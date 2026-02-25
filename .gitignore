@@ -1,13 +1,17 @@
 # Python
 __pycache__/
+**/__pycache__/
 *.py[cod]
 .pytest_cache/
+**/.pytest_cache/
 
 # Virtual envs
 .venv/
+**/.venv/
 
 # Java / Maven
 target/
+**/target/
 
 # Environment files
 .env
@@ -16,12 +20,14 @@ target/
 
 # Logs
 *.log
+*.out.log
+*.err.log
 
 # Editor/OS
 .vscode/
 .idea/
 .DS_Store
 
-# Backup and local git metadata snapshots
+# Backup and temporary files
 .git-backup/
 *.bak

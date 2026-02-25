@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="utf-8">
+  <title>高德地图展示</title>
+  <link rel="stylesheet" href="/static/css/map-common.css">
+  {% block extra_css %}{% endblock %}
+</head>
+
+<body>
+  {% block control_panel %}{% endblock %}
+
+  <div class="export-actions export-actions-top">
+    <button id="btnExportXlsx">导出表格</button>
+    <button id="btnExportImage">导出图片</button>
+  </div>
+  <div class="polygon-panel polygon-panel-bottom" id="polygonPanel">
+    <div class="panel-title">多边形绘制</div>
+    <div class="panel-hint">格式：[[116.1,39.9],[116.2,39.8]]</div>
+    <textarea id="polygonInput" placeholder="输入多边形坐标数组"></textarea>
+    <div class="panel-actions">
+      <button id="btnSavePolygon">保存多边形</button>
+    </div>
+    <div id="polygonStatus" class="polygon-status"></div>
+    <div id="polygonList" class="polygon-list"></div>
+  </div>
+
+  <div id="container"></div>
+
+  <script type="text/javascript">
+    window._AMapSecurityConfig = {
+      securityJsCode: "{{ amap_js_security_code }}",
+    };
+  </script>
+  <script src="https://webapi.amap.com/maps?v=1.4.15&key={{ amap_js_api_key }}"></script>
+  <script src="https://cdn.bootcdn.net/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
+  <script src="/static/js/map-utils.js"></script>
+  <script src="/static/js/map-core.js"></script>
+  <script src="/static/js/map-exporter.js"></script>
+  <script src="/static/js/draw-bound.js"></script>
+
+  {% block extra_js %}{% endblock %}
+
+  <script>
+    var mapTypeConfig = {{ map_type_config_json | safe }} || { groups: [], markerStyles: {} };
+    var mapId = {{ map_id if map_id is not none else 'null' }};
+    var mapData = {{ map_data_json | safe }};
+
+    {% block init_script %}
+    {% endblock %}
+  </script>
+</body>
+
+</html>

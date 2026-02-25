@@ -1,0 +1,369 @@
+.controls-panel {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    z-index: 10;
+    background: rgba(255, 255, 255, 0.95);
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15);
+    border-radius: 8px;
+    padding: 15px;
+    font-family: Arial, sans-serif;
+    font-size: 14px;
+    width: 280px;
+    max-height: calc(100vh - 50px);
+    overflow-y: auto;
+}
+
+.title-section {
+    margin-bottom: 15px;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 10px;
+}
+
+.title-section h3 {
+    margin: 0;
+    font-size: 16px;
+    color: #333;
+}
+
+.filter-section {
+    margin-bottom: 12px;
+}
+
+.filter-section.poi-group-card {
+    border: 1px solid #eee;
+    border-radius: 10px;
+    padding: 10px;
+    background: #fff;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+}
+
+.filter-section h4 {
+    margin: 0 0 8px 0;
+    font-size: 13px;
+    color: #333;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.poi-group-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+}
+
+.poi-group-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: #333;
+}
+
+.poi-group-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.badge {
+    background: #f5f5f5;
+    color: #555;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.poi-type-card {
+    border: 1px solid #eee;
+    border-radius: 10px;
+    padding: 10px;
+    background: #fff;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+}
+
+.poi-type-card.is-visible {
+    background: #f5f5f5;
+    border-color: #cfcfcf;
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.08) inset, 0 2px 6px rgba(0, 0, 0, 0.05);
+}
+
+.poi-type-card.is-hidden {
+    opacity: 0.55;
+    border-color: #ddd;
+    box-shadow: none;
+}
+
+.poi-type-card.is-partial {
+    border-style: dashed;
+    border-color: #bfbfbf;
+}
+
+.poi-type-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 6px;
+    cursor: pointer;
+    user-select: none;
+}
+
+.poi-type-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #333;
+}
+
+.poi-type-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.color-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+}
+
+
+.filter-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.filter-option {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.filter-option.range-control {
+    align-items: center;
+}
+
+.filter-option.range-control input[type="range"] {
+    flex: 1;
+}
+
+.filter-option.range-control .range-value {
+    width: 70px;
+    text-align: right;
+}
+
+.filter-option input[type="checkbox"] {
+    margin: 0;
+}
+
+.filter-option label {
+    cursor: pointer;
+    font-size: 13px;
+    flex: 1;
+}
+
+.color-indicator {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    border: 1px solid #ddd;
+    flex-shrink: 0;
+}
+
+.checkbox-all {
+    font-weight: bold;
+}
+
+.type-count {
+    color: #666;
+    font-size: 12px;
+    margin-left: 4px;
+}
+
+.group-content {
+    border: 1px solid #f0f0f0;
+    border-radius: 6px;
+    padding: 8px;
+    background: #fafafa;
+}
+
+.group-content.collapsed {
+    display: none;
+}
+
+.group-actions {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+
+.group-count {
+    color: #666;
+    font-size: 12px;
+    padding: 0 4px;
+}
+
+.expand-btn {
+    font-size: 11px;
+    padding: 2px 6px;
+    cursor: pointer;
+    border: 1px solid #ddd;
+    background: #fff;
+    border-radius: 6px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+}
+
+.expand-icon {
+    width: 12px;
+    height: 12px;
+    transition: transform 0.2s ease;
+}
+
+.expand-btn.expanded .expand-icon {
+    transform: rotate(90deg);
+}
+
+.point-list {
+    margin: 4px 0 8px 20px;
+    border-left: 1px dashed #e0e0e0;
+    padding-left: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.point-list.collapsed {
+    display: none;
+}
+
+.type-block {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-bottom: 6px;
+}
+
+.type-block:last-child {
+    margin-bottom: 0;
+}
+
+.point-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    padding: 3px 6px;
+    border-radius: 4px;
+    transition: background 0.2s, box-shadow 0.2s;
+}
+
+.toggle {
+    position: relative;
+    display: inline-block;
+    width: 34px;
+    height: 18px;
+}
+
+.toggle input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.toggle-slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: #ddd;
+    border-radius: 999px;
+    transition: background 0.2s;
+}
+
+.toggle-slider:before {
+    position: absolute;
+    content: "";
+    height: 14px;
+    width: 14px;
+    left: 2px;
+    top: 2px;
+    background: #fff;
+    border-radius: 50%;
+    transition: transform 0.2s;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.toggle input:checked + .toggle-slider {
+    background: #111;
+}
+
+.toggle input:checked + .toggle-slider:before {
+    transform: translateX(16px);
+}
+
+.toggle input:indeterminate + .toggle-slider {
+    background: #999;
+}
+
+.toggle input:indeterminate + .toggle-slider:before {
+    transform: translateX(8px);
+}
+
+.point-item:hover {
+    background: #f5f8ff;
+}
+
+.point-item.disabled {
+    opacity: 0.5;
+}
+
+.point-item .point-name {
+    cursor: pointer;
+    color: #0d47a1;
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.point-item .point-meta {
+    color: #999;
+    font-size: 11px;
+    flex-shrink: 0;
+}
+
+.highlight-row {
+    background: #fff7e6 !important;
+    box-shadow: 0 0 0 2px #ffd591 inset;
+}
+
+.controls-panel .filter-section > button {
+    width: 100%;
+    padding: 8px;
+    cursor: pointer;
+    font-size: 13px;
+    border: 1px solid #ddd;
+    background: #f5f5f5;
+    border-radius: 4px;
+}
+
+.controls-panel .filter-section > button + button {
+    margin-top: 5px;
+}
+
+.filter-section.footer-actions {
+    border-top: 1px solid #eee;
+    padding-top: 10px;
+    margin-top: 10px;
+}

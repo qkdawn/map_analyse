@@ -1,0 +1,16 @@
+server:
+  port: ${SERVER_PORT:8001}
+
+spring:
+  config:
+    # Load local .env file as properties if it exists.
+    # Note: keep key/value format, e.g. KEY=value (no `export` prefix).
+    import: optional:file:.env[.properties]
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:}
+    username: ${SPRING_DATASOURCE_USERNAME:}
+    password: ${SPRING_DATASOURCE_PASSWORD:}
+  jpa:
+    hibernate:
+      ddl-auto: none
+    open-in-view: false

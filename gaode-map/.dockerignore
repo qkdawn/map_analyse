@@ -1,0 +1,14 @@
+.git
+.venv
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.db
+*.sqlite
+*.sqlite3
+*.log
+*.tmp
+.DS_Store
+Thumbs.db
+node_modules/

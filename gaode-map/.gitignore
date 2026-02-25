@@ -1,0 +1,23 @@
+.venv
+__pycache__/
+*.pyc
+.env
+.DS_Store
+
+# Data
+data/
+*.db
+*.sqlite
+
+# Docker / Valhalla Data (Huge files)
+docker/valhalla_custom_files/valhalla_tiles/
+docker/valhalla_custom_files/valhalla_tiles.tar
+docker/valhalla_custom_files/elevation_data/
+docker/valhalla_custom_files/timezone_data/
+docker/valhalla_custom_files/admin_data/
+docker/valhalla_custom_files/transit_tiles/
+docker/valhalla_custom_files/_backup_*/
+docker/valhalla_custom_files/*.pbf
+*.pbf
+*.osrm
+*.gph

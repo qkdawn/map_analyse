@@ -1,0 +1,63 @@
+{% extends "map_base.html" %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="/static/css/filter-panel.css">
+{% endblock %}
+
+{% block control_panel %}
+<div class="controls-panel">
+    <div class="title-section">
+        <h3>地图过滤</h3>
+    </div>
+    <div class="filter-section">
+        <button id="toggleExpandAll">全部展开</button>
+    </div>
+
+    <div class="filter-section">
+        <button id="toggleAll">全部显示/隐藏</button>
+        <button id="toggleNames">显示名称</button>
+    </div>
+
+    <div id="filtersContainer"></div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="/static/js/map-markers.js"></script>
+<script src="/static/js/map-filters.js"></script>
+{% endblock %}
+
+{% block init_script %}
+// 初始化地图核心
+var mapCore = new MapCore('container', {
+    center: mapData.center,
+    zoom: 13,
+    zooms: [3, 20],
+    mapData: mapData
+});
+window.mapCore = mapCore;
+mapCore.initMap();
+
+// 初始化标记管理器
+var markerManager = new MarkerManager(mapCore, {
+    mapData: mapData,
+    mapTypeConfig: mapTypeConfig
+});
+markerManager.init();
+markerManager.renderMarkers();
+window.markerManager = markerManager;
+
+// 初始化过滤面板
+var filterPanel = new FilterPanel(markerManager, {
+    mapData: mapData,
+    mapTypeConfig: mapTypeConfig
+});
+filterPanel.init();
+window.filterPanel = filterPanel;
+
+// 聚合插件加载后执行一次过滤与视野调整
+mapCore.loadPlugins().then(function() {
+    filterPanel.applyFilters();
+    mapCore.updateFitView(markerManager.getVisibleMarkers());
+});
+{% endblock %}

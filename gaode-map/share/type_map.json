@@ -1,0 +1,856 @@
+{
+    "groups": [
+        {
+            "id": "group-1",
+            "title": "公司",
+            "toggleId": "toggle-group-1",
+            "filtersId": "filters-group-1",
+            "items": [
+                {
+                    "id": "type-170000",
+                    "label": "公司企业",
+                    "color": "#4E79A7",
+                    "defaultChecked": true,
+                    "types": "170000",
+                    "keywords": "公司企业",
+                    "point_type": "type-170000"
+                },
+                {
+                    "id": "type-170100",
+                    "label": "知名企业",
+                    "color": "#4E79A7",
+                    "defaultChecked": true,
+                    "types": "170100",
+                    "keywords": "知名企业",
+                    "point_type": "type-170100"
+                },
+                {
+                    "id": "type-170200",
+                    "label": "公司",
+                    "color": "#4E79A7",
+                    "defaultChecked": true,
+                    "types": "170200|170201|170202|170203|170204|170205|170206|170207|170208|170209",
+                    "keywords": "公司",
+                    "point_type": "type-170200"
+                },
+                {
+                    "id": "type-170300",
+                    "label": "工厂",
+                    "color": "#4E79A7",
+                    "defaultChecked": true,
+                    "types": "170300",
+                    "keywords": "工厂",
+                    "point_type": "type-170300"
+                },
+                {
+                    "id": "type-170400",
+                    "label": "农林牧渔基地",
+                    "color": "#4E79A7",
+                    "defaultChecked": true,
+                    "types": "170400|170401|170402|170403|170404|170405|170406|170407|170408",
+                    "keywords": "农林牧渔基地",
+                    "point_type": "type-170400"
+                }
+            ]
+        },
+        {
+            "id": "group-2",
+            "title": "旅游",
+            "toggleId": "toggle-group-2",
+            "filtersId": "filters-group-2",
+            "items": [
+                {
+                    "id": "type-110000",
+                    "label": "风景名胜相关",
+                    "color": "#F28E8B",
+                    "defaultChecked": true,
+                    "types": "110000",
+                    "keywords": "风景名胜相关",
+                    "point_type": "type-110000"
+                },
+                {
+                    "id": "type-110100",
+                    "label": "公园广场",
+                    "color": "#F28E8B",
+                    "defaultChecked": true,
+                    "types": "110100|110101|110102|110103|110104|110105|110106",
+                    "keywords": "公园广场",
+                    "point_type": "type-110100"
+                },
+                {
+                    "id": "type-110200",
+                    "label": "风景名胜",
+                    "color": "#F28E8B",
+                    "defaultChecked": true,
+                    "types": "110200|110201|110202|110203|110204|110205|110206|110207|110208|110209|110210",
+                    "keywords": "风景名胜",
+                    "point_type": "type-110200"
+                }
+            ]
+        },
+        {
+            "id": "group-3",
+            "title": "交通",
+            "toggleId": "toggle-group-3",
+            "filtersId": "filters-group-3",
+            "items": [
+                {
+                    "id": "type-150000",
+                    "label": "交通服务相关",
+                    "color": "#76B7B2",
+                    "defaultChecked": true,
+                    "types": "150000",
+                    "keywords": "交通服务相关",
+                    "point_type": "type-150000"
+                },
+                {
+                    "id": "type-150100",
+                    "label": "机场相关",
+                    "color": "#76B7B2",
+                    "defaultChecked": true,
+                    "types": "150100|150104",
+                    "keywords": "机场相关",
+                    "point_type": "type-150100"
+                },
+                {
+                    "id": "type-150200",
+                    "label": "火车站",
+                    "color": "#76B7B2",
+                    "defaultChecked": true,
+                    "types": "150200|150210",
+                    "keywords": "火车站",
+                    "point_type": "type-150200"
+                },
+                {
+                    "id": "type-150300",
+                    "label": "港口码头",
+                    "color": "#76B7B2",
+                    "defaultChecked": true,
+                    "types": "150300|150301",
+                    "keywords": "港口码头",
+                    "point_type": "type-150300"
+                },
+                {
+                    "id": "type-150400",
+                    "label": "长途汽车站",
+                    "color": "#76B7B2",
+                    "defaultChecked": true,
+                    "types": "150400",
+                    "keywords": "长途汽车站",
+                    "point_type": "type-150400"
+                },
+                {
+                    "id": "type-150500",
+                    "label": "地铁站",
+                    "color": "#76B7B2",
+                    "defaultChecked": true,
+                    "types": "150500",
+                    "keywords": "地铁站",
+                    "point_type": "type-150500"
+                },
+                {
+                    "id": "type-150600",
+                    "label": "轻轨站",
+                    "color": "#76B7B2",
+                    "defaultChecked": true,
+                    "types": "150600",
+                    "keywords": "轻轨站",
+                    "point_type": "type-150600"
+                },
+                {
+                    "id": "type-150700",
+                    "label": "公交车站",
+                    "color": "#76B7B2",
+                    "defaultChecked": true,
+                    "types": "150700|150701|150702|150703|150704|150705|150706",
+                    "keywords": "公交车站",
+                    "point_type": "type-150700"
+                },
+                {
+                    "id": "type-150800",
+                    "label": "班车站",
+                    "color": "#76B7B2",
+                    "defaultChecked": true,
+                    "types": "150800",
+                    "keywords": "班车站",
+                    "point_type": "type-150800"
+                },
+                {
+                    "id": "type-150900",
+                    "label": "停车场",
+                    "color": "#76B7B2",
+                    "defaultChecked": true,
+                    "types": "150900|150903|150904|150905|150906|150907|150908|150909",
+                    "keywords": "停车场",
+                    "point_type": "type-150900"
+                },
+                {
+                    "id": "type-151100",
+                    "label": "出租车",
+                    "color": "#76B7B2",
+                    "defaultChecked": true,
+                    "types": "151100",
+                    "keywords": "出租车",
+                    "point_type": "type-151100"
+                },
+                {
+                    "id": "type-151200",
+                    "label": "轮渡站",
+                    "color": "#76B7B2",
+                    "defaultChecked": true,
+                    "types": "151200",
+                    "keywords": "轮渡站",
+                    "point_type": "type-151200"
+                },
+                {
+                    "id": "type-151400",
+                    "label": "上下客区",
+                    "color": "#76B7B2",
+                    "defaultChecked": true,
+                    "types": "151400",
+                    "keywords": "上下客区",
+                    "point_type": "type-151400"
+                }
+            ]
+        },
+        {
+            "id": "group-4",
+            "title": "商务住宅",
+            "toggleId": "toggle-group-4",
+            "filtersId": "filters-group-4",
+            "items": [
+                {
+                    "id": "type-120000",
+                    "label": "商务住宅相关",
+                    "color": "#E15759",
+                    "defaultChecked": true,
+                    "types": "120000",
+                    "keywords": "商务住宅相关",
+                    "point_type": "type-120000"
+                },
+                {
+                    "id": "type-120100",
+                    "label": "产业园区",
+                    "color": "#E15759",
+                    "defaultChecked": true,
+                    "types": "120100",
+                    "keywords": "产业园区",
+                    "point_type": "type-120100"
+                },
+                {
+                    "id": "type-120200",
+                    "label": "楼宇",
+                    "color": "#E15759",
+                    "defaultChecked": true,
+                    "types": "120200|120201|120202|120203",
+                    "keywords": "楼宇",
+                    "point_type": "type-120200"
+                },
+                {
+                    "id": "type-120300",
+                    "label": "住宅区",
+                    "color": "#E15759",
+                    "defaultChecked": true,
+                    "types": "120300|120301|120302|120303|120304",
+                    "keywords": "住宅区",
+                    "point_type": "type-120300"
+                }
+            ]
+        },
+        {
+            "id": "group-5",
+            "title": "自然",
+            "toggleId": "toggle-group-5",
+            "filtersId": "filters-group-5",
+            "items": [
+                {
+                    "id": "type-190200",
+                    "label": "自然地名",
+                    "color": "#59A14F",
+                    "defaultChecked": true,
+                    "types": "190200|190201|190202|190203|190204|190205|190206|190207|190208|190209|190210|190211|190212|190213|190214|190215|190216|190217|190218|190219|190220",
+                    "keywords": "自然地名",
+                    "point_type": "type-190200"
+                }
+            ]
+        },
+        {
+            "id": "group-6",
+            "title": "购物",
+            "toggleId": "toggle-group-6",
+            "filtersId": "filters-group-6",
+            "items": [
+                {
+                    "id": "type-060000",
+                    "label": "购物相关场所",
+                    "color": "#EDC948",
+                    "defaultChecked": true,
+                    "types": "060000",
+                    "keywords": "购物相关场所",
+                    "point_type": "type-060000"
+                },
+                {
+                    "id": "type-060100",
+                    "label": "商场",
+                    "color": "#EDC948",
+                    "defaultChecked": true,
+                    "types": "060100|060101|060102|060103",
+                    "keywords": "商场",
+                    "point_type": "type-060100"
+                },
+                {
+                    "id": "type-060200",
+                    "label": "便民商店/便利店",
+                    "color": "#EDC948",
+                    "defaultChecked": true,
+                    "types": "060200|060201|060202",
+                    "keywords": "便民商店/便利店",
+                    "point_type": "type-060200"
+                },
+                {
+                    "id": "type-060300",
+                    "label": "家电电子卖场",
+                    "color": "#EDC948",
+                    "defaultChecked": true,
+                    "types": "060300|060301|060302|060303|060304|060305|060306|060307|060308",
+                    "keywords": "家电电子卖场",
+                    "point_type": "type-060300"
+                },
+                {
+                    "id": "type-060400",
+                    "label": "超级市场",
+                    "color": "#EDC948",
+                    "defaultChecked": true,
+                    "types": "060400|060401|060402|060403|060404|060405|060406|060407|060408|060409|060411|060413|060414|060415",
+                    "keywords": "超级市场",
+                    "point_type": "type-060400"
+                },
+                {
+                    "id": "type-060500",
+                    "label": "花鸟鱼虫市场",
+                    "color": "#EDC948",
+                    "defaultChecked": true,
+                    "types": "060500|060501|060502",
+                    "keywords": "花鸟鱼虫市场",
+                    "point_type": "type-060500"
+                },
+                {
+                    "id": "type-060600",
+                    "label": "家居建材市场",
+                    "color": "#EDC948",
+                    "defaultChecked": true,
+                    "types": "060600|060601|060602|060603|060604|060605|060606",
+                    "keywords": "家居建材市场",
+                    "point_type": "type-060600"
+                },
+                {
+                    "id": "type-060700",
+                    "label": "综合市场",
+                    "color": "#EDC948",
+                    "defaultChecked": true,
+                    "types": "060700|060701|060702|060703|060704|060705|060706",
+                    "keywords": "综合市场",
+                    "point_type": "type-060700"
+                },
+                {
+                    "id": "type-061000",
+                    "label": "特色商业街",
+                    "color": "#EDC948",
+                    "defaultChecked": true,
+                    "types": "061000|061001",
+                    "keywords": "特色商业街",
+                    "point_type": "type-061000"
+                }
+            ]
+        },
+        {
+            "id": "group-7",
+            "title": "餐饮",
+            "toggleId": "toggle-group-7",
+            "filtersId": "filters-group-7",
+            "items": [
+                {
+                    "id": "type-050000",
+                    "label": "餐饮相关场所",
+                    "color": "#B07AA1",
+                    "defaultChecked": true,
+                    "types": "050000",
+                    "keywords": "餐饮相关场所",
+                    "point_type": "type-050000"
+                },
+                {
+                    "id": "type-050100",
+                    "label": "中餐厅",
+                    "color": "#B07AA1",
+                    "defaultChecked": true,
+                    "types": "050100|050101|050102|050103|050104|050105|050106|050107|050108|050109|050110|050111|050112|050113|050114|050115|050116|050117|050118|050119|050120|050121|050122|050123",
+                    "keywords": "中餐厅",
+                    "point_type": "type-050100"
+                },
+                {
+                    "id": "type-050200",
+                    "label": "外国餐厅",
+                    "color": "#B07AA1",
+                    "defaultChecked": true,
+                    "types": "050200|050201|050202|050203|050204|050205|050206|050207|050208|050209|050210|050211|050212|050213|050214|050215|050216|050217",
+                    "keywords": "外国餐厅",
+                    "point_type": "type-050200"
+                },
+                {
+                    "id": "type-050300",
+                    "label": "快餐厅",
+                    "color": "#B07AA1",
+                    "defaultChecked": true,
+                    "types": "050300|050301|050302|050303|050304|050305|050306|050307|050308|050309|050310|050311",
+                    "keywords": "快餐厅",
+                    "point_type": "type-050300"
+                },
+                {
+                    "id": "type-050400",
+                    "label": "休闲餐饮场所",
+                    "color": "#B07AA1",
+                    "defaultChecked": true,
+                    "types": "050400",
+                    "keywords": "休闲餐饮场所",
+                    "point_type": "type-050400"
+                },
+                {
+                    "id": "type-050500",
+                    "label": "咖啡厅",
+                    "color": "#B07AA1",
+                    "defaultChecked": true,
+                    "types": "050500|050501|050502|050503|050504",
+                    "keywords": "咖啡厅",
+                    "point_type": "type-050500"
+                },
+                {
+                    "id": "type-050600",
+                    "label": "茶艺馆",
+                    "color": "#B07AA1",
+                    "defaultChecked": true,
+                    "types": "050600",
+                    "keywords": "茶艺馆",
+                    "point_type": "type-050600"
+                },
+                {
+                    "id": "type-050700",
+                    "label": "冷饮店",
+                    "color": "#B07AA1",
+                    "defaultChecked": true,
+                    "types": "050700",
+                    "keywords": "冷饮店",
+                    "point_type": "type-050700"
+                },
+                {
+                    "id": "type-050800",
+                    "label": "糕饼店",
+                    "color": "#B07AA1",
+                    "defaultChecked": true,
+                    "types": "050800",
+                    "keywords": "糕饼店",
+                    "point_type": "type-050800"
+                },
+                {
+                    "id": "type-050900",
+                    "label": "甜品店",
+                    "color": "#B07AA1",
+                    "defaultChecked": true,
+                    "types": "050900",
+                    "keywords": "甜品店",
+                    "point_type": "type-050900"
+                }
+            ]
+        },
+        {
+            "id": "group-9",
+            "title": "体育",
+            "toggleId": "toggle-group-9",
+            "filtersId": "filters-group-9",
+            "items": [
+                {
+                    "id": "type-080000",
+                    "label": "体育休闲服务场所",
+                    "color": "#9C755F",
+                    "defaultChecked": true,
+                    "types": "080000",
+                    "keywords": "体育休闲服务场所",
+                    "point_type": "type-080000"
+                },
+                {
+                    "id": "type-080100",
+                    "label": "运动场馆",
+                    "color": "#9C755F",
+                    "defaultChecked": true,
+                    "types": "080100|080101|080102|080103|080104|080105|080106|080107|080108|080109|080110|080111|080112|080114|080115|080116|080117|080118|080119",
+                    "keywords": "运动场馆",
+                    "point_type": "type-080100"
+                },
+                {
+                    "id": "type-080200",
+                    "label": "高尔夫相关",
+                    "color": "#9C755F",
+                    "defaultChecked": true,
+                    "types": "080200|080201|080202",
+                    "keywords": "高尔夫相关",
+                    "point_type": "type-080200"
+                },
+                {
+                    "id": "type-080300",
+                    "label": "娱乐场所",
+                    "color": "#9C755F",
+                    "defaultChecked": true,
+                    "types": "080300|080301|080302|080303|080304|080305|080306|080307",
+                    "keywords": "娱乐场所",
+                    "point_type": "type-080300"
+                },
+                {
+                    "id": "type-080400",
+                    "label": "度假疗养场所",
+                    "color": "#9C755F",
+                    "defaultChecked": true,
+                    "types": "080400|080401|080402",
+                    "keywords": "度假疗养场所",
+                    "point_type": "type-080400"
+                },
+                {
+                    "id": "type-080500",
+                    "label": "休闲场所",
+                    "color": "#9C755F",
+                    "defaultChecked": true,
+                    "types": "080500|080501|080502|080503|080504|080505",
+                    "keywords": "休闲场所",
+                    "point_type": "type-080500"
+                },
+                {
+                    "id": "type-080600",
+                    "label": "影剧院",
+                    "color": "#9C755F",
+                    "defaultChecked": true,
+                    "types": "080600|080601|080602|080603",
+                    "keywords": "影剧院",
+                    "point_type": "type-080600"
+                }
+            ]
+        },
+        {
+            "id": "group-10",
+            "title": "医疗",
+            "toggleId": "toggle-group-10",
+            "filtersId": "filters-group-10",
+            "items": [
+                {
+                    "id": "type-090000",
+                    "label": "医疗保健服务场所",
+                    "color": "#BAB0AC",
+                    "defaultChecked": true,
+                    "types": "090000",
+                    "keywords": "医疗保健服务场所",
+                    "point_type": "type-090000"
+                },
+                {
+                    "id": "type-090100",
+                    "label": "综合医院",
+                    "color": "#BAB0AC",
+                    "defaultChecked": true,
+                    "types": "090100|090101|090102",
+                    "keywords": "综合医院",
+                    "point_type": "type-090100"
+                },
+                {
+                    "id": "type-090200",
+                    "label": "专科医院",
+                    "color": "#BAB0AC",
+                    "defaultChecked": true,
+                    "types": "090200|090201|090202|090203|090204|090205|090206|090207|090208|090209|090210|090211",
+                    "keywords": "专科医院",
+                    "point_type": "type-090200"
+                },
+                {
+                    "id": "type-090300",
+                    "label": "诊所",
+                    "color": "#BAB0AC",
+                    "defaultChecked": true,
+                    "types": "090300",
+                    "keywords": "诊所",
+                    "point_type": "type-090300"
+                },
+                {
+                    "id": "type-090400",
+                    "label": "急救中心",
+                    "color": "#BAB0AC",
+                    "defaultChecked": true,
+                    "types": "090400",
+                    "keywords": "急救中心",
+                    "point_type": "type-090400"
+                },
+                {
+                    "id": "type-090500",
+                    "label": "疾病预防机构",
+                    "color": "#BAB0AC",
+                    "defaultChecked": true,
+                    "types": "090500",
+                    "keywords": "疾病预防机构",
+                    "point_type": "type-090500"
+                },
+                {
+                    "id": "type-090600",
+                    "label": "医药保健销售店",
+                    "color": "#BAB0AC",
+                    "defaultChecked": true,
+                    "types": "090600|090601|090602",
+                    "keywords": "医药保健销售店",
+                    "point_type": "type-090600"
+                },
+                {
+                    "id": "type-090700",
+                    "label": "动物医疗场所",
+                    "color": "#BAB0AC",
+                    "defaultChecked": true,
+                    "types": "090700|090701|090702",
+                    "keywords": "动物医疗场所",
+                    "point_type": "type-090700"
+                }
+            ]
+        },
+        {
+            "id": "group-11",
+            "title": "住宿",
+            "toggleId": "toggle-group-11",
+            "filtersId": "filters-group-11",
+            "items": [
+                {
+                    "id": "type-100000",
+                    "label": "住宿服务相关",
+                    "color": "#6B8E23",
+                    "defaultChecked": true,
+                    "types": "100000",
+                    "keywords": "住宿服务相关",
+                    "point_type": "type-100000"
+                },
+                {
+                    "id": "type-100100",
+                    "label": "宾馆酒店",
+                    "color": "#6B8E23",
+                    "defaultChecked": true,
+                    "types": "100100|100101|100102|100103|100104|100105",
+                    "keywords": "宾馆酒店",
+                    "point_type": "type-100100"
+                },
+                {
+                    "id": "type-100200",
+                    "label": "旅馆招待所",
+                    "color": "#6B8E23",
+                    "defaultChecked": true,
+                    "types": "100200|100201",
+                    "keywords": "旅馆招待所",
+                    "point_type": "type-100200"
+                }
+            ]
+        },
+        {
+            "id": "group-12",
+            "title": "政府机构",
+            "toggleId": "toggle-group-12",
+            "filtersId": "filters-group-12",
+            "items": [
+                {
+                    "id": "type-130000",
+                    "label": "政府及社会团体相关",
+                    "color": "#8CD17D",
+                    "defaultChecked": true,
+                    "types": "130000",
+                    "keywords": "政府及社会团体相关",
+                    "point_type": "type-130000"
+                },
+                {
+                    "id": "type-130100",
+                    "label": "政府机关",
+                    "color": "#8CD17D",
+                    "defaultChecked": true,
+                    "types": "130100|130101|130102|130103|130104|130105|130106|130107",
+                    "keywords": "政府机关",
+                    "point_type": "type-130100"
+                },
+                {
+                    "id": "type-130200",
+                    "label": "外国机构",
+                    "color": "#8CD17D",
+                    "defaultChecked": true,
+                    "types": "130200|130201|130202",
+                    "keywords": "外国机构",
+                    "point_type": "type-130200"
+                },
+                {
+                    "id": "type-130300",
+                    "label": "民主党派",
+                    "color": "#8CD17D",
+                    "defaultChecked": true,
+                    "types": "130300",
+                    "keywords": "民主党派",
+                    "point_type": "type-130300"
+                },
+                {
+                    "id": "type-130400",
+                    "label": "社会团体",
+                    "color": "#8CD17D",
+                    "defaultChecked": true,
+                    "types": "130400|130401|130402|130403|130404|130405|130406|130407|130408|130409",
+                    "keywords": "社会团体",
+                    "point_type": "type-130400"
+                },
+                {
+                    "id": "type-130500",
+                    "label": "公检法机构",
+                    "color": "#8CD17D",
+                    "defaultChecked": true,
+                    "types": "130500|130501|130502|130503|130504|130505|130506",
+                    "keywords": "公检法机构",
+                    "point_type": "type-130500"
+                },
+                {
+                    "id": "type-130700",
+                    "label": "工商税务机构",
+                    "color": "#8CD17D",
+                    "defaultChecked": true,
+                    "types": "130700|130701|130702|130703",
+                    "keywords": "工商税务机构",
+                    "point_type": "type-130700"
+                }
+            ]
+        },
+        {
+            "id": "group-13",
+            "title": "科教文化",
+            "toggleId": "toggle-group-13",
+            "filtersId": "filters-group-13",
+            "items": [
+                {
+                    "id": "type-140000",
+                    "label": "科教文化场所",
+                    "color": "#499894",
+                    "defaultChecked": true,
+                    "types": "140000",
+                    "keywords": "科教文化场所",
+                    "point_type": "type-140000"
+                },
+                {
+                    "id": "type-140100",
+                    "label": "博物馆",
+                    "color": "#499894",
+                    "defaultChecked": true,
+                    "types": "140100|140101|140102",
+                    "keywords": "博物馆",
+                    "point_type": "type-140100"
+                },
+                {
+                    "id": "type-140200",
+                    "label": "展览馆",
+                    "color": "#499894",
+                    "defaultChecked": true,
+                    "types": "140200",
+                    "keywords": "展览馆",
+                    "point_type": "type-140200"
+                },
+                {
+                    "id": "type-140300",
+                    "label": "会展中心",
+                    "color": "#499894",
+                    "defaultChecked": true,
+                    "types": "140300",
+                    "keywords": "会展中心",
+                    "point_type": "type-140300"
+                },
+                {
+                    "id": "type-140400",
+                    "label": "美术馆",
+                    "color": "#499894",
+                    "defaultChecked": true,
+                    "types": "140400",
+                    "keywords": "美术馆",
+                    "point_type": "type-140400"
+                },
+                {
+                    "id": "type-140500",
+                    "label": "图书馆",
+                    "color": "#499894",
+                    "defaultChecked": true,
+                    "types": "140500",
+                    "keywords": "图书馆",
+                    "point_type": "type-140500"
+                },
+                {
+                    "id": "type-140600",
+                    "label": "科技馆",
+                    "color": "#499894",
+                    "defaultChecked": true,
+                    "types": "140600",
+                    "keywords": "科技馆",
+                    "point_type": "type-140600"
+                },
+                {
+                    "id": "type-140700",
+                    "label": "天文馆",
+                    "color": "#499894",
+                    "defaultChecked": true,
+                    "types": "140700",
+                    "keywords": "天文馆",
+                    "point_type": "type-140700"
+                },
+                {
+                    "id": "type-140800",
+                    "label": "文化宫",
+                    "color": "#499894",
+                    "defaultChecked": true,
+                    "types": "140800",
+                    "keywords": "文化宫",
+                    "point_type": "type-140800"
+                },
+                {
+                    "id": "type-140900",
+                    "label": "档案馆",
+                    "color": "#499894",
+                    "defaultChecked": true,
+                    "types": "140900",
+                    "keywords": "档案馆",
+                    "point_type": "type-140900"
+                },
+                {
+                    "id": "type-141100",
+                    "label": "传媒机构",
+                    "color": "#499894",
+                    "defaultChecked": true,
+                    "types": "141100|141101|141102|141103|141104|141105",
+                    "keywords": "传媒机构",
+                    "point_type": "type-141100"
+                },
+                {
+                    "id": "type-141200",
+                    "label": "学校",
+                    "color": "#499894",
+                    "defaultChecked": true,
+                    "types": "141200|141201|141202|141203|141204|141205|141206",
+                    "keywords": "学校",
+                    "point_type": "type-141200"
+                },
+                {
+                    "id": "type-141300",
+                    "label": "科研机构",
+                    "color": "#499894",
+                    "defaultChecked": true,
+                    "types": "141300",
+                    "keywords": "科研机构",
+                    "point_type": "type-141300"
+                },
+                {
+                    "id": "type-141400",
+                    "label": "培训机构",
+                    "color": "#499894",
+                    "defaultChecked": true,
+                    "types": "141400",
+                    "keywords": "培训机构",
+                    "point_type": "type-141400"
+                }
+            ]
+        }
+    ]
+}

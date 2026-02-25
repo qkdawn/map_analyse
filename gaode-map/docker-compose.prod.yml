@@ -1,0 +1,69 @@
+services:
+  search:
+    build:
+      context: ../search
+      dockerfile: Dockerfile
+    container_name: gaode-map-search
+    env_file:
+      - ../search/.env
+    ports:
+      - "8001:8001"
+
+  app:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    container_name: gaode-map-app
+    ports:
+      - "8000:8000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      - VALHALLA_BASE_URL=http://valhalla:8002
+      - AMAP_WEB_SERVICE_KEY
+      # Default only for same compose network; override LOCAL_QUERY_BASE_URL in .env for split deployment.
+      - LOCAL_QUERY_BASE_URL=${LOCAL_QUERY_BASE_URL:-http://search:8001}
+      - LOCAL_QUERY_COORD_SYSTEM=${LOCAL_QUERY_COORD_SYSTEM:-gcj02}
+      - DEPTHMAPX_CLI_PATH=${DEPTHMAPX_CLI_PATH:-/usr/local/bin/depthmapXcli}
+      - OVERPASS_ENDPOINT=${OVERPASS_ENDPOINT}
+      - PYTHONUNBUFFERED=1
+    depends_on:
+      - search
+      - valhalla
+      - overpass
+    command: uvicorn main:app --host 0.0.0.0 --port 8000
+
+  valhalla:
+    image: ghcr.io/gis-ops/docker-valhalla/valhalla:latest
+    container_name: gaode-map-valhalla
+    ports:
+      - "8002:8002"
+    volumes:
+      - "${VALHALLA_CUSTOM_FILES_DIR}:/custom_files"
+      - "${VALHALLA_TILES_DIR}:/valhalla/tiles"
+    environment:
+      - build_elevation=False
+      - build_admins=False
+      - build_time_zones=False
+      - server_threads=${VALHALLA_SERVER_THREADS:-8}
+      - use_tiles_ignore_pbf=False
+      - use_default_speeds_config=True
+      - default_speeds_config_url=https://raw.githubusercontent.com/OpenStreetMapSpeeds/schema/master/default_speeds.json
+    # Note: Valhalla needs a 'tiles.tar' or PBF files in the mapped volume to start effectively.
+    # Without data, it will start but return empty results for routing.
+
+  overpass:
+    image: wiktorn/overpass-api:latest
+    container_name: gaode-map-overpass
+    ports:
+      - "8003:80"
+    environment:
+      - OVERPASS_MODE=init
+      - OVERPASS_META=no
+      - OVERPASS_PLANET_URL=file:///osm/${OVERPASS_PBF_FILE}
+      - "OVERPASS_PLANET_PREPROCESS=mv /db/planet.osm.bz2 /db/planet.osm.pbf && osmium cat /db/planet.osm.pbf -o /db/planet.osm.bz2 -f osm.bz2 --overwrite && rm -f /db/planet.osm.pbf"
+      - OVERPASS_RULES_LOAD=10
+    volumes:
+      - "${OVERPASS_DB_DIR}:/db"
+      - "${OVERPASS_SOURCE_DIR}:/osm:ro"
+    restart: unless-stopped

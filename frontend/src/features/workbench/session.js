@@ -25,7 +25,7 @@
                 this.h3GridFeatures = [];
                 this.isGeneratingGrid = false;
                 this.resetH3AnalysisState();
-                this.resetPopulationAnalysisState({ keepMeta: true });
+                this.resetPopulationAnalysisState({ keepMeta: true, keepYear: true });
                 this.resetNightlightAnalysisState({ keepMeta: true, keepYear: true });
                 this.clearIsochroneDebugState();
                 this.clearPoiOverlayLayers({
@@ -130,7 +130,7 @@
                 });
                 this.clearPoiKdeOverlay();
                 this.clearH3Grid();
-                this.resetPopulationAnalysisState({ keepMeta: true });
+                this.resetPopulationAnalysisState({ keepMeta: true, keepYear: true });
                 this.resetNightlightAnalysisState({ keepMeta: true, keepYear: true });
                 this.clearScopeOutlineDisplay();
                 this.disposePoiChart();

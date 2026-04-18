@@ -12,12 +12,12 @@ from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 import asyncio
-from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from core.config import settings
 from core.exceptions import BizError
+from core.middleware import SelectiveGZipMiddleware
 from modules.population.runtime_check import run_population_runtime_check
 from router import admin_router, app_router
 from store import init_db
@@ -92,7 +92,11 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
-    app.add_middleware(GZipMiddleware, minimum_size=500)
+    app.add_middleware(
+        SelectiveGZipMiddleware,
+        minimum_size=500,
+        excluded_paths={"/api/v1/analysis/agent/turn/stream"},
+    )
     app.add_exception_handler(RequestValidationError, validation_exception_handler)
     app.add_exception_handler(BizError, biz_exception_handler)
 

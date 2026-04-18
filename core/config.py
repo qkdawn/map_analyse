@@ -196,6 +196,11 @@ class Settings(BaseSettings):
         validation_alias="POPULATION_DATA_DIR",
         description="Directory containing population GeoTIFF files",
     )
+    population_data_year: str = Field(
+        "2026",
+        validation_alias="POPULATION_DATA_YEAR",
+        description="Population dataset year to read from the population data directory",
+    )
     population_preview_max_size: int = Field(
         2048,
         validation_alias="POPULATION_PREVIEW_MAX_SIZE",

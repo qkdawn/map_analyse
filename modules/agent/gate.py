@@ -123,6 +123,43 @@ def _needs_clarification_for_ambiguous_intent(text: str) -> str:
     return ""
 
 
+def _clarification_options(text: str, snapshot: AnalysisSnapshot) -> List[str]:
+    if not text:
+        return [
+            "总结这个区域的商业特征",
+            "哪里适合补充餐饮",
+            "为什么这里路网差",
+            "下一步做什么分析",
+        ]
+    if not extract_scope_polygon(snapshot):
+        return [
+            "我先画一个范围再继续",
+            "基于当前等时圈总结这个区域",
+            "帮我看看这里适合补充什么业态",
+        ]
+    if _has_any(text, BUSINESS_ACTION_TOKENS) and not _has_business_target(text):
+        return [
+            "哪里适合补充咖啡",
+            "哪里适合补充餐饮",
+            "哪里适合补充便利店",
+            "哪里适合补充零售",
+        ]
+    if _has_any(text, AMBIGUOUS_DECISION_TOKENS) and not _has_any(text, DECISION_CONTEXT_TOKENS):
+        return [
+            "对比这两个区域的商业特征",
+            "优化这个区域的商业补位方向",
+            "比较人口、路网和夜间活力哪个更弱",
+        ]
+    if _has_any(text, VAGUE_ANALYSIS_TOKENS):
+        return [
+            "总结这个区域的商业特征",
+            "哪里适合补充餐饮",
+            "为什么这里夜间活力强",
+            "为什么这里路网差",
+        ]
+    return []
+
+
 def run_gate(messages: List[AgentMessage], snapshot: AnalysisSnapshot) -> GateDecision:
     latest = latest_user_message(messages)
     if not latest:
@@ -133,6 +170,7 @@ def run_gate(messages: List[AgentMessage], snapshot: AnalysisSnapshot) -> GateDe
             missing_information=["问题目标"],
             clarification_questions=["请先说清楚你想解决的问题，例如“总结这个区域”或“哪里适合补充餐饮”。"],
             clarification_question="请先说清楚你想解决的问题，例如“总结这个区域”或“哪里适合补充餐饮”。",
+            clarification_options=_clarification_options(latest, snapshot),
         )
     if not extract_scope_polygon(snapshot):
         return GateDecision(
@@ -142,6 +180,7 @@ def run_gate(messages: List[AgentMessage], snapshot: AnalysisSnapshot) -> GateDe
             missing_information=["分析范围"],
             clarification_questions=["当前 analysis snapshot 里没有可用分析范围，请先提供 scope / isochrone / polygon。"],
             clarification_question="当前 analysis snapshot 里没有可用分析范围，请先提供 scope / isochrone / polygon。",
+            clarification_options=_clarification_options(latest, snapshot),
         )
     if not _is_actionable_question(latest):
         clarification_question = _needs_clarification_for_ambiguous_intent(latest)
@@ -152,6 +191,7 @@ def run_gate(messages: List[AgentMessage], snapshot: AnalysisSnapshot) -> GateDe
                 summary="用户问题还不够明确，建议先补齐关键意图。",
                 clarification_questions=[clarification_question],
                 clarification_question=clarification_question,
+                clarification_options=_clarification_options(latest, snapshot),
             )
     return GateDecision(
         status="pass",

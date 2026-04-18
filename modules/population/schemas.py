@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 class PopulationBaseRequest(BaseModel):
     polygon: list = Field(..., description="Polygon ring or multi-ring polygon coordinates")
     coord_type: Literal["gcj02", "wgs84"] = Field("gcj02", description="Input coordinate system")
+    year: str = Field("2026", description="Population dataset year")
 
 
 class PopulationOverviewRequest(PopulationBaseRequest):
@@ -81,6 +82,8 @@ class PopulationMetaResponse(BaseModel):
     age_band_options: List[Dict[str, str]] = Field(default_factory=list)
     default_sex: str = "total"
     default_age_band: str = "all"
+    default_year: str = "2026"
+    year_options: List[str] = Field(default_factory=lambda: ["2024", "2025", "2026"])
 
 
 class PopulationAgeDistributionItem(BaseModel):

@@ -8,7 +8,7 @@ import numpy as np
 from shapely.geometry import mapping
 from shapely.geometry.base import BaseGeometry
 
-from .registry import age_band_keys, resolve_population_file_paths
+from .registry import DEFAULT_POPULATION_YEAR, age_band_keys, resolve_population_file_paths
 
 logger = logging.getLogger(__name__)
 
@@ -71,28 +71,39 @@ def combine_masked_layers(paths: Sequence[Path], geom_wgs84: BaseGeometry):
     return base
 
 
-def fallback_age_sum_paths(data_dir: Path, sex: str, age_band: str) -> list[Path]:
+def fallback_age_sum_paths(
+    data_dir: Path,
+    sex: str,
+    age_band: str,
+    year: str = DEFAULT_POPULATION_YEAR,
+) -> list[Path]:
     if age_band != "all":
         return []
     if sex == "male":
-        return [path for key in age_band_keys() for path in resolve_population_file_paths(data_dir, "male", key)]
+        return [path for key in age_band_keys() for path in resolve_population_file_paths(data_dir, "male", key, year)]
     if sex == "female":
-        return [path for key in age_band_keys() for path in resolve_population_file_paths(data_dir, "female", key)]
+        return [path for key in age_band_keys() for path in resolve_population_file_paths(data_dir, "female", key, year)]
     if sex == "total":
         return (
-            [path for key in age_band_keys() for path in resolve_population_file_paths(data_dir, "male", key)]
-            + [path for key in age_band_keys() for path in resolve_population_file_paths(data_dir, "female", key)]
+            [path for key in age_band_keys() for path in resolve_population_file_paths(data_dir, "male", key, year)]
+            + [path for key in age_band_keys() for path in resolve_population_file_paths(data_dir, "female", key, year)]
         )
     return []
 
 
-def combine_population_layers(data_dir: Path, sex: str, age_band: str, geom_wgs84: BaseGeometry):
-    primary_paths = resolve_population_file_paths(data_dir, sex, age_band)
+def combine_population_layers(
+    data_dir: Path,
+    sex: str,
+    age_band: str,
+    geom_wgs84: BaseGeometry,
+    year: str = DEFAULT_POPULATION_YEAR,
+):
+    primary_paths = resolve_population_file_paths(data_dir, sex, age_band, year)
     ensure_data_files(primary_paths)
     try:
         return combine_masked_layers(primary_paths, geom_wgs84)
     except Exception as exc:
-        fallback_paths = fallback_age_sum_paths(data_dir, sex, age_band)
+        fallback_paths = fallback_age_sum_paths(data_dir, sex, age_band, year)
         if not fallback_paths:
             raise
         logger.warning(

@@ -778,7 +778,7 @@ import { markRaw } from 'vue'
                     this.fetchProgress = 0;
                     this.poiStatus = '';
                     this.resetRoadSyntaxState();
-                    this.resetPopulationAnalysisState({ keepMeta: true });
+                    this.resetPopulationAnalysisState({ keepMeta: true, keepYear: true });
                     this.clearIsochroneDebugState();
                 },
                 _completeScopeAnalysis(geojson, options = {}) {

@@ -133,6 +133,11 @@ export function runAnalysisBootstrapApp() {
                       this.agentLoading = false;
                       this.agentStatus = 'idle';
                       this.agentCards = [];
+                      this.agentDecision = { summary: '', mode: 'judgment', strength: 'weak', canAct: false };
+                      this.agentSupport = [];
+                      this.agentCounterpoints = [];
+                      this.agentActions = [];
+                      this.agentBoundary = [];
                       this.agentExecutionTrace = [];
                       this.agentUsedTools = [];
                       this.agentCitations = [];

@@ -64,6 +64,8 @@ AgentSessionTitleSource = Literal["user", "ai", "fallback"]
 AgentTurnStreamEventType = Literal["meta", "status", "thinking", "reasoning_delta", "trace", "plan", "final", "error"]
 ThinkingState = Literal["pending", "active", "completed", "failed"]
 EvidenceConfidence = Literal["strong", "moderate", "weak"]
+DecisionMode = Literal["cognition", "judgment", "action"]
+DecisionStrength = Literal["strong", "moderate", "weak"]
 
 
 class AgentMessage(BaseModel):
@@ -212,12 +214,62 @@ class AgentEvidenceItem(BaseModel):
     limitation: str = ""
 
 
+class DecisionPayload(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    summary: str = ""
+    mode: DecisionMode = "judgment"
+    strength: DecisionStrength = "weak"
+    can_act: bool = False
+
+
+class DecisionEvidenceItem(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    key: str = ""
+    metric: str = ""
+    headline: str = ""
+    value: Any = None
+    interpretation: str = ""
+    source: str = ""
+    confidence: EvidenceConfidence = "weak"
+    limitation: str = ""
+    supports: List[str] = Field(default_factory=list)
+    is_key: bool = False
+
+
+class DecisionCounterpointItem(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    kind: Literal["conflict", "missing", "boundary"] = "boundary"
+    title: str = ""
+    detail: str = ""
+
+
+class DecisionActionItem(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    title: str = ""
+    detail: str = ""
+    condition: str = ""
+    target: str = ""
+    prompt: str = ""
+
+
+class DecisionBoundaryItem(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    title: str = ""
+    detail: str = ""
+
+
 class GateDecision(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     status: Literal["pass", "clarify", "block"] = "pass"
     clarification_question: str = ""
     clarification_questions: List[str] = Field(default_factory=list)
+    clarification_options: List[str] = Field(default_factory=list)
     missing_information: List[str] = Field(default_factory=list)
     question_type: str = ""
     summary: str = ""
@@ -329,9 +381,15 @@ class AgentTurnOutput(BaseModel):
 
     cards: List[AssistantCard] = Field(default_factory=list)
     clarification_question: str = ""
+    clarification_options: List[str] = Field(default_factory=list)
     risk_prompt: str = ""
     next_suggestions: List[str] = Field(default_factory=list)
     panel_payloads: Dict[str, Any] = Field(default_factory=dict)
+    decision: DecisionPayload = Field(default_factory=DecisionPayload)
+    support: List[DecisionEvidenceItem] = Field(default_factory=list)
+    counterpoints: List[DecisionCounterpointItem] = Field(default_factory=list)
+    actions: List[DecisionActionItem] = Field(default_factory=list)
+    boundary: List[DecisionBoundaryItem] = Field(default_factory=list)
 
 
 class AgentTurnDiagnostics(BaseModel):
@@ -397,9 +455,15 @@ class AgentTurnResponse(BaseModel):
             value["output"] = {
                 "cards": value.pop("assistant_cards", value.pop("cards", [])),
                 "clarification_question": value.pop("clarification_question", ""),
+                "clarification_options": value.pop("clarification_options", []),
                 "risk_prompt": value.pop("risk_prompt", ""),
                 "next_suggestions": value.pop("next_suggestions", []),
                 "panel_payloads": value.pop("panel_payloads", {}),
+                "decision": value.pop("decision", {}),
+                "support": value.pop("support", []),
+                "counterpoints": value.pop("counterpoints", []),
+                "actions": value.pop("actions", []),
+                "boundary": value.pop("boundary", []),
             }
         if "diagnostics" not in value:
             value["diagnostics"] = {
@@ -502,9 +566,15 @@ class AgentSessionSnapshotRequest(BaseModel):
             value["output"] = {
                 "cards": value.pop("cards", []),
                 "clarification_question": value.pop("clarification_question", ""),
+                "clarification_options": value.pop("clarification_options", []),
                 "risk_prompt": value.pop("risk_prompt", ""),
                 "next_suggestions": value.pop("next_suggestions", []),
                 "panel_payloads": value.pop("panel_payloads", {}),
+                "decision": value.pop("decision", {}),
+                "support": value.pop("support", []),
+                "counterpoints": value.pop("counterpoints", []),
+                "actions": value.pop("actions", []),
+                "boundary": value.pop("boundary", []),
             }
         if "diagnostics" not in value:
             value["diagnostics"] = {

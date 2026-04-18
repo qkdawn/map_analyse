@@ -19,12 +19,15 @@ from .cache import (
 from .dataset import combine_masked_layers, combine_population_layers, ensure_data_files, masked_stats
 from .registry import (
     DEFAULT_AGE_BAND,
+    DEFAULT_POPULATION_YEAR,
     DEFAULT_SEX,
     age_band_keys,
     build_meta_payload,
     build_selected_descriptor,
     get_age_band_label,
     get_sex_label,
+    normalize_population_year,
+    resolve_population_data_dir,
     resolve_population_file_paths,
 )
 from .render import (
@@ -47,18 +50,27 @@ from .render import (
 DEFAULT_ANALYSIS_AGE_BAND = "25"
 
 
-def _population_scope_id(geom_wgs84) -> str:
-    data_dir = resolve_dir(settings.population_data_dir)
+def _population_year(year: str | None = None) -> str:
+    return normalize_population_year(year or settings.population_data_year)
+
+
+def _population_data_dir(year: str | None = None):
+    return resolve_population_data_dir(resolve_dir(settings.population_data_dir), _population_year(year))
+
+
+def _population_scope_id(geom_wgs84, year: str | None = None) -> str:
+    data_dir = _population_data_dir(year)
     return build_scope_id(geom_wgs84, "population", str(data_dir))
 
 
-def _compute_population_overview(scope_id: str, geom_wgs84) -> Dict[str, Any]:
-    data_dir = resolve_dir(settings.population_data_dir)
+def _compute_population_overview(scope_id: str, geom_wgs84, year: str | None = None) -> Dict[str, Any]:
+    safe_year = _population_year(year)
+    data_dir = _population_data_dir(safe_year)
     if not data_dir.exists():
         raise RuntimeError(f"population data directory not found: {data_dir}")
 
-    male_total_data = combine_population_layers(data_dir, "male", "all", geom_wgs84)
-    female_total_data = combine_population_layers(data_dir, "female", "all", geom_wgs84)
+    male_total_data = combine_population_layers(data_dir, "male", "all", geom_wgs84, safe_year)
+    female_total_data = combine_population_layers(data_dir, "female", "all", geom_wgs84, safe_year)
 
     male_total = masked_stats(male_total_data["array"] if male_total_data else None, round_float)["sum"]
     female_total = masked_stats(female_total_data["array"] if female_total_data else None, round_float)["sum"]
@@ -68,8 +80,8 @@ def _compute_population_overview(scope_id: str, geom_wgs84) -> Dict[str, Any]:
 
     age_distribution: list[dict[str, Any]] = []
     for age_band in age_band_keys():
-        male_paths = resolve_population_file_paths(data_dir, "male", age_band)
-        female_paths = resolve_population_file_paths(data_dir, "female", age_band)
+        male_paths = resolve_population_file_paths(data_dir, "male", age_band, safe_year)
+        female_paths = resolve_population_file_paths(data_dir, "female", age_band, safe_year)
         ensure_data_files([*male_paths, *female_paths])
         male_data = combine_masked_layers(male_paths, geom_wgs84)
         female_data = combine_masked_layers(female_paths, geom_wgs84)
@@ -106,19 +118,19 @@ def _compute_population_overview(scope_id: str, geom_wgs84) -> Dict[str, Any]:
     return payload
 
 
-def _load_or_compute_population_overview(scope_id: str, geom_wgs84) -> Dict[str, Any]:
+def _load_or_compute_population_overview(scope_id: str, geom_wgs84, year: str | None = None) -> Dict[str, Any]:
     cached = read_json(overview_cache_path(scope_id))
     if cached:
         return cached
-    return _compute_population_overview(scope_id, geom_wgs84)
+    return _compute_population_overview(scope_id, geom_wgs84, year)
 
 
-def _compute_population_grid(scope_id: str, geom_wgs84) -> Dict[str, Any]:
-    data_dir = resolve_dir(settings.population_data_dir)
+def _compute_population_grid(scope_id: str, geom_wgs84, year: str | None = None) -> Dict[str, Any]:
+    data_dir = _population_data_dir(year)
     if not data_dir.exists():
         raise RuntimeError(f"population data directory not found: {data_dir}")
 
-    base_data = combine_population_layers(data_dir, "male", "all", geom_wgs84)
+    base_data = combine_population_layers(data_dir, "male", "all", geom_wgs84, _population_year(year))
     if base_data is None:
         payload = {"scope_id": scope_id, "cell_count": 0, "features": []}
         write_json(grid_cache_path(scope_id), payload)
@@ -145,11 +157,11 @@ def _compute_population_grid(scope_id: str, geom_wgs84) -> Dict[str, Any]:
     return payload
 
 
-def _load_or_compute_population_grid(scope_id: str, geom_wgs84) -> Dict[str, Any]:
+def _load_or_compute_population_grid(scope_id: str, geom_wgs84, year: str | None = None) -> Dict[str, Any]:
     cached = read_json(grid_cache_path(scope_id))
     if cached:
         return cached
-    return _compute_population_grid(scope_id, geom_wgs84)
+    return _compute_population_grid(scope_id, geom_wgs84, year)
 
 
 def _resolve_population_layer_source(view: str, sex_mode: str, age_mode: str, age_band: str) -> Dict[str, str]:
@@ -218,21 +230,32 @@ def build_population_meta_payload() -> Dict[str, Any]:
     return build_meta_payload()
 
 
-def get_population_overview(polygon: list, coord_type: str = "gcj02") -> Dict[str, Any]:
+def get_population_overview(
+    polygon: list,
+    coord_type: str = "gcj02",
+    year: str = DEFAULT_POPULATION_YEAR,
+) -> Dict[str, Any]:
     geom_wgs84 = to_wgs84_geometry(polygon, coord_type)
-    scope_id = _population_scope_id(geom_wgs84)
-    return _load_or_compute_population_overview(scope_id, geom_wgs84)
+    safe_year = _population_year(year)
+    scope_id = _population_scope_id(geom_wgs84, safe_year)
+    return _load_or_compute_population_overview(scope_id, geom_wgs84, safe_year)
 
 
-def get_population_grid(polygon: list, coord_type: str = "gcj02") -> Dict[str, Any]:
+def get_population_grid(
+    polygon: list,
+    coord_type: str = "gcj02",
+    year: str = DEFAULT_POPULATION_YEAR,
+) -> Dict[str, Any]:
     geom_wgs84 = to_wgs84_geometry(polygon, coord_type)
-    scope_id = _population_scope_id(geom_wgs84)
-    return _load_or_compute_population_grid(scope_id, geom_wgs84)
+    safe_year = _population_year(year)
+    scope_id = _population_scope_id(geom_wgs84, safe_year)
+    return _load_or_compute_population_grid(scope_id, geom_wgs84, safe_year)
 
 
 def get_population_layer(
     polygon: list,
     coord_type: str = "gcj02",
+    year: str = DEFAULT_POPULATION_YEAR,
     scope_id: str | None = None,
     view: str = "density",
     sex_mode: str = "male",
@@ -240,9 +263,10 @@ def get_population_layer(
     age_band: str = DEFAULT_ANALYSIS_AGE_BAND,
 ) -> Dict[str, Any]:
     geom_wgs84 = to_wgs84_geometry(polygon, coord_type)
-    resolved_scope_id = scope_id or _population_scope_id(geom_wgs84)
-    overview = _load_or_compute_population_overview(resolved_scope_id, geom_wgs84)
-    _load_or_compute_population_grid(resolved_scope_id, geom_wgs84)
+    safe_year = _population_year(year)
+    resolved_scope_id = scope_id or _population_scope_id(geom_wgs84, safe_year)
+    overview = _load_or_compute_population_overview(resolved_scope_id, geom_wgs84, safe_year)
+    _load_or_compute_population_grid(resolved_scope_id, geom_wgs84, safe_year)
 
     view_config = _resolve_population_layer_source(view, sex_mode, age_mode, age_band)
     selected = _build_population_layer_selected(view_config, sex_mode, age_mode, age_band)
@@ -260,7 +284,7 @@ def get_population_layer(
         cached["selected"] = selected
         return cached
 
-    data_dir = resolve_dir(settings.population_data_dir)
+    data_dir = _population_data_dir(safe_year)
     if not data_dir.exists():
         raise RuntimeError(f"population data directory not found: {data_dir}")
 
@@ -271,8 +295,8 @@ def get_population_layer(
     raw_sum = 0.0
 
     if str(view_config.get("view")) == "age" and str(view_config.get("age_mode")) == "ratio":
-        total_layer = combine_population_layers(data_dir, "total", "all", geom_wgs84)
-        age_layer = combine_population_layers(data_dir, "total", str(view_config["age_band"]), geom_wgs84)
+        total_layer = combine_population_layers(data_dir, "total", "all", geom_wgs84, safe_year)
+        age_layer = combine_population_layers(data_dir, "total", str(view_config["age_band"]), geom_wgs84, safe_year)
         if total_layer is not None and age_layer is not None:
             raw_cells, raw_sum = build_age_ratio_cells(total_layer, age_layer)
             display_values = [float(cell["display_value"]) for cell in raw_cells]
@@ -290,8 +314,11 @@ def get_population_layer(
         else:
             combined = None
     elif str(view_config.get("view")) == "age" and str(view_config.get("age_mode")) == "dominant":
-        total_layer = combine_population_layers(data_dir, "total", "all", geom_wgs84)
-        age_layers = {age_key: combine_population_layers(data_dir, "total", age_key, geom_wgs84) for age_key in age_band_keys()}
+        total_layer = combine_population_layers(data_dir, "total", "all", geom_wgs84, safe_year)
+        age_layers = {
+            age_key: combine_population_layers(data_dir, "total", age_key, geom_wgs84, safe_year)
+            for age_key in age_band_keys()
+        }
         if total_layer is not None and all(layer is not None for layer in age_layers.values()):
             raw_cells, _ = build_dominant_age_cells(total_layer, age_layers)
             display_values = [float(cell["display_value"]) for cell in raw_cells]
@@ -309,7 +336,13 @@ def get_population_layer(
         else:
             combined = None
     else:
-        combined = combine_population_layers(data_dir, str(view_config["sex"]), str(view_config["age_band"]), geom_wgs84)
+        combined = combine_population_layers(
+            data_dir,
+            str(view_config["sex"]),
+            str(view_config["age_band"]),
+            geom_wgs84,
+            safe_year,
+        )
 
     if combined is None and not raw_cells:
         payload = {
@@ -371,13 +404,15 @@ def get_population_layer(
 def get_population_raster_preview(
     polygon: list,
     coord_type: str = "gcj02",
+    year: str = DEFAULT_POPULATION_YEAR,
     sex: str = DEFAULT_SEX,
     age_band: str = DEFAULT_AGE_BAND,
     scope_id: str | None = None,
 ) -> Dict[str, Any]:
     geom_wgs84 = to_wgs84_geometry(polygon, coord_type)
-    resolved_scope_id = scope_id or _population_scope_id(geom_wgs84)
-    overview = _load_or_compute_population_overview(resolved_scope_id, geom_wgs84)
+    safe_year = _population_year(year)
+    resolved_scope_id = scope_id or _population_scope_id(geom_wgs84, safe_year)
+    overview = _load_or_compute_population_overview(resolved_scope_id, geom_wgs84, safe_year)
     selected = build_selected_descriptor(sex, age_band)
 
     cache_json_path = raster_cache_json_path(resolved_scope_id, sex, age_band)
@@ -387,10 +422,10 @@ def get_population_raster_preview(
         cached["selected"] = selected
         return cached
 
-    data_dir = resolve_dir(settings.population_data_dir)
+    data_dir = _population_data_dir(safe_year)
     if not data_dir.exists():
         raise RuntimeError(f"population data directory not found: {data_dir}")
-    combined = combine_population_layers(data_dir, sex, age_band, geom_wgs84)
+    combined = combine_population_layers(data_dir, sex, age_band, geom_wgs84, safe_year)
     if combined is None:
         payload = {
             "scope_id": resolved_scope_id,

@@ -232,7 +232,7 @@
                 this.clearScopeOutlineDisplay();
                 this.drawnScopePolygon = [];
                 this.resetRoadSyntaxState();
-                this.resetPopulationAnalysisState({ keepMeta: true });
+                this.resetPopulationAnalysisState({ keepMeta: true, keepYear: true });
                 this.resetNightlightAnalysisState({ keepMeta: true, keepYear: true });
                 this.allPoisDetails = [];
 

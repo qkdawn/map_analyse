@@ -34,6 +34,11 @@ def test_build_synthesis_payload_includes_evidence_matrix_and_decision_layers():
     )
 
     assert payload["decision_strength"] == "strong"
+    assert payload["decision"]["strength"] == "strong"
+    assert payload["decision"]["can_act"] is True
+    assert payload["support"]
+    assert payload["actions"]
+    assert payload["boundary"]
     assert any(item["metric"] == "poi_count" for item in payload["evidence_matrix"])
     assert payload["recommendation_layers"]["can_act_now"]
     assert payload["recommendation_layers"]["do_not_infer"]
@@ -55,6 +60,44 @@ def test_build_cards_uses_decision_oriented_titles_and_layers():
     assert "证据强度" in cards[0].content
     assert any(item.startswith("需补充后判断") for item in cards[2].items)
     assert any(item.startswith("不建议直接推断") for item in cards[2].items)
+
+
+def test_build_synthesis_payload_marks_missing_evidence_as_non_actionable():
+    audit = AuditResult(missing_evidence=["路网概览", "夜光概览"])
+    payload = build_synthesis_payload(
+        question="这里值不值得继续做商业选址研究",
+        snapshot=AnalysisSnapshot(poi_summary={"total": 6}),
+        artifacts={},
+        tool_results=[ToolResult(tool_name="read_current_results", status="success")],
+        research_notes=[],
+        audit=audit,
+    )
+
+    assert payload["decision"]["strength"] == "weak"
+    assert payload["decision"]["can_act"] is False
+    assert any(item["kind"] == "missing" for item in payload["counterpoints"])
+    assert any("路网概览" in item["detail"] for item in payload["counterpoints"])
+
+
+def test_build_synthesis_payload_explains_conflicts_in_output():
+    payload = build_synthesis_payload(
+        question="为什么这里夜间活力看起来强，但不一定适合直接开店",
+        snapshot=AnalysisSnapshot(
+            poi_summary={"total": 28},
+            population={"summary": {"total_population": 1200, "male_ratio": 0.48, "female_ratio": 0.52}},
+            nightlight={"summary": {"total_radiance": 188.0, "mean_radiance": 4.3, "max_radiance": 11.5, "lit_pixel_ratio": 0.81}},
+            road={"summary": {"node_count": 26, "edge_count": 33}},
+            h3={"summary": {"grid_count": 10, "avg_density_poi_per_km2": 8.1}},
+        ),
+        artifacts={},
+        tool_results=[ToolResult(tool_name="read_current_results", status="success")],
+        research_notes=[],
+        audit=AuditResult(),
+    )
+
+    assert any(item["kind"] == "conflict" for item in payload["counterpoints"])
+    assert "不过" in payload["decision"]["summary"]
+    assert payload["actions"]
 
 
 def test_build_cards_includes_business_site_advice_target():

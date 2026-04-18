@@ -19,7 +19,7 @@ from modules.providers.amap.utils.transform_posi import wgs84_to_gcj02
 PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
 
 
-def _write_population_test_rasters(root: Path):
+def _write_population_test_rasters(root: Path, year: str = "2026"):
     import rasterio
     from rasterio.transform import from_origin
 
@@ -49,13 +49,13 @@ def _write_population_test_rasters(root: Path):
         female_total += female_arr
 
     datasets = {
-        "chn_T_M_2026_CN_100m_R2025A_v1.tif": male_total,
-        "chn_T_F_2026_CN_100m_R2025A_v1.tif": female_total,
+        f"chn_T_M_{year}_CN_100m_R2025A_v1.tif": male_total,
+        f"chn_T_F_{year}_CN_100m_R2025A_v1.tif": female_total,
     }
     for age_band in age_band_keys():
-        datasets[f"chn_m_{age_band}_2026_CN_100m_R2025A_v1.tif"] = male_ages[age_band]
-        datasets[f"chn_f_{age_band}_2026_CN_100m_R2025A_v1.tif"] = female_ages[age_band]
-        datasets[f"chn_t_{age_band}_2026_CN_100m_R2025A_v1.tif"] = male_ages[age_band] + female_ages[age_band]
+        datasets[f"chn_m_{age_band}_{year}_CN_100m_R2025A_v1.tif"] = male_ages[age_band]
+        datasets[f"chn_f_{age_band}_{year}_CN_100m_R2025A_v1.tif"] = female_ages[age_band]
+        datasets[f"chn_t_{age_band}_{year}_CN_100m_R2025A_v1.tif"] = male_ages[age_band] + female_ages[age_band]
 
     for filename, data in datasets.items():
         path = root / filename
@@ -85,12 +85,14 @@ def _sample_gcj02_polygon():
     return [list(wgs84_to_gcj02(lng, lat)) for lng, lat in ring_wgs84]
 
 
-def _configure_population_dirs(tmp_path: Path):
-    data_dir = tmp_path / "population_data"
-    _write_population_test_rasters(data_dir)
-    settings.population_data_dir = str(data_dir)
+def _configure_population_dirs(tmp_path: Path, year: str = "2026"):
+    data_root = tmp_path / "population_data"
+    data_dir = data_root / year
+    _write_population_test_rasters(data_dir, year)
+    settings.population_data_dir = str(data_root)
+    settings.population_data_year = year
     settings.population_preview_max_size = 512
-    return data_dir
+    return data_root
 
 
 async def _request(method: str, url: str, **kwargs):
@@ -105,6 +107,8 @@ def test_population_meta_api():
     data = resp.json()
     assert data["default_sex"] == "total"
     assert data["default_age_band"] == "all"
+    assert data["default_year"] == "2026"
+    assert data["year_options"] == ["2024", "2025", "2026"]
     assert any(item["value"] == "male" for item in data["sex_options"])
     assert any(item["value"] == "90" for item in data["age_band_options"])
 
@@ -233,8 +237,21 @@ def test_population_raster_age_specific_api(tmp_path):
     assert data["summary"]["selected_population"] > 0
 
 
+def test_population_overview_api_supports_alternate_year(tmp_path):
+    _configure_population_dirs(tmp_path, year="2025")
+    resp = asyncio.run(_request(
+        "POST",
+        "/api/v1/analysis/population/overview",
+        json={"polygon": _sample_gcj02_polygon(), "coord_type": "gcj02", "year": "2025"},
+    ))
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["summary"]["total_population"] > 0
+
+
 def test_population_missing_directory_returns_500(tmp_path):
     settings.population_data_dir = str(tmp_path / "missing_population_data")
+    settings.population_data_year = "2026"
     resp = asyncio.run(_request(
         "POST",
         "/api/v1/analysis/population/overview",

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Literal, Sequence
+from typing import Dict, Literal
 
 
 SexKey = Literal["total", "male", "female"]
@@ -33,6 +33,8 @@ AgeBandKey = Literal[
 
 DEFAULT_SEX: SexKey = "total"
 DEFAULT_AGE_BAND: AgeBandKey = "all"
+DEFAULT_POPULATION_YEAR = "2026"
+POPULATION_YEAR_OPTIONS: tuple[str, ...] = ("2024", "2025", "2026")
 
 
 SEX_OPTIONS: tuple[dict[str, str], ...] = (
@@ -74,6 +76,7 @@ _SEX_LABEL_MAP: dict[str, str] = {item["value"]: item["label"] for item in SEX_O
 class PopulationLayer:
     sex: SexKey
     age_band: AgeBandKey
+    year: str
     filename: str
     label: str
 
@@ -86,12 +89,24 @@ def get_sex_label(sex: str) -> str:
     return _SEX_LABEL_MAP.get(str(sex), str(sex))
 
 
-def _file_name_for_layer(sex: SexKey, age_band: AgeBandKey) -> str:
+def normalize_population_year(year: str | int | None) -> str:
+    safe_year = str(year or DEFAULT_POPULATION_YEAR).strip()
+    if safe_year in POPULATION_YEAR_OPTIONS:
+        return safe_year
+    return DEFAULT_POPULATION_YEAR
+
+
+def _file_name_for_layer(
+    sex: SexKey,
+    age_band: AgeBandKey,
+    year: str = DEFAULT_POPULATION_YEAR,
+) -> str:
+    safe_year = normalize_population_year(year)
     if age_band == "all":
         if sex == "male":
-            return "chn_T_M_2026_CN_100m_R2025A_v1.tif"
+            return f"chn_T_M_{safe_year}_CN_100m_R2025A_v1.tif"
         if sex == "female":
-            return "chn_T_F_2026_CN_100m_R2025A_v1.tif"
+            return f"chn_T_F_{safe_year}_CN_100m_R2025A_v1.tif"
         raise ValueError("total/all is represented by two sex-specific total files")
 
     prefix_map = {
@@ -99,28 +114,35 @@ def _file_name_for_layer(sex: SexKey, age_band: AgeBandKey) -> str:
         "female": "f",
         "total": "t",
     }
-    return f"chn_{prefix_map[sex]}_{age_band}_2026_CN_100m_R2025A_v1.tif"
+    return f"chn_{prefix_map[sex]}_{age_band}_{safe_year}_CN_100m_R2025A_v1.tif"
 
 
-def resolve_population_layers(sex: SexKey, age_band: AgeBandKey) -> list[PopulationLayer]:
+def resolve_population_layers(
+    sex: SexKey,
+    age_band: AgeBandKey,
+    year: str = DEFAULT_POPULATION_YEAR,
+) -> list[PopulationLayer]:
+    safe_year = normalize_population_year(year)
     if age_band == "all" and sex == "total":
         return [
             PopulationLayer(
                 sex="male",
                 age_band="all",
-                filename=_file_name_for_layer("male", "all"),
+                year=safe_year,
+                filename=_file_name_for_layer("male", "all", safe_year),
                 label="男性总人口",
             ),
             PopulationLayer(
                 sex="female",
                 age_band="all",
-                filename=_file_name_for_layer("female", "all"),
+                year=safe_year,
+                filename=_file_name_for_layer("female", "all", safe_year),
                 label="女性总人口",
             ),
         ]
-    filename = _file_name_for_layer(sex, age_band)
+    filename = _file_name_for_layer(sex, age_band, safe_year)
     label = f"{get_sex_label(sex)} {get_age_band_label(age_band)}"
-    return [PopulationLayer(sex=sex, age_band=age_band, filename=filename, label=label)]
+    return [PopulationLayer(sex=sex, age_band=age_band, year=safe_year, filename=filename, label=label)]
 
 
 def age_band_keys() -> list[str]:
@@ -131,9 +153,18 @@ def resolve_population_file_paths(
     data_dir: str | Path,
     sex: SexKey,
     age_band: AgeBandKey,
+    year: str = DEFAULT_POPULATION_YEAR,
 ) -> list[Path]:
     base_dir = Path(data_dir).expanduser().resolve()
-    return [base_dir / layer.filename for layer in resolve_population_layers(sex, age_band)]
+    return [base_dir / layer.filename for layer in resolve_population_layers(sex, age_band, year)]
+
+
+def resolve_population_data_dir(
+    data_dir: str | Path,
+    year: str = DEFAULT_POPULATION_YEAR,
+) -> Path:
+    base_dir = Path(data_dir).expanduser().resolve()
+    return (base_dir / normalize_population_year(year)).resolve()
 
 
 def build_meta_payload() -> Dict[str, object]:
@@ -142,6 +173,8 @@ def build_meta_payload() -> Dict[str, object]:
         "age_band_options": [dict(item) for item in AGE_BAND_OPTIONS],
         "default_sex": DEFAULT_SEX,
         "default_age_band": DEFAULT_AGE_BAND,
+        "default_year": DEFAULT_POPULATION_YEAR,
+        "year_options": list(POPULATION_YEAR_OPTIONS),
     }
 
 

@@ -30,6 +30,8 @@ function createPopulationFallbackMeta() {
     ],
     default_sex: 'total',
     default_age_band: 'all',
+    default_year: '2026',
+    year_options: ['2024', '2025', '2026'],
   }
 }
 
@@ -119,6 +121,7 @@ function createAnalysisPopulationInitialState() {
     populationAgeBand: 'all',
     populationMeta: meta,
     populationMetaLoaded: false,
+    populationSelectedYear: String(meta.default_year || '2026'),
     populationPrimaryChart: null,
     populationSecondaryChart: null,
     populationChartsResizeHandler: null,
@@ -158,6 +161,26 @@ function createAnalysisPopulationMethods() {
         this.populationStatus = '人口图层切换失败: ' + (err && err.message ? err.message : String(err))
       })
     },
+    getPopulationYearOptions() {
+      const options = Array.isArray(this.populationMeta && this.populationMeta.year_options)
+        ? this.populationMeta.year_options
+        : []
+      return options
+        .map((item) => String(item || '').trim())
+        .filter((item) => item.length > 0)
+        .map((year) => ({ value: year, label: `${year} 年` }))
+    },
+    getPopulationSelectedYear() {
+      const selected = String(this.populationSelectedYear || '').trim()
+      const options = this.getPopulationYearOptions()
+      if (options.some((item) => item.value === selected)) return selected
+      return String((this.populationMeta && this.populationMeta.default_year) || '2026')
+    },
+    getPopulationSelectedYearLabel() {
+      const year = this.getPopulationSelectedYear()
+      const option = this.getPopulationYearOptions().find((item) => item.value === year)
+      return String((option && option.label) || (year ? `${year} 年` : '-'))
+    },
     async loadPopulationMeta(force = false) {
       if ((this.populationMetaLoaded && !force) || this.isLoadingPopulationMeta) return this.populationMeta
       this.isLoadingPopulationMeta = true
@@ -172,16 +195,24 @@ function createAnalysisPopulationMethods() {
           age_band_options: Array.isArray(data.age_band_options) ? data.age_band_options : createPopulationFallbackMeta().age_band_options,
           default_sex: String(data.default_sex || 'total'),
           default_age_band: String(data.default_age_band || 'all'),
+          default_year: String(data.default_year || '2026'),
+          year_options: Array.isArray(data.year_options)
+            ? data.year_options.map((item) => String(item || '').trim()).filter((item) => item.length > 0)
+            : createPopulationFallbackMeta().year_options,
         }
         this.populationMeta = meta
         this.populationAgeBand = 'all'
         this.populationMetaLoaded = true
+        if (!this.getPopulationYearOptions().some((item) => item.value === String(this.populationSelectedYear || '').trim())) {
+          this.populationSelectedYear = String(meta.default_year || '2026')
+        }
         return meta
       } catch (e) {
         console.error(e)
         this.populationMeta = createPopulationFallbackMeta()
         this.populationAgeBand = 'all'
         this.populationMetaLoaded = false
+        this.populationSelectedYear = String(this.populationMeta.default_year || '2026')
         throw e
       } finally {
         this.isLoadingPopulationMeta = false
@@ -251,12 +282,14 @@ function createAnalysisPopulationMethods() {
       const rawRing = this.getIsochronePolygonRing()
       if (!rawRing) return null
       const polygon = this.getIsochronePolygonPayload()
+      const year = this.getPopulationSelectedYear()
       const res = await fetch('/api/v1/analysis/population/layer', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           polygon,
           coord_type: 'gcj02',
+          year,
           scope_id: this.populationScopeId || null,
           view,
           sex_mode: sexMode,
@@ -827,6 +860,7 @@ function createAnalysisPopulationMethods() {
     },
     resetPopulationAnalysisState(options = {}) {
       const keepMeta = !!(options && options.keepMeta)
+      const keepYear = !!(options && options.keepYear)
       this.isComputingPopulation = false
       this.isLoadingPopulationGrid = false
       this.populationStatus = ''
@@ -843,6 +877,9 @@ function createAnalysisPopulationMethods() {
       if (!keepMeta) {
         this.populationMeta = createPopulationFallbackMeta()
         this.populationMetaLoaded = false
+      }
+      if (!keepYear) {
+        this.populationSelectedYear = String((this.populationMeta && this.populationMeta.default_year) || '2026')
       }
       this.populationAgeBand = 'all'
       this.clearPopulationRasterDisplayOnLeave()
@@ -916,12 +953,14 @@ function createAnalysisPopulationMethods() {
       this.isLoadingPopulationGrid = true
       try {
         const polygon = this.getIsochronePolygonPayload()
+        const year = this.getPopulationSelectedYear()
         const res = await fetch('/api/v1/analysis/population/grid', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             polygon,
             coord_type: 'gcj02',
+            year,
           }),
         })
         if (!res.ok) {
@@ -1000,6 +1039,7 @@ function createAnalysisPopulationMethods() {
           body: JSON.stringify({
             polygon,
             coord_type: 'gcj02',
+            year: this.getPopulationSelectedYear(),
           }),
         })
         if (!overviewResp.ok) {
@@ -1029,6 +1069,28 @@ function createAnalysisPopulationMethods() {
       } finally {
         this.isComputingPopulation = false
       }
+    },
+    async onPopulationYearChange() {
+      const year = String(this.populationSelectedYear || '').trim()
+      const options = this.getPopulationYearOptions()
+      if (!options.some((item) => item.value === year)) {
+        this.populationSelectedYear = String((this.populationMeta && this.populationMeta.default_year) || '2026')
+      }
+      this.populationStatus = `正在切换人口年份：${this.getPopulationSelectedYearLabel()}`
+      this.populationScopeId = ''
+      this.populationOverview = null
+      this.populationGrid = null
+      this.populationGridCount = 0
+      this.populationLayer = null
+      this.populationSubTab = 'analysis'
+      this.populationAnalysisView = 'density'
+      this.populationSexMetricMode = 'ratio'
+      this.populationSexSourceLayers = createPopulationSexSourceLayers()
+      this.populationAgeMode = 'dominant'
+      this.populationAgeBand = 'all'
+      this.clearPopulationRasterDisplayOnLeave()
+      this.disposePopulationCharts()
+      await this.ensurePopulationPanelEntryState()
     },
     async fetchPopulationLayer(view = this.populationAnalysisView) {
       const rawRing = this.getIsochronePolygonRing()

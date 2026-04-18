@@ -163,6 +163,55 @@ function normalizeAgentPlanEnvelope(seed = {}) {
   }
 }
 
+function normalizeAgentDecision(seed = {}) {
+  return {
+    summary: asText(seed.summary),
+    mode: asText(seed.mode || 'judgment') || 'judgment',
+    strength: asText(seed.strength || 'weak') || 'weak',
+    canAct: !!(seed.canAct || seed.can_act),
+  }
+}
+
+function normalizeAgentDecisionEvidence(seed = {}) {
+  return {
+    key: asText(seed.key || seed.metric),
+    metric: asText(seed.metric),
+    headline: asText(seed.headline),
+    value: seed && Object.prototype.hasOwnProperty.call(seed, 'value') ? seed.value : null,
+    interpretation: asText(seed.interpretation),
+    source: asText(seed.source),
+    confidence: asText(seed.confidence || 'weak') || 'weak',
+    limitation: asText(seed.limitation),
+    supports: cloneArray(seed.supports).map((item) => asText(item)).filter(Boolean),
+    isKey: !!(seed.isKey || seed.is_key),
+  }
+}
+
+function normalizeAgentCounterpoint(seed = {}) {
+  return {
+    kind: asText(seed.kind || 'boundary') || 'boundary',
+    title: asText(seed.title),
+    detail: asText(seed.detail),
+  }
+}
+
+function normalizeAgentAction(seed = {}) {
+  return {
+    title: asText(seed.title),
+    detail: asText(seed.detail),
+    condition: asText(seed.condition),
+    target: asText(seed.target),
+    prompt: asText(seed.prompt),
+  }
+}
+
+function normalizeAgentBoundaryItem(seed = {}) {
+  return {
+    title: asText(seed.title),
+    detail: asText(seed.detail),
+  }
+}
+
 function normalizeAgentPanelPreloadNote(seed = {}) {
   return {
     key: asText(seed.key),
@@ -320,29 +369,67 @@ function normalizeAgentWaitingThinkingItem(elapsedSeconds = 0) {
   const seconds = Number(elapsedSeconds || 0)
   if (seconds >= 30) {
     return normalizeAgentThinkingItem({
-      id: 'frontend-wait-long-running',
+      id: 'frontend-wait-backend',
       phase: 'connecting',
-      title: '后端仍在处理',
-      detail: '后台还在继续计算，结果出来后这里会自动更新，不用重新提交。',
+      title: '等待后端首个进度事件',
+      detail: '请求已经发出，但后端还没推来第一条真实进度。这里一旦收到门卫判断、规划、工具执行或审计事件，就会立刻切换成真实步骤。',
       state: 'active',
     })
   }
   if (seconds >= 12) {
     return normalizeAgentThinkingItem({
-      id: 'frontend-wait-model',
+      id: 'frontend-wait-backend',
       phase: 'connecting',
-      title: '等待模型与分析工具',
-      detail: 'AI 正在思考并调用分析工具，所以这一步会多等一会儿。',
+      title: '等待后端首个进度事件',
+      detail: '后端已收到请求，正在准备返回第一条真实步骤。',
       state: 'active',
     })
   }
   return normalizeAgentThinkingItem({
-    id: 'frontend-wait-first-event',
+    id: 'frontend-wait-backend',
     phase: 'connecting',
-    title: '等待 Agent 过程',
-    detail: 'AI 已收到请求，正在开始第一步分析，马上会返回进度。',
+    title: '等待后端首个进度事件',
+    detail: '正在等待后端返回第一条真实进度。',
     state: 'active',
   })
+}
+
+function normalizeAgentPlanThinkingItem(seed = {}) {
+  const normalizedPlan = normalizeAgentPlanEnvelope(seed)
+  const previewItems = normalizedPlan.steps
+    .slice(0, 4)
+    .map((step) => asText(step.reason || step.tool_name))
+    .filter(Boolean)
+  return normalizeAgentThinkingItem({
+    id: `plan-envelope-${stableAgentHash({
+      steps: normalizedPlan.steps.map((step) => step.tool_name),
+      followup: normalizedPlan.followupSteps.map((step) => step.tool_name),
+      summary: normalizedPlan.summary,
+    })}`,
+    phase: normalizedPlan.followupApplied ? 'replanning' : 'planning',
+    title: normalizedPlan.followupApplied ? '已补充后续步骤' : '已列出本轮步骤',
+    detail: normalizedPlan.summary || '已生成待执行的分析步骤。',
+    items: previewItems,
+    state: 'completed',
+  })
+}
+
+function mergeAgentThinkingTimeline(liveItems = [], finalItems = []) {
+  const merged = cloneArray(liveItems).map((item) => normalizeAgentThinkingItem(item))
+  cloneArray(finalItems)
+    .map((item) => normalizeAgentThinkingItem(item))
+    .forEach((item) => {
+      const existingIndex = merged.findIndex((entry) => asText(entry && entry.id) === item.id)
+      if (existingIndex >= 0) {
+        merged.splice(existingIndex, 1, {
+          ...merged[existingIndex],
+          ...item,
+        })
+        return
+      }
+      merged.push(item)
+    })
+  return merged
 }
 
 function parseSseChunk(rawChunk = '') {
@@ -419,6 +506,15 @@ function normalizeAgentTurnPayload(seed = {}) {
             : (rawOutput.clarificationQuestion || rawOutput.clarification_question || '')
         ),
     ),
+    clarificationOptions: cloneArray(
+      Object.prototype.hasOwnProperty.call(seed, 'clarificationOptions')
+        ? seed.clarificationOptions
+        : (
+          Object.prototype.hasOwnProperty.call(seed, 'clarification_options')
+            ? seed.clarification_options
+            : (rawOutput.clarificationOptions || rawOutput.clarification_options)
+        ),
+    ).map((item) => asText(item)).filter(Boolean),
     riskPrompt: String(
       Object.prototype.hasOwnProperty.call(seed, 'riskPrompt')
         ? seed.riskPrompt
@@ -446,6 +542,31 @@ function normalizeAgentTurnPayload(seed = {}) {
             : (rawOutput.panelPayloads || rawOutput.panel_payloads || {})
         ),
     ),
+    decision: normalizeAgentDecision(
+      Object.prototype.hasOwnProperty.call(seed, 'decision')
+        ? seed.decision
+        : (rawOutput.decision || {}),
+    ),
+    support: cloneArray(
+      Object.prototype.hasOwnProperty.call(seed, 'support')
+        ? seed.support
+        : rawOutput.support,
+    ).map((item) => normalizeAgentDecisionEvidence(item)).filter((item) => item.key || item.metric || item.headline),
+    counterpoints: cloneArray(
+      Object.prototype.hasOwnProperty.call(seed, 'counterpoints')
+        ? seed.counterpoints
+        : rawOutput.counterpoints,
+    ).map((item) => normalizeAgentCounterpoint(item)).filter((item) => item.detail),
+    actions: cloneArray(
+      Object.prototype.hasOwnProperty.call(seed, 'actions')
+        ? seed.actions
+        : rawOutput.actions,
+    ).map((item) => normalizeAgentAction(item)).filter((item) => item.title || item.detail),
+    boundary: cloneArray(
+      Object.prototype.hasOwnProperty.call(seed, 'boundary')
+        ? seed.boundary
+        : rawOutput.boundary,
+    ).map((item) => normalizeAgentBoundaryItem(item)).filter((item) => item.detail),
   }
   const diagnostics = {
     executionTrace: cloneArray(
@@ -641,6 +762,11 @@ function createAgentSessionRecord(seed = {}) {
     contextSummary: cloneObject(turn.contextSummary),
     plan: cloneObject(turn.plan),
     cards: cloneArray(turn.output.cards),
+    decision: normalizeAgentDecision(turn.output.decision),
+    support: cloneArray(turn.output.support).map((item) => normalizeAgentDecisionEvidence(item)),
+    counterpoints: cloneArray(turn.output.counterpoints).map((item) => normalizeAgentCounterpoint(item)),
+    actions: cloneArray(turn.output.actions).map((item) => normalizeAgentAction(item)),
+    boundary: cloneArray(turn.output.boundary).map((item) => normalizeAgentBoundaryItem(item)),
     executionTrace: cloneArray(turn.diagnostics.executionTrace),
     usedTools: cloneArray(turn.diagnostics.usedTools),
     citations: cloneArray(turn.diagnostics.citations),
@@ -649,6 +775,7 @@ function createAgentSessionRecord(seed = {}) {
     thinkingTimeline: cloneArray(turn.diagnostics.thinkingTimeline),
     nextSuggestions: cloneArray(turn.output.nextSuggestions),
     clarificationQuestion: String(turn.output.clarificationQuestion || ''),
+    clarificationOptions: cloneArray(turn.output.clarificationOptions),
     riskPrompt: String(turn.output.riskPrompt || ''),
     error: String(turn.diagnostics.error || ''),
     riskConfirmations: cloneArray(seed.riskConfirmations || seed.risk_confirmations),
@@ -682,11 +809,24 @@ function createAgentSessionPlaceholderRecord(session = null) {
     researchNotes: [],
     nextSuggestions: [],
     clarificationQuestion: '',
+    clarificationOptions: [],
     riskPrompt: '',
     error: '',
     riskConfirmations: [],
     messages: [],
-    output: { cards: [], clarificationQuestion: '', riskPrompt: '', nextSuggestions: [], panelPayloads: {} },
+    output: {
+      cards: [],
+      clarificationQuestion: '',
+      clarificationOptions: [],
+      riskPrompt: '',
+      nextSuggestions: [],
+      panelPayloads: {},
+      decision: { summary: '', mode: 'judgment', strength: 'weak', canAct: false },
+      support: [],
+      counterpoints: [],
+      actions: [],
+      boundary: [],
+    },
     diagnostics: { executionTrace: [], usedTools: [], citations: [], researchNotes: [], auditIssues: [], thinkingTimeline: [], error: '' },
     contextSummary: {},
     plan: { steps: [], followupSteps: [], followupApplied: false, summary: '' },
@@ -792,6 +932,11 @@ function createAnalysisAgentInitialState() {
     agentStatus: 'idle',
     agentStage: 'gating',
     agentCards: [],
+    agentDecision: { summary: '', mode: 'judgment', strength: 'weak', canAct: false },
+    agentSupport: [],
+    agentCounterpoints: [],
+    agentActions: [],
+    agentBoundary: [],
     agentExecutionTrace: [],
     agentUsedTools: [],
     agentCitations: [],
@@ -800,6 +945,9 @@ function createAnalysisAgentInitialState() {
     agentNextSuggestions: [],
     agentPanelPayloads: {},
     agentClarificationQuestion: '',
+    agentClarificationOptions: [],
+    agentClarificationDraft: '',
+    agentClarificationSubmitting: false,
     agentRiskPrompt: '',
     agentError: '',
     agentContextSummary: {},
@@ -990,6 +1138,11 @@ function createAnalysisAgentSessionMethods() {
       this.agentStatus = String(session.status || 'idle')
       this.agentStage = String(session.stage || 'gating')
       this.agentCards = cloneArray(session.cards)
+      this.agentDecision = normalizeAgentDecision(session.decision)
+      this.agentSupport = cloneArray(session.support).map((item) => normalizeAgentDecisionEvidence(item))
+      this.agentCounterpoints = cloneArray(session.counterpoints).map((item) => normalizeAgentCounterpoint(item))
+      this.agentActions = cloneArray(session.actions).map((item) => normalizeAgentAction(item))
+      this.agentBoundary = cloneArray(session.boundary).map((item) => normalizeAgentBoundaryItem(item))
       this.agentExecutionTrace = cloneArray(session.executionTrace)
       this.agentUsedTools = cloneArray(session.usedTools)
       this.agentCitations = cloneArray(session.citations)
@@ -998,6 +1151,9 @@ function createAnalysisAgentSessionMethods() {
       this.agentNextSuggestions = cloneArray(session.nextSuggestions)
       this.agentPanelPayloads = cloneObject(session.panelPayloads)
       this.agentClarificationQuestion = String(session.clarificationQuestion || '')
+      this.agentClarificationOptions = cloneArray(session.clarificationOptions)
+      this.agentClarificationDraft = ''
+      this.agentClarificationSubmitting = false
       this.agentRiskPrompt = String(session.riskPrompt || '')
       this.agentError = String(session.error || '')
       this.agentContextSummary = cloneObject(session.contextSummary)
@@ -1147,9 +1303,15 @@ function createAnalysisAgentSessionMethods() {
         output: {
           cards: this.agentCards,
           clarificationQuestion: this.agentClarificationQuestion,
+          clarificationOptions: this.agentClarificationOptions,
           riskPrompt: this.agentRiskPrompt,
           nextSuggestions: this.agentNextSuggestions,
           panelPayloads: this.agentPanelPayloads,
+          decision: this.agentDecision,
+          support: this.agentSupport,
+          counterpoints: this.agentCounterpoints,
+          actions: this.agentActions,
+          boundary: this.agentBoundary,
         },
         diagnostics: {
           executionTrace: this.agentExecutionTrace,
@@ -1458,24 +1620,27 @@ function createAnalysisAgentSessionMethods() {
     agentCanSubmit() {
       return !this.agentSessionHydrating && !!String(this.agentInput || '').trim()
     },
-    agentShouldMoveLatestAssistantAfterThinking() {
+    getAgentCurrentTurnMessageBoundary() {
       const messages = Array.isArray(this.agentMessages) ? this.agentMessages : []
-      const latest = messages.length ? messages[messages.length - 1] : null
-      return Boolean(
-        latest
-        && latest.role === 'assistant'
-        && this.agentShouldRenderThinkingBlock()
-      )
+      if (!this.agentShouldRenderThinkingBlock() || !messages.length) return -1
+      for (let index = messages.length - 1; index >= 0; index -= 1) {
+        if (asText(messages[index] && messages[index].role) === 'user') {
+          return index
+        }
+      }
+      return -1
     },
     getAgentMessagesBeforeThinking() {
       const messages = cloneArray(this.agentMessages)
-      if (!this.agentShouldMoveLatestAssistantAfterThinking()) return messages
-      return messages.slice(0, -1)
+      const boundaryIndex = this.getAgentCurrentTurnMessageBoundary()
+      if (boundaryIndex < 0) return messages
+      return messages.slice(0, boundaryIndex + 1)
     },
     getAgentMessagesAfterThinking() {
-      if (!this.agentShouldMoveLatestAssistantAfterThinking()) return []
       const messages = cloneArray(this.agentMessages)
-      return messages.length ? [messages[messages.length - 1]] : []
+      const boundaryIndex = this.getAgentCurrentTurnMessageBoundary()
+      if (boundaryIndex < 0 || boundaryIndex >= messages.length - 1) return []
+      return messages.slice(boundaryIndex + 1).filter((message) => asText(message && message.role) === 'assistant')
     },
     getAgentStatusLabel() {
       if (this.agentSessionHydrating) {
@@ -1769,6 +1934,63 @@ function createAnalysisAgentSessionMethods() {
         return cloneObject(targetSession.panelPayloads)
       }
       return cloneObject(this.agentPanelPayloads)
+    },
+    hasAgentStructuredOutput() {
+      return !!(
+        asText(this.agentDecision && this.agentDecision.summary)
+        || (Array.isArray(this.agentSupport) && this.agentSupport.length)
+        || (Array.isArray(this.agentActions) && this.agentActions.length)
+        || (Array.isArray(this.agentCounterpoints) && this.agentCounterpoints.length)
+        || (Array.isArray(this.agentBoundary) && this.agentBoundary.length)
+      )
+    },
+    getAgentDecisionStrengthLabel(strength = '') {
+      const key = asText(strength || (this.agentDecision && this.agentDecision.strength) || 'weak')
+      return {
+        strong: '强判断',
+        moderate: '中等判断',
+        weak: '方向性判断',
+      }[key] || '方向性判断'
+    },
+    getAgentDecisionModeLabel(mode = '') {
+      const key = asText(mode || (this.agentDecision && this.agentDecision.mode) || 'judgment')
+      return {
+        cognition: '认知输出',
+        judgment: '判断输出',
+        action: '行动输出',
+      }[key] || '判断输出'
+    },
+    getAgentStructuredItemKey(item = null, fallbackIndex = 0) {
+      if (item && typeof item === 'object') {
+        return asText(item.key || item.metric || item.title || item.prompt) || `agent-structured-item-${fallbackIndex}`
+      }
+      return `agent-structured-item-${fallbackIndex}`
+    },
+    hasAgentActionPrompt(item = null) {
+      return !!asText(item && item.prompt)
+    },
+    canSubmitAgentClarificationDraft() {
+      return !this.agentLoading
+        && !this.agentSessionHydrating
+        && !this.agentClarificationSubmitting
+        && !!String(this.agentClarificationDraft || '').trim()
+    },
+    onAgentClarificationOptionClick(option = '') {
+      const prompt = asText(option)
+      if (!prompt || this.agentLoading || this.agentSessionHydrating || this.agentClarificationSubmitting) return
+      this.agentClarificationSubmitting = true
+      this.submitAgentTurn({ prompt })
+    },
+    onAgentClarificationDraftSubmit() {
+      const prompt = String(this.agentClarificationDraft || '').trim()
+      if (!prompt || this.agentLoading || this.agentSessionHydrating || this.agentClarificationSubmitting) return
+      this.agentClarificationSubmitting = true
+      this.submitAgentTurn({ prompt })
+    },
+    onAgentActionPromptClick(item = null) {
+      const prompt = asText(item && item.prompt)
+      if (!prompt) return
+      this.queueAgentPrompt(prompt)
     },
     isAgentCardActionItem(item = null) {
       return !!(item && typeof item === 'object' && asText(item.type) === 'h3_candidate' && asText(item.h3_id))
@@ -2084,8 +2306,44 @@ function createAnalysisAgentSessionMethods() {
         output: {
           cards: cloneArray(merged.cards),
           clarification_question: String(merged.clarificationQuestion || ''),
+          clarification_options: cloneArray(merged.clarificationOptions).map((item) => asText(item)).filter(Boolean),
           risk_prompt: String(merged.riskPrompt || ''),
           next_suggestions: cloneArray(merged.nextSuggestions),
+          panel_payloads: cloneObject(merged.panelPayloads),
+          decision: {
+            summary: asText(merged.decision && merged.decision.summary),
+            mode: asText(merged.decision && merged.decision.mode) || 'judgment',
+            strength: asText(merged.decision && merged.decision.strength) || 'weak',
+            can_act: !!(merged.decision && merged.decision.canAct),
+          },
+          support: cloneArray(merged.support).map((item) => ({
+            key: asText(item && item.key),
+            metric: asText(item && item.metric),
+            headline: asText(item && item.headline),
+            value: item && Object.prototype.hasOwnProperty.call(item, 'value') ? item.value : null,
+            interpretation: asText(item && item.interpretation),
+            source: asText(item && item.source),
+            confidence: asText(item && item.confidence) || 'weak',
+            limitation: asText(item && item.limitation),
+            supports: cloneArray(item && item.supports).map((entry) => asText(entry)).filter(Boolean),
+            is_key: !!(item && item.isKey),
+          })),
+          counterpoints: cloneArray(merged.counterpoints).map((item) => ({
+            kind: asText(item && item.kind) || 'boundary',
+            title: asText(item && item.title),
+            detail: asText(item && item.detail),
+          })),
+          actions: cloneArray(merged.actions).map((item) => ({
+            title: asText(item && item.title),
+            detail: asText(item && item.detail),
+            condition: asText(item && item.condition),
+            target: asText(item && item.target),
+            prompt: asText(item && item.prompt),
+          })),
+          boundary: cloneArray(merged.boundary).map((item) => ({
+            title: asText(item && item.title),
+            detail: asText(item && item.detail),
+          })),
         },
         diagnostics: {
           execution_trace: cloneArray(merged.executionTrace),
@@ -2325,6 +2583,7 @@ function createAnalysisAgentSessionMethods() {
         auditIssues: [],
         nextSuggestions: [],
         clarificationQuestion: '',
+        clarificationOptions: [],
         riskPrompt: '',
         error: '',
         contextSummary: {},
@@ -2348,6 +2607,8 @@ function createAnalysisAgentSessionMethods() {
       })
       this.agentTurnAbortController = targetSessionId === asText(this.activeAgentSessionId) ? requestAbortController : null
       this.agentInput = ''
+      this.agentClarificationDraft = ''
+      this.agentClarificationSubmitting = false
       this.agentThinkingExpanded = true
       this.agentPlanExpanded = true
       this.startAgentThinkingTimer(targetSessionId)
@@ -2398,6 +2659,9 @@ function createAnalysisAgentSessionMethods() {
               ),
             }))
             markStreamActive()
+            if (targetSessionId === asText(this.activeAgentSessionId)) {
+              this.agentThinkingExpanded = true
+            }
             return
           }
           if (type === 'thinking') {
@@ -2414,10 +2678,14 @@ function createAnalysisAgentSessionMethods() {
               ),
             }))
             markStreamActive()
+            if (targetSessionId === asText(this.activeAgentSessionId)) {
+              this.agentThinkingExpanded = true
+            }
             return
           }
           if (type === 'plan') {
             const nextPlan = normalizeAgentPlanEnvelope(payload)
+            const planItem = normalizeAgentPlanThinkingItem(payload)
             const currentSessionSnapshot = this.findAgentSession(targetSessionId)
             const hadPlan = !!(
               currentSessionSnapshot
@@ -2428,11 +2696,18 @@ function createAnalysisAgentSessionMethods() {
               ...session,
               status: 'running',
               plan: nextPlan,
+              thinkingTimeline: upsertThinkingItemInList(
+                completeActiveThinkingItemsInList(session.thinkingTimeline, planItem.id),
+                planItem,
+              ),
             }))
             if (!hadPlan && (nextPlan.steps.length || nextPlan.followupSteps.length) && targetSessionId === asText(this.activeAgentSessionId)) {
               this.agentPlanExpanded = true
             }
             markStreamActive()
+            if (targetSessionId === asText(this.activeAgentSessionId)) {
+              this.agentThinkingExpanded = true
+            }
             return
           }
           if (type === 'reasoning_delta') {
@@ -2468,6 +2743,9 @@ function createAnalysisAgentSessionMethods() {
               }
             })
             markStreamActive()
+            if (targetSessionId === asText(this.activeAgentSessionId)) {
+              this.agentThinkingExpanded = true
+            }
             return
           }
           if (type === 'error') {
@@ -2499,9 +2777,11 @@ function createAnalysisAgentSessionMethods() {
           const turn = normalizeAgentTurnPayload(responsePayload)
           const nextStatus = asText(responsePayload.status || 'answered') || 'answered'
           const nextStage = asText(responsePayload.stage || turn.stage || 'answered') || 'answered'
-          let nextThinkingTimeline = cloneArray(turn.diagnostics.thinkingTimeline).length
-            ? cloneArray(turn.diagnostics.thinkingTimeline)
-            : cloneArray((this.findAgentSession(targetSessionId) || {}).thinkingTimeline)
+          const currentSessionSnapshot = this.findAgentSession(targetSessionId) || {}
+          let nextThinkingTimeline = mergeAgentThinkingTimeline(
+            cloneArray(currentSessionSnapshot.thinkingTimeline),
+            cloneArray(turn.diagnostics.thinkingTimeline),
+          )
           if (['answered', 'failed'].includes(nextStatus)) {
             const finalStatusItem = normalizeAgentStatusThinkingItem({
               stage: nextStatus === 'answered' ? 'answered' : 'failed',
@@ -2519,6 +2799,11 @@ function createAnalysisAgentSessionMethods() {
             status: nextStatus,
             stage: nextStage,
             cards: cloneArray(turn.output.cards),
+            decision: normalizeAgentDecision(turn.output.decision),
+            support: cloneArray(turn.output.support).map((item) => normalizeAgentDecisionEvidence(item)),
+            counterpoints: cloneArray(turn.output.counterpoints).map((item) => normalizeAgentCounterpoint(item)),
+            actions: cloneArray(turn.output.actions).map((item) => normalizeAgentAction(item)),
+            boundary: cloneArray(turn.output.boundary).map((item) => normalizeAgentBoundaryItem(item)),
             executionTrace: cloneArray(turn.diagnostics.executionTrace),
             usedTools: cloneArray(turn.diagnostics.usedTools),
             citations: cloneArray(turn.diagnostics.citations),
@@ -2527,6 +2812,7 @@ function createAnalysisAgentSessionMethods() {
             thinkingTimeline: nextThinkingTimeline,
             nextSuggestions: cloneArray(turn.output.nextSuggestions),
             clarificationQuestion: String(turn.output.clarificationQuestion || ''),
+            clarificationOptions: cloneArray(turn.output.clarificationOptions),
             riskPrompt: String(turn.output.riskPrompt || ''),
             error: String(turn.diagnostics.error || ''),
             contextSummary: cloneObject(turn.contextSummary),
@@ -2544,6 +2830,8 @@ function createAnalysisAgentSessionMethods() {
             streamState: nextStatus === 'failed' ? 'failed' : 'completed',
           })
           if (targetSessionId === asText(this.activeAgentSessionId)) {
+            this.agentClarificationDraft = ''
+            this.agentClarificationSubmitting = false
             if (['failed', 'requires_risk_confirmation'].includes(nextStatus)) {
               this.agentThinkingExpanded = Array.isArray(nextThinkingTimeline) && nextThinkingTimeline.length > 0
             }
@@ -2577,6 +2865,7 @@ function createAnalysisAgentSessionMethods() {
             auditIssues: [],
             nextSuggestions: [],
             clarificationQuestion: '',
+            clarificationOptions: [],
             riskPrompt: '',
             error: '',
             contextSummary: cloneObject(session.contextSummary),
@@ -2585,6 +2874,8 @@ function createAnalysisAgentSessionMethods() {
           }))
           if (targetSessionId === asText(this.activeAgentSessionId)) {
             this.agentInput = question
+            this.agentClarificationDraft = ''
+            this.agentClarificationSubmitting = false
           }
           return
         }
@@ -2605,6 +2896,7 @@ function createAnalysisAgentSessionMethods() {
         }))
         this.setAgentRunState(targetSessionId, { streamState: 'failed' })
         if (targetSessionId === asText(this.activeAgentSessionId)) {
+          this.agentClarificationSubmitting = false
           this.agentThinkingExpanded = true
         }
       } finally {
@@ -2614,6 +2906,7 @@ function createAnalysisAgentSessionMethods() {
           this.clearAgentRunState(targetSessionId)
         }
         if (targetSessionId === asText(this.activeAgentSessionId)) {
+          this.agentClarificationSubmitting = false
           this.syncActiveAgentRuntimeView(targetSessionId)
         }
       }

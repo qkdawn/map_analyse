@@ -156,7 +156,7 @@
                                             </button>
                                         </div>
 
-                                        <div v-if="agentThinkingExpanded && getAgentVisibleReasoningBlocks().length" class="agent-reasoning-panel">
+                                        <div v-if="(agentThinkingExpanded || agentLoading) && getAgentVisibleReasoningBlocks().length" class="agent-reasoning-panel">
                                             <div
                                                 v-for="block in getAgentVisibleReasoningBlocks()"
                                                 :key="`agent-reasoning-${block.id}`"
@@ -168,7 +168,7 @@
                                             </div>
                                         </div>
 
-                                        <div v-if="agentThinkingExpanded" class="agent-thinking-steps">
+                                        <div v-if="agentThinkingExpanded || agentLoading" class="agent-thinking-steps">
                                             <div
                                                 v-for="stepItem in getAgentVisibleProcessSteps()"
                                                 :key="`agent-visible-process-${stepItem.id}`"
@@ -196,8 +196,40 @@
                                 </div>
 
                                 <div v-if="agentClarificationQuestion" class="agent-message-row is-assistant">
-                                    <div class="agent-message-bubble is-assistant agent-message-bubble-note">
-                                        {{ agentClarificationQuestion }}
+                                    <div class="agent-clarification-card">
+                                        <div class="agent-clarification-title">{{ agentClarificationQuestion }}</div>
+                                        <div
+                                            v-for="(option, index) in agentClarificationOptions.slice(0, 3)"
+                                            :key="`agent-clarify-option-${index}`"
+                                            class="agent-clarification-row">
+                                            <div class="agent-clarification-index">{{ index + 1 }}.</div>
+                                            <button
+                                                type="button"
+                                                class="agent-clarification-option"
+                                                :disabled="agentLoading || agentClarificationSubmitting"
+                                                @click="onAgentClarificationOptionClick(option)">
+                                                {{ option }}
+                                            </button>
+                                        </div>
+                                        <div class="agent-clarification-row is-input">
+                                            <div class="agent-clarification-index">4.</div>
+                                            <div class="agent-clarification-input-wrap">
+                                                <input
+                                                    v-model="agentClarificationDraft"
+                                                    type="text"
+                                                    class="agent-clarification-input"
+                                                    placeholder="输入更具体的问题"
+                                                    :disabled="agentLoading || agentClarificationSubmitting || agentSessionHydrating"
+                                                    @keydown.enter.prevent="onAgentClarificationDraftSubmit()">
+                                                <button
+                                                    type="button"
+                                                    class="agent-clarification-submit"
+                                                    :disabled="!canSubmitAgentClarificationDraft()"
+                                                    @click="onAgentClarificationDraftSubmit()">
+                                                    发送
+                                                </button>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
 
@@ -213,7 +245,73 @@
                                     </div>
                                 </div>
 
-                                <div v-if="agentCards.length" class="agent-message-row is-assistant">
+                                <div v-if="hasAgentStructuredOutput()" class="agent-message-row is-assistant">
+                                    <div class="agent-message-bubble is-assistant agent-card-bubble">
+                                        <div class="agent-decision-layout">
+                                            <div class="agent-card agent-card-decision">
+                                                <div class="agent-card-type">decision</div>
+                                                <div class="agent-card-title">核心判断</div>
+                                                <div class="agent-card-content">{{ agentDecision.summary }}</div>
+                                                <div class="agent-decision-badges">
+                                                    <span class="agent-decision-badge">{{ getAgentDecisionStrengthLabel(agentDecision.strength) }}</span>
+                                                    <span class="agent-decision-badge is-muted">{{ getAgentDecisionModeLabel(agentDecision.mode) }}</span>
+                                                    <span v-if="agentDecision.canAct" class="agent-decision-badge is-positive">可直接推进</span>
+                                                </div>
+                                            </div>
+
+                                            <div v-if="agentSupport.length" class="agent-card">
+                                                <div class="agent-card-type">support</div>
+                                                <div class="agent-card-title">为什么这么判断</div>
+                                                <ul class="agent-card-items">
+                                                    <li v-for="(item, index) in agentSupport" :key="getAgentStructuredItemKey(item, index)">
+                                                        <span class="agent-structured-headline">{{ item.headline || item.metric }}</span>
+                                                        <span class="agent-structured-detail">{{ item.interpretation }}</span>
+                                                        <span class="agent-structured-meta">来源：{{ item.source || '未标注' }}｜置信度：{{ item.confidence || 'weak' }}</span>
+                                                    </li>
+                                                </ul>
+                                            </div>
+
+                                            <div v-if="agentCounterpoints.length || agentBoundary.length" class="agent-card">
+                                                <div class="agent-card-type">counterpoints</div>
+                                                <div class="agent-card-title">还不能判断什么</div>
+                                                <ul class="agent-card-items">
+                                                    <li v-for="(item, index) in agentCounterpoints" :key="`agent-counterpoint-${getAgentStructuredItemKey(item, index)}`">
+                                                        <span class="agent-structured-headline">{{ item.title || '约束' }}</span>
+                                                        <span class="agent-structured-detail">{{ item.detail }}</span>
+                                                    </li>
+                                                    <li v-for="(item, index) in agentBoundary" :key="`agent-boundary-${getAgentStructuredItemKey(item, index)}`">
+                                                        <span class="agent-structured-headline">{{ item.title || '适用边界' }}</span>
+                                                        <span class="agent-structured-detail">{{ item.detail }}</span>
+                                                    </li>
+                                                </ul>
+                                            </div>
+
+                                            <div v-if="agentActions.length" class="agent-card">
+                                                <div class="agent-card-type">actions</div>
+                                                <div class="agent-card-title">下一步怎么做</div>
+                                                <ul class="agent-card-items">
+                                                    <li v-for="(item, index) in agentActions" :key="`agent-action-${getAgentStructuredItemKey(item, index)}`">
+                                                        <button
+                                                            v-if="hasAgentActionPrompt(item)"
+                                                            type="button"
+                                                            class="agent-card-item-btn"
+                                                            @click="onAgentActionPromptClick(item)">
+                                                            {{ item.title || item.detail }}
+                                                        </button>
+                                                        <span v-else class="agent-structured-headline">{{ item.title || item.detail }}</span>
+                                                        <div v-if="item.detail" class="agent-structured-detail">{{ item.detail }}</div>
+                                                        <div v-if="item.condition || item.target" class="agent-structured-meta">
+                                                            <span v-if="item.condition">触发条件：{{ item.condition }}</span>
+                                                            <span v-if="item.target">｜目标：{{ item.target }}</span>
+                                                        </div>
+                                                    </li>
+                                                </ul>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div v-else-if="agentCards.length" class="agent-message-row is-assistant">
                                     <div class="agent-message-bubble is-assistant agent-card-bubble">
                                         <div v-for="(card, index) in agentCards" :key="`agent-main-card-${index}`" class="agent-card">
                                             <div class="agent-card-type">{{ card.type }}</div>
@@ -235,7 +333,7 @@
                                     </div>
                                 </div>
 
-                                <div v-if="agentNextSuggestions.length || agentCitations.length" class="agent-meta-inline">
+                                <div v-if="agentResearchNotes.length || agentNextSuggestions.length || agentCitations.length" class="agent-meta-inline">
                                     <div v-if="agentResearchNotes.length" class="agent-meta-group">
                                         <div class="agent-meta-title">研究笔记</div>
                                         <ul class="agent-meta-list">

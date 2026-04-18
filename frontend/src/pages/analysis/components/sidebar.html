@@ -979,7 +979,15 @@
                                                 :class="{ active: populationAnalysisView === 'age' }"
                                                 @click="setPopulationAnalysisView('age')">年龄</button>
                                         </div>
-                                        <div v-if="populationOverview" class="population-view-control-row">
+                                        <div v-if="populationMeta && getPopulationYearOptions().length" class="population-view-control-row">
+                                            <label class="population-inline-field">
+                                                <span>年份</span>
+                                                <select v-model="populationSelectedYear" @change="onPopulationYearChange" class="h3-params-select">
+                                                    <option v-for="item in getPopulationYearOptions()" :key="`population-year-${item.value}`" :value="item.value">
+                                                        {{ item.label }}
+                                                    </option>
+                                                </select>
+                                            </label>
                                             <label v-if="populationAnalysisView === 'sex'" class="population-inline-field">
                                                 <span>地图图层</span>
                                                 <select v-model="populationSexMetricMode" @change="onPopulationSexMetricModeChange" class="h3-params-select">

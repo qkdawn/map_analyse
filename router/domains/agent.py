@@ -42,6 +42,26 @@ async def run_agent_turn(payload: AgentTurnRequest):
 @router.post("/api/v1/analysis/agent/turn/stream")
 async def run_agent_turn_stream(request: Request, payload: AgentTurnRequest):
     async def event_stream():
+        bootstrap_events = [
+            AgentTurnStreamEvent(
+                type="status",
+                payload={"stage": "gating", "label": "门卫判断"},
+            ),
+            AgentTurnStreamEvent(
+                type="thinking",
+                payload={
+                    "id": "router-bootstrap-gating",
+                    "phase": "gating",
+                    "title": "门卫判断",
+                    "detail": "后端已收到请求，正在进入门卫判断。",
+                    "state": "active",
+                },
+            ),
+        ]
+        for bootstrap in bootstrap_events:
+            if await request.is_disconnected():
+                return
+            yield _encode_sse(bootstrap)
         generator = stream_agent_turn(payload)
         try:
             async for event in generator:

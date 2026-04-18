@@ -87,6 +87,11 @@ test('normalizeAgentTurnPayload reads staged backend response shape', () => {
       cards: [{ type: 'summary', title: '概览', content: '这里以社区商业为主', items: [] }],
       next_suggestions: ['继续看路网'],
       panel_payloads: { h3_result: { summary: { grid_count: 8 } } },
+      decision: { summary: '适合继续预研', mode: 'action', strength: 'moderate', can_act: true },
+      support: [{ key: 'poi_count', metric: 'poi_count', headline: 'POI 样本量 12', interpretation: '供给样本够用', source: 'analysis_snapshot.poi_summary', confidence: 'moderate', limitation: '不能直接推断收益', supports: ['core_judgment'], is_key: true }],
+      counterpoints: [{ kind: 'missing', title: '仍缺证据', detail: '当前仍缺少路网概览。' }],
+      actions: [{ title: '补齐路网证据', detail: '先补跑路网分析', condition: '当要做更强判断时', target: 'evidence_gap', prompt: '补齐路网概览再判断' }],
+      boundary: [{ title: '适用边界', detail: '不能直接推断经营收益。' }],
     },
     diagnostics: {
       execution_trace: [{ tool_name: 'read_current_scope', status: 'success' }],
@@ -116,6 +121,12 @@ test('normalizeAgentTurnPayload reads staged backend response shape', () => {
 
   assert.equal(normalized.output.cards[0].content, '这里以社区商业为主')
   assert.equal(normalized.output.panelPayloads.h3_result.summary.grid_count, 8)
+  assert.equal(normalized.output.decision.mode, 'action')
+  assert.equal(normalized.output.decision.canAct, true)
+  assert.equal(normalized.output.support[0].headline, 'POI 样本量 12')
+  assert.equal(normalized.output.counterpoints[0].kind, 'missing')
+  assert.equal(normalized.output.actions[0].prompt, '补齐路网概览再判断')
+  assert.equal(normalized.output.boundary[0].detail, '不能直接推断经营收益。')
   assert.deepEqual(normalized.diagnostics.usedTools, ['read_current_scope'])
   assert.deepEqual(normalized.diagnostics.auditIssues, ['不能直接推断经营收益'])
   assert.equal(normalized.diagnostics.planningSummary, '先读取范围，再分析业态结构')
@@ -124,6 +135,20 @@ test('normalizeAgentTurnPayload reads staged backend response shape', () => {
   assert.equal(normalized.diagnostics.thinkingTimeline[0].id, 'thinking-1')
   assert.equal(normalized.contextSummary.active_panel, 'agent')
   assert.equal(normalized.plan.summary, '先读取范围，再分析业态结构')
+})
+
+test('normalizeAgentTurnPayload keeps backward compatibility when structured output is absent', () => {
+  const normalized = normalizeAgentTurnPayload({
+    status: 'answered',
+    output: {
+      cards: [{ type: 'summary', title: '概览', content: '这里只能先做方向性判断', items: [] }],
+    },
+  })
+
+  assert.equal(normalized.output.decision.summary, '')
+  assert.deepEqual(normalized.output.support, [])
+  assert.deepEqual(normalized.output.actions, [])
+  assert.deepEqual(normalized.output.boundary, [])
 })
 
 test('deriveAgentSessionPreview prefers summary card over mirrored message fallback', () => {
@@ -205,6 +230,70 @@ test('backToAgentChat keeps conversation state and cached tools', () => {
   assert.deepEqual(ctx.agentMessages.map((item) => item.content), ['总结这个区域'])
   assert.deepEqual(ctx.agentTools.map((item) => item.name), ['read_current_scope'])
   assert.equal(ctx.agentToolsLoaded, true)
+})
+
+test('clarification draft state is isolated from the main composer', () => {
+  const ctx = createAgentContext({
+    agentInput: '底部聊天框内容',
+    agentClarificationDraft: '门卫卡片内容',
+  })
+
+  assert.equal(ctx.agentInput, '底部聊天框内容')
+  assert.equal(ctx.agentClarificationDraft, '门卫卡片内容')
+  assert.equal(ctx.canSubmitAgentClarificationDraft(), true)
+})
+
+test('clarification option click submits immediately without mutating composer input', () => {
+  const ctx = createAgentContext({
+    agentInput: '底部聊天框内容',
+  })
+  let submittedPrompt = ''
+  ctx.submitAgentTurn = ({ prompt }) => {
+    submittedPrompt = prompt
+  }
+
+  ctx.onAgentClarificationOptionClick('总结这个区域的商业特征')
+
+  assert.equal(submittedPrompt, '总结这个区域的商业特征')
+  assert.equal(ctx.agentInput, '底部聊天框内容')
+  assert.equal(ctx.agentClarificationSubmitting, true)
+})
+
+test('clarification draft submit uses inline input and keeps composer untouched', () => {
+  const ctx = createAgentContext({
+    agentInput: '底部聊天框内容',
+    agentClarificationDraft: '比较人口和夜间活力哪个更弱',
+  })
+  let submittedPrompt = ''
+  ctx.submitAgentTurn = ({ prompt }) => {
+    submittedPrompt = prompt
+  }
+
+  ctx.onAgentClarificationDraftSubmit()
+
+  assert.equal(submittedPrompt, '比较人口和夜间活力哪个更弱')
+  assert.equal(ctx.agentInput, '底部聊天框内容')
+  assert.equal(ctx.agentClarificationSubmitting, true)
+})
+
+test('applyAgentSessionSnapshot clears transient clarification draft state', () => {
+  const ctx = createAgentContext({
+    agentClarificationDraft: '旧草稿',
+    agentClarificationSubmitting: true,
+  })
+
+  ctx.applyAgentSessionSnapshot({
+    ...ctxSessionBase('agent-a', 'A'),
+    persisted: true,
+    snapshotLoaded: true,
+    clarificationQuestion: '你想重点看哪个方向？',
+    clarificationOptions: ['总结这个区域的商业特征'],
+  })
+
+  assert.equal(ctx.agentClarificationDraft, '')
+  assert.equal(ctx.agentClarificationSubmitting, false)
+  assert.equal(ctx.agentClarificationQuestion, '你想重点看哪个方向？')
+  assert.deepEqual(ctx.agentClarificationOptions, ['总结这个区域的商业特征'])
 })
 
 test('normalizeAgentToolSummary keeps new classification fields and grouping works', () => {
@@ -618,7 +707,10 @@ test('startNewAgentChat keeps new draft out of visible history until first turn 
   assert.equal(ctx.findAgentSession(ctx.activeAgentSessionId).persisted, true)
   assert.equal(ctx.findAgentSession(ctx.activeAgentSessionId).title, '社区商业概览')
   assert.equal(ctx.findAgentSession(ctx.activeAgentSessionId).titleSource, 'ai')
-  assert.equal(ctx.findAgentSession(ctx.activeAgentSessionId).thinkingTimeline[0].id, 'thinking-1')
+  assert.equal(
+    ctx.findAgentSession(ctx.activeAgentSessionId).thinkingTimeline.some((item) => item.id === 'thinking-1'),
+    true,
+  )
 })
 
 test('cancelAgentTurn aborts in-flight agent request and restores idle state', async () => {
@@ -832,14 +924,14 @@ test('waiting process fallback advances while first backend event is delayed', (
 
     now = 5000
     timerCallback()
-    assert.deepEqual(ctx.getAgentVisibleProcessSteps().map((item) => item.id), ['frontend-submit-request', 'frontend-wait-first-event'])
+    assert.deepEqual(ctx.getAgentVisibleProcessSteps().map((item) => item.id), ['frontend-submit-request', 'frontend-wait-backend'])
     assert.equal(ctx.getAgentVisibleProcessSteps()[0].state, 'completed')
-    assert.equal(ctx.getAgentVisibleProcessSteps()[1].title, '等待 Agent 过程')
+    assert.equal(ctx.getAgentVisibleProcessSteps()[1].title, '等待后端首个进度事件')
 
     now = 14000
     timerCallback()
-    assert.equal(ctx.getAgentVisibleProcessSteps().at(-1).id, 'frontend-wait-model')
-    assert.equal(ctx.getAgentVisibleProcessSteps().at(-1).title, '等待模型与分析工具')
+    assert.equal(ctx.getAgentVisibleProcessSteps().at(-1).id, 'frontend-wait-backend')
+    assert.equal(ctx.getAgentVisibleProcessSteps().at(-1).title, '等待后端首个进度事件')
 
     ctx.upsertAgentThinkingItem({
       id: 'thinking-gating',
@@ -1317,12 +1409,15 @@ test('submitAgentTurn appends user message immediately and updates thinking time
 
   await pending
 
-  assert.equal(ctx.agentThinkingTimeline.length, 3)
+  assert.equal(ctx.agentThinkingTimeline.length, 5)
   assert.equal(ctx.agentThinkingExpanded, true)
   assert.deepEqual(ctx.getAgentMessagesBeforeThinking().map((item) => item.content), ['总结这个区域'])
   assert.deepEqual(ctx.getAgentMessagesAfterThinking().map((item) => item.content), [])
-  assert.deepEqual(ctx.getAgentVisibleProcessSteps().map((item) => item.id), ['thinking-gating', 'tool-call-read-current-scope', 'status-answered'])
-  assert.equal(ctx.getAgentVisibleProcessSteps()[1].state, 'completed')
+  assert.deepEqual(
+    ctx.getAgentVisibleProcessSteps().map((item) => item.id),
+    ['frontend-submit-request', 'status-gating', 'thinking-gating', 'tool-call-read-current-scope', 'status-answered'],
+  )
+  assert.equal(ctx.getAgentVisibleProcessSteps()[3].state, 'completed')
   const toolThinking = ctx.agentThinkingTimeline.find((item) => item.id === 'tool-call-read-current-scope')
   assert.equal(toolThinking.items.includes('参数：无参数'), true)
   assert.equal(toolThinking.items.includes('结果：scope_polygon 已读取'), true)
@@ -1333,9 +1428,270 @@ test('submitAgentTurn appends user message immediately and updates thinking time
   assert.equal(ctx.agentReasoningBlocks.length, 1)
   assert.equal(ctx.getAgentVisibleReasoningBlocks()[0].content, '先读取当前范围。')
   assert.deepEqual(ctx.agentMessages.map((item) => item.content), ['总结这个区域'])
-  assert.equal(ctx.findAgentSession(ctx.activeAgentSessionId).thinkingTimeline[0].id, 'thinking-gating')
+  assert.equal(
+    ctx.findAgentSession(ctx.activeAgentSessionId).thinkingTimeline.some((item) => item.id === 'thinking-gating'),
+    true,
+  )
   assert.equal(ctx.findAgentSession(ctx.activeAgentSessionId).preview, '这里以社区商业为主')
   assert.equal(Object.prototype.hasOwnProperty.call(ctx.findAgentSession(ctx.activeAgentSessionId), 'reasoningBlocks'), false)
+})
+
+test('multi-turn thinking keeps previous assistant above the new user turn', async () => {
+  const ctx = createAgentContext({
+    agentMessages: [
+      { role: 'user', content: '第一轮问题' },
+      { role: 'assistant', content: '第一轮回答' },
+    ],
+    agentThinkingTimeline: [
+      { id: 'thinking-prev', phase: 'answering', title: '回答生成完成', detail: '上一轮已结束。', state: 'completed' },
+    ],
+  })
+
+  assert.deepEqual(ctx.getAgentMessagesBeforeThinking().map((item) => item.content), ['第一轮问题'])
+  assert.deepEqual(ctx.getAgentMessagesAfterThinking().map((item) => item.content), ['第一轮回答'])
+
+  ctx.agentSessionsLoaded = true
+  ctx.startNewAgentChat()
+  ctx.updateAgentSessionSnapshot(ctx.activeAgentSessionId, (session) => ({
+    ...session,
+    messages: [
+      { role: 'user', content: '第一轮问题' },
+      { role: 'assistant', content: '第一轮回答' },
+    ],
+    thinkingTimeline: [],
+  }))
+  ctx.agentInput = '第二轮问题'
+
+  global.fetch = async (url) => {
+    if (url === '/api/v1/analysis/agent/turn/stream') {
+      await Promise.resolve()
+      return createSseResponse([
+        { type: 'status', payload: { stage: 'gating', label: '门卫判断' } },
+        { type: 'thinking', payload: { id: 'thinking-gating', phase: 'gating', title: '门卫判断', detail: '正在判断。', state: 'active' } },
+        {
+          type: 'final',
+          payload: {
+            response: {
+              status: 'answered',
+              stage: 'answered',
+              output: {
+                cards: [{ type: 'summary', title: '概览', content: '第二轮结论', items: [] }],
+                clarification_question: '',
+                risk_prompt: '',
+                next_suggestions: [],
+              },
+              diagnostics: {
+                execution_trace: [],
+                used_tools: [],
+                citations: [],
+                research_notes: [],
+                audit_issues: [],
+                thinking_timeline: [{ id: 'thinking-gating', phase: 'gating', title: '门卫判断', detail: '已完成。', state: 'completed' }],
+                error: '',
+              },
+              context_summary: { has_scope: true, available_results: [], active_panel: 'agent', filters_digest: {} },
+              plan: { steps: [], followup_steps: [], followup_applied: false },
+            },
+          },
+        },
+      ])
+    }
+    return {
+      ok: true,
+      async json() {
+        return {
+          id: ctx.activeAgentSessionId,
+          title: '第二轮',
+          title_source: 'ai',
+          preview: '第二轮结论',
+          status: 'answered',
+          stage: 'answered',
+          is_pinned: false,
+          created_at: '2026-04-05T00:00:00Z',
+          updated_at: '2026-04-05T01:00:00Z',
+          pinned_at: null,
+          input: '',
+          messages: [
+            { role: 'user', content: '第一轮问题' },
+            { role: 'assistant', content: '第一轮回答' },
+            { role: 'user', content: '第二轮问题' },
+          ],
+          output: {
+            cards: [{ type: 'summary', title: '概览', content: '第二轮结论', items: [] }],
+            clarification_question: '',
+            risk_prompt: '',
+            next_suggestions: [],
+          },
+          diagnostics: { execution_trace: [], used_tools: [], citations: [], research_notes: [], audit_issues: [], thinking_timeline: [{ id: 'thinking-gating', phase: 'gating', title: '门卫判断', detail: '已完成。', state: 'completed' }], error: '' },
+          context_summary: { has_scope: true, available_results: [], active_panel: 'agent', filters_digest: {} },
+          plan: { steps: [], followup_steps: [], followup_applied: false },
+          risk_confirmations: [],
+        }
+      },
+    }
+  }
+
+  const pending = ctx.submitAgentTurn()
+  await Promise.resolve()
+
+  assert.deepEqual(
+    ctx.getAgentMessagesBeforeThinking().map((item) => item.content),
+    ['第一轮问题', '第一轮回答', '第二轮问题'],
+  )
+  assert.deepEqual(ctx.getAgentMessagesAfterThinking().map((item) => item.content), [])
+
+  await pending
+
+  assert.deepEqual(
+    ctx.getAgentMessagesBeforeThinking().map((item) => item.content),
+    ['第一轮问题', '第一轮回答', '第二轮问题'],
+  )
+  assert.deepEqual(ctx.getAgentMessagesAfterThinking().map((item) => item.content), [])
+})
+
+test('getAgentMessagesAfterThinking only returns assistant messages from the current turn', () => {
+  const ctx = createAgentContext({
+    agentMessages: [
+      { role: 'user', content: '第一轮问题' },
+      { role: 'assistant', content: '第一轮回答' },
+      { role: 'user', content: '第二轮问题' },
+      { role: 'assistant', content: '第二轮回答' },
+    ],
+    agentThinkingTimeline: [
+      { id: 'thinking-current', phase: 'answering', title: '回答生成完成', detail: '第二轮已结束。', state: 'completed' },
+    ],
+  })
+
+  assert.deepEqual(
+    ctx.getAgentMessagesBeforeThinking().map((item) => item.content),
+    ['第一轮问题', '第一轮回答', '第二轮问题'],
+  )
+  assert.deepEqual(ctx.getAgentMessagesAfterThinking().map((item) => item.content), ['第二轮回答'])
+})
+
+test('submitAgentTurn keeps streamed timeline order when final diagnostics omit intermediate steps', async () => {
+  const ctx = createAgentContext()
+  ctx.agentSessionsLoaded = true
+  ctx.startNewAgentChat()
+  ctx.agentInput = '总结这个区域'
+
+  global.fetch = async (url) => {
+    if (url === '/api/v1/analysis/agent/turn/stream') {
+      return createSseResponse([
+        {
+          type: 'status',
+          payload: { stage: 'gating', label: '门卫判断' },
+        },
+        {
+          type: 'thinking',
+          payload: { id: 'thinking-gate-pass', phase: 'gating', title: '门卫通过', detail: '问题已明确。', state: 'completed' },
+        },
+        {
+          type: 'plan',
+          payload: {
+            steps: [{ tool_name: 'read_current_results', reason: '读取当前结果', evidence_goal: '确认已有证据' }],
+            followup_steps: [],
+            followup_applied: false,
+            summary: '先读取当前结果。',
+          },
+        },
+        {
+          type: 'trace',
+          payload: {
+            id: 'tool-call-read-current-results',
+            tool_name: 'read_current_results',
+            status: 'success',
+            message: '执行成功',
+            result_summary: '已读取现有摘要',
+          },
+        },
+        {
+          type: 'final',
+          payload: {
+            response: {
+              status: 'answered',
+              stage: 'answered',
+              output: {
+                cards: [{ type: 'summary', title: '概览', content: '这里以社区商业为主', items: [] }],
+                clarification_question: '',
+                risk_prompt: '',
+                next_suggestions: [],
+              },
+              diagnostics: {
+                execution_trace: [{ tool_name: 'read_current_results', status: 'success' }],
+                used_tools: ['read_current_results'],
+                citations: [],
+                research_notes: [],
+                audit_issues: [],
+                thinking_timeline: [
+                  { id: 'status-gating', phase: 'gating', title: '门卫判断', detail: '已检查输入。', state: 'completed' },
+                ],
+                error: '',
+              },
+              context_summary: { has_scope: true, available_results: [], active_panel: 'agent', filters_digest: {} },
+              plan: {
+                steps: [{ tool_name: 'read_current_results', reason: '读取当前结果', evidence_goal: '确认已有证据' }],
+                followup_steps: [],
+                followup_applied: false,
+                summary: '先读取当前结果。',
+              },
+            },
+          },
+        },
+      ])
+    }
+    return {
+      ok: true,
+      async json() {
+        return {
+          id: ctx.activeAgentSessionId,
+          title: '社区商业概览',
+          title_source: 'ai',
+          preview: '这里以社区商业为主',
+          status: 'answered',
+          stage: 'answered',
+          is_pinned: false,
+          created_at: '2026-04-05T00:00:00Z',
+          updated_at: '2026-04-05T01:00:00Z',
+          pinned_at: null,
+          input: '',
+          messages: [
+            { role: 'user', content: '总结这个区域' },
+            { role: 'assistant', content: '这里以社区商业为主' },
+          ],
+          output: {
+            cards: [{ type: 'summary', title: '概览', content: '这里以社区商业为主', items: [] }],
+            clarification_question: '',
+            risk_prompt: '',
+            next_suggestions: [],
+          },
+          diagnostics: {
+            execution_trace: [{ tool_name: 'read_current_results', status: 'success' }],
+            used_tools: ['read_current_results'],
+            citations: [],
+            research_notes: [],
+            audit_issues: [],
+            thinking_timeline: [
+              { id: 'status-gating', phase: 'gating', title: '门卫判断', detail: '已检查输入。', state: 'completed' },
+            ],
+            error: '',
+          },
+          context_summary: { has_scope: true, available_results: [], active_panel: 'agent', filters_digest: {} },
+          plan: { steps: [], followup_steps: [], followup_applied: false },
+          risk_confirmations: [],
+        }
+      },
+    }
+  }
+
+  await ctx.submitAgentTurn()
+
+  const steps = ctx.getAgentVisibleProcessSteps()
+  assert.deepEqual(
+    steps.map((item) => item.title),
+    ['提交请求', '门卫判断', '门卫通过', '已列出本轮步骤', '执行成功 read_current_results', '回答生成完成'],
+  )
+  assert.equal(steps[3].detail, '先读取当前结果。')
 })
 
 test('submitAgentTurn shows streamed plan above final response and keeps checklist expanded by default', async () => {
@@ -1672,7 +2028,7 @@ test('submitAgentTurn keeps failed thinking timeline expanded after final respon
 
   assert.equal(ctx.agentStatus, 'failed')
   assert.equal(ctx.agentThinkingExpanded, true)
-  assert.equal(ctx.agentThinkingTimeline[0].state, 'failed')
+  assert.equal(ctx.agentThinkingTimeline.some((item) => item.state === 'failed'), true)
   assert.equal(ctx.agentError, 'LLM 卡片生成失败')
 })
 

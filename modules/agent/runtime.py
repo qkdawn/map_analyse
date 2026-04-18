@@ -373,7 +373,10 @@ async def _run_agent_turn(payload: AgentTurnRequest, *, emit: StreamEmit | None 
         return AgentTurnResponse(
             status="requires_clarification",
             stage="requires_clarification",
-            output=AgentTurnOutput(clarification_question=gate.clarification_question),
+            output=AgentTurnOutput(
+                clarification_question=gate.clarification_question,
+                clarification_options=list(gate.clarification_options or []),
+            ),
             diagnostics=AgentTurnDiagnostics(
                 research_notes=list(gate.research_notes or []) + list(gate.missing_information or []),
                 thinking_timeline=list(thinking_timeline or []),
@@ -675,6 +678,9 @@ async def _run_agent_turn(payload: AgentTurnRequest, *, emit: StreamEmit | None 
         question=question,
         snapshot=snapshot,
         artifacts=memory.artifacts,
+        tool_results=memory.tool_results,
+        research_notes=list(memory.research_notes or []),
+        audit=latest_rule_audit,
     )
     return AgentTurnResponse(
         status="answered",

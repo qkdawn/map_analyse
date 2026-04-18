@@ -319,7 +319,7 @@
                                 resetFilterPanel: true,
                             });
                             this.resetRoadSyntaxState();
-                            this.resetPopulationAnalysisState({ keepMeta: true });
+                            this.resetPopulationAnalysisState({ keepMeta: true, keepYear: true });
                             this.poiStatus = '';
                             this.clearH3Grid();
                         }
@@ -329,7 +329,7 @@
                                 this.clearScopePolygonsFromMap();
                             }
                             this.resetRoadSyntaxState();
-                            this.resetPopulationAnalysisState({ keepMeta: true });
+                            this.resetPopulationAnalysisState({ keepMeta: true, keepYear: true });
                             this.lastIsochroneGeoJSON = null;
                             this.clearH3Grid();
                         }

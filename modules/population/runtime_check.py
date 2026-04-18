@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any, Dict
 
 from core.config import settings
+from .registry import normalize_population_year, resolve_population_data_dir
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +48,10 @@ def run_population_runtime_check() -> Dict[str, Any]:
             f"pillow import failed: {exc.__class__.__name__}: {exc}"
         )
 
-    data_dir = _resolve_dir(settings.population_data_dir)
+    data_dir = resolve_population_data_dir(
+        _resolve_dir(settings.population_data_dir),
+        normalize_population_year(settings.population_data_year),
+    )
     result["data_dir"] = str(data_dir)
     result["data_dir_exists"] = data_dir.exists()
     if not data_dir.exists():

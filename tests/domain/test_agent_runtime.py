@@ -232,7 +232,37 @@ def test_runtime_requires_clarification_from_gate(monkeypatch):
 
     assert response.status == "requires_clarification"
     assert "1." in response.clarification_question
+    assert response.output.clarification_options == []
     assert response.stage == "requires_clarification"
+
+
+def test_runtime_returns_clarification_options(monkeypatch):
+    _mock_roles(
+        monkeypatch,
+        gate=GateDecision(
+            status="clarify",
+            question_type="summary",
+            summary="问题还不够具体。",
+            clarification_questions=["你更想看商业特征、人口还是路网？"],
+            clarification_options=["总结这个区域的商业特征", "为什么这里路网差", "下一步做什么分析"],
+        ),
+    )
+
+    response = asyncio.run(
+        process_agent_turn(
+            AgentTurnRequest(
+                messages=[AgentMessage(role="user", content="分析一下")],
+                analysis_snapshot=_snapshot_with_scope(),
+            )
+        )
+    )
+
+    assert response.status == "requires_clarification"
+    assert response.output.clarification_options == [
+        "总结这个区域的商业特征",
+        "为什么这里路网差",
+        "下一步做什么分析",
+    ]
 
 
 def test_runtime_executes_plan_then_answers(monkeypatch):

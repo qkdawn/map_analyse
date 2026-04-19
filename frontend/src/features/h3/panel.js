@@ -231,10 +231,10 @@
                 return ['map', 'isochrone', 'drawn_polygon', 'poi'];
             },
             getSimplifyAnalysisTargets() {
-                return ['h3', 'population', 'nightlight', 'syntax'];
+                return ['h3', 'population', 'nightlight', 'timeseries', 'syntax'];
             },
             getSimplifyGridAnalysisTargets() {
-                return ['h3', 'population', 'nightlight'];
+                return ['h3', 'population', 'nightlight', 'timeseries'];
             },
             getAllowedSimplifyTargets() {
                 return [
@@ -257,6 +257,7 @@
                     : String(this.poiSubTab || '').trim().toLowerCase();
                 if (panel === 'population') return 'population';
                 if (panel === 'nightlight') return 'nightlight';
+                if (panel === 'timeseries') return 'timeseries';
                 if (panel === 'syntax') return 'syntax';
                 if (panel === 'poi' && poiSubTab === 'grid') return 'h3';
                 return '';
@@ -562,24 +563,34 @@
                 const showH3 = this.step === 2 && normalizedTargets.indexOf('h3') >= 0;
                 const showPopulation = this.step === 2 && normalizedTargets.indexOf('population') >= 0;
                 const showNightlight = this.step === 2 && normalizedTargets.indexOf('nightlight') >= 0;
+                const showTimeseries = this.step === 2 && normalizedTargets.indexOf('timeseries') >= 0;
                 const showSyntax = this.step === 2 && normalizedTargets.indexOf('syntax') >= 0;
 
                 if (showPopulation) {
                     this.clearH3GridDisplayOnLeave();
                     this.clearNightlightDisplayOnLeave();
+                    if (typeof this.clearTimeseriesDisplayOnLeave === 'function') this.clearTimeseriesDisplayOnLeave();
                     this.restorePopulationRasterDisplayOnEnter();
                 } else if (showNightlight) {
                     this.clearH3GridDisplayOnLeave();
                     this.clearPopulationRasterDisplayOnLeave();
+                    if (typeof this.clearTimeseriesDisplayOnLeave === 'function') this.clearTimeseriesDisplayOnLeave();
                     this.restoreNightlightDisplayOnEnter();
+                } else if (showTimeseries) {
+                    this.clearH3GridDisplayOnLeave();
+                    this.clearPopulationRasterDisplayOnLeave();
+                    this.clearNightlightDisplayOnLeave();
+                    if (typeof this.restoreTimeseriesDisplayOnEnter === 'function') this.restoreTimeseriesDisplayOnEnter();
                 } else if (showH3) {
                     this.clearPopulationRasterDisplayOnLeave();
                     this.clearNightlightDisplayOnLeave();
+                    if (typeof this.clearTimeseriesDisplayOnLeave === 'function') this.clearTimeseriesDisplayOnLeave();
                     this.restoreH3GridDisplayOnEnter();
                 } else {
                     this.clearH3GridDisplayOnLeave();
                     this.clearPopulationRasterDisplayOnLeave();
                     this.clearNightlightDisplayOnLeave();
+                    if (typeof this.clearTimeseriesDisplayOnLeave === 'function') this.clearTimeseriesDisplayOnLeave();
                 }
 
                 if (showSyntax) {

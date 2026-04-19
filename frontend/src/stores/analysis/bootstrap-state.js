@@ -3,6 +3,7 @@ import { useAnalysisPoiStore } from './poi'
 import { useAnalysisH3Store } from './h3'
 import { useAnalysisPopulationStore } from './population'
 import { useAnalysisNightlightStore } from './nightlight'
+import { useAnalysisTimeseriesStore } from './timeseries'
 import { useAnalysisRoadStore } from './road'
 import { useAnalysisExportStore } from './export'
 import { useAnalysisHistoryStore } from './history'
@@ -19,6 +20,7 @@ export function createAnalysisInitialStateFromPinia(pinia, options = {}) {
     buildAnalysisH3InitialState = () => ({}),
     buildAnalysisPopulationInitialState = () => ({}),
     buildAnalysisNightlightInitialState = () => ({}),
+    buildAnalysisTimeseriesInitialState = () => ({}),
     buildAnalysisExportInitialState = () => ({}),
     buildRoadSyntaxInitialState = () => ({}),
   } = options
@@ -28,6 +30,7 @@ export function createAnalysisInitialStateFromPinia(pinia, options = {}) {
   const h3Store = useAnalysisH3Store(pinia)
   const populationStore = useAnalysisPopulationStore(pinia)
   const nightlightStore = useAnalysisNightlightStore(pinia)
+  const timeseriesStore = useAnalysisTimeseriesStore(pinia)
   const roadStore = useAnalysisRoadStore(pinia)
   const exportStore = useAnalysisExportStore(pinia)
   const historyStore = useAnalysisHistoryStore(pinia)
@@ -37,6 +40,7 @@ export function createAnalysisInitialStateFromPinia(pinia, options = {}) {
   h3Store.$reset()
   populationStore.$reset()
   nightlightStore.$reset()
+  timeseriesStore.$reset()
   roadStore.$reset()
   exportStore.$reset()
   historyStore.$reset()
@@ -53,6 +57,7 @@ export function createAnalysisInitialStateFromPinia(pinia, options = {}) {
   h3Store.$patch(buildAnalysisH3InitialState())
   populationStore.$patch(buildAnalysisPopulationInitialState())
   nightlightStore.$patch(buildAnalysisNightlightInitialState())
+  timeseriesStore.$patch(buildAnalysisTimeseriesInitialState())
   roadStore.$patch({
     roadSyntaxModulesReady,
     roadSyntaxModuleMissing: Array.isArray(roadSyntaxModuleMissing)

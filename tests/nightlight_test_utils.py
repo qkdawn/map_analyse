@@ -75,7 +75,8 @@ def sample_gcj02_polygon():
     return [list(wgs84_to_gcj02(lng, lat)) for lng, lat in ring_wgs84]
 
 
-def write_population_test_dataset(root: Path) -> Path:
+def write_population_test_dataset(root: Path, year: str = "2026") -> Path:
+    root = root / str(year)
     root.mkdir(parents=True, exist_ok=True)
     transform = from_origin(121.46, 31.25, 0.01, 0.01)
     crs = "EPSG:4326"
@@ -102,13 +103,13 @@ def write_population_test_dataset(root: Path) -> Path:
         female_total += female_arr
 
     datasets = {
-        "chn_T_M_2026_CN_100m_R2025A_v1.tif": male_total,
-        "chn_T_F_2026_CN_100m_R2025A_v1.tif": female_total,
+        f"chn_T_M_{year}_CN_100m_R2025A_v1.tif": male_total,
+        f"chn_T_F_{year}_CN_100m_R2025A_v1.tif": female_total,
     }
     for age_band in age_band_keys():
-        datasets[f"chn_m_{age_band}_2026_CN_100m_R2025A_v1.tif"] = male_ages[age_band]
-        datasets[f"chn_f_{age_band}_2026_CN_100m_R2025A_v1.tif"] = female_ages[age_band]
-        datasets[f"chn_t_{age_band}_2026_CN_100m_R2025A_v1.tif"] = male_ages[age_band] + female_ages[age_band]
+        datasets[f"chn_m_{age_band}_{year}_CN_100m_R2025A_v1.tif"] = male_ages[age_band]
+        datasets[f"chn_f_{age_band}_{year}_CN_100m_R2025A_v1.tif"] = female_ages[age_band]
+        datasets[f"chn_t_{age_band}_{year}_CN_100m_R2025A_v1.tif"] = male_ages[age_band] + female_ages[age_band]
 
     for filename, data in datasets.items():
         path = root / filename
@@ -136,6 +137,7 @@ def configure_nightlight_dir(tmp_path: Path, year: int = 2025) -> Path:
     settings.nightlight_data_dir = str(data_dir)
     settings.nightlight_preview_max_size = 512
     settings.population_data_dir = str(population_dir)
+    settings.population_data_year = "2026"
     clear_clip_cache()
     population_service._IN_MEMORY_JSON_CACHE.clear()
     return data_dir

@@ -21,7 +21,7 @@ from ..analysis_extractors import (
 )
 from ..context_builder import build_context_summary
 from ..executor import execute_plan_step
-from ..gate import classify_question_type, latest_user_message, run_gate
+from ..gate import _clarification_options, classify_question_type, latest_user_message, run_gate
 from ..governance import check_tool_governance
 from ..planner import build_planning_fallback
 from ..schemas import (
@@ -684,6 +684,60 @@ async def _maybe_emit(emit: LoopEmit | None, event_type: str, payload: Dict[str,
         await outcome
 
 
+async def _emit_preflight_trace(
+    *,
+    emit: LoopEmit | None,
+    trace_id: str,
+    data_readiness: Dict[str, Any],
+) -> None:
+    if emit is None or not isinstance(data_readiness, dict):
+        return
+    reused = [str(item) for item in (data_readiness.get("reused") or []) if str(item).strip()]
+    fetched = [str(item) for item in (data_readiness.get("fetched") or []) if str(item).strip()]
+    ready = bool(data_readiness.get("ready"))
+    await _maybe_emit(
+        emit,
+        "trace",
+        {
+            "id": f"{trace_id}:precheck",
+            "tool_name": "analysis_preflight",
+            "phase": "precheck",
+            "status": "success" if data_readiness.get("checked") else "failed",
+            "reason": "checked",
+            "message": "已完成现有数据检查",
+            "result_summary": f"复用: {', '.join(reused) if reused else '无'}",
+            "produced_artifacts": ["current_data_readiness"],
+        },
+    )
+    await _maybe_emit(
+        emit,
+        "trace",
+        {
+            "id": f"{trace_id}:fetch_missing",
+            "tool_name": "analysis_preflight",
+            "phase": "fetch_missing",
+            "status": "success" if ready else "failed",
+            "reason": "fetched_missing",
+            "message": "已按缺失维度补齐数据" if ready else "缺失维度补齐失败",
+            "result_summary": f"补齐: {', '.join(fetched) if fetched else '无'}",
+            "produced_artifacts": ["current_area_data_bundle", "current_data_readiness"],
+        },
+    )
+    await _maybe_emit(
+        emit,
+        "trace",
+        {
+            "id": f"{trace_id}:analysis",
+            "tool_name": "analysis_preflight",
+            "phase": "analysis",
+            "status": "start" if ready else "failed",
+            "reason": "analysis_started",
+            "message": "数据就绪，开始分析" if ready else "数据未就绪，阻止进入分析",
+            "produced_artifacts": ["current_data_readiness"],
+        },
+    )
+
+
 async def _invoke_json_role(
     *,
     system_prompt: str,
@@ -726,13 +780,14 @@ def _gate_system_prompt() -> str:
         "只输出 JSON。"
         "JSON 结构："
         "{\"status\":\"pass|clarify|block\",\"question_type\":\"area_character|site_selection|population|nightlight|road|vitality|tod|livability|facility_gap|renewal_priority|metric|general\","
-        "\"summary\":\"...\",\"missing_information\":[\"...\"],\"clarification_questions\":[\"...\"],\"clarification_question\":\"...\",\"blocked_reason\":\"...\"}"
+        "\"summary\":\"...\",\"missing_information\":[\"...\"],\"clarification_questions\":[\"...\"],\"clarification_question\":\"...\",\"clarification_options\":[\"...\"],\"blocked_reason\":\"...\"}"
         "规则："
         "1. 如果问题已经足够清晰，返回 pass；"
         "2. 如果问题不清晰，只问最关键的 1 到 3 个问题；"
         "3. 澄清问题要具体，不要泛泛而谈；"
         "4. 不要编造 scope、结果或用户意图；"
         "5. clarification_questions 最多 3 条。"
+        "6. 当 status=clarify 时，clarification_options 必须提供 1 到 3 条可直接点击的建议回答，使用用户口吻，避免和 clarification_question 重复。"
     )
 
 
@@ -861,6 +916,10 @@ async def run_gate_with_llm(
         decision = GateDecision(**payload)
     except Exception:
         return rule_decision
+    if decision.status == "clarify":
+        fallback_options = _clarification_options(latest_user_message(messages), snapshot)[:3]
+        normalized_options = [str(item).strip() for item in (decision.clarification_options or []) if str(item).strip()]
+        decision.clarification_options = normalized_options[:3] if normalized_options else fallback_options
     if rule_decision.status == "pass" and decision.status == "pass" and not decision.summary:
         decision.summary = rule_decision.summary
     return decision
@@ -1241,6 +1300,13 @@ async def run_llm_tool_loop(
                     artifacts=loop_result.artifacts,
                     question=str(messages[-1].content if messages else ""),
                 )
+                data_readiness = dict(result.result.get("data_readiness") or {}) if isinstance(result.result, dict) else {}
+                if data_readiness.get("checked"):
+                    await _emit_preflight_trace(
+                        emit=emit,
+                        trace_id=f"tool-call:{call.get('call_id') or tool_name}",
+                        data_readiness=data_readiness,
+                    )
                 loop_result.execution_trace.append(trace)
                 loop_result.used_tools.append(tool_name)
                 loop_result.tool_results.append(result)
@@ -1257,6 +1323,7 @@ async def run_llm_tool_loop(
                         "id": f"tool-call:{call.get('call_id') or tool_name}",
                         "call_id": str(call.get("call_id") or ""),
                         "tool_name": tool_name,
+                        "phase": "analysis" if data_readiness.get("checked") else "executing",
                         "status": result.status,
                         "reason": step.reason,
                         "message": trace.message or ("执行成功" if result.status == "success" else "执行失败"),

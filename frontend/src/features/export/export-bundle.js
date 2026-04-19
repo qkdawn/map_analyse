@@ -1419,6 +1419,16 @@
                             ? this.getNightlightLegendNote()
                             : '',
                     };
+                    result.timeseries = {
+                        active_tab: String(this.timeseriesActiveTab || ''),
+                        summary_rows: (typeof this.getTimeseriesSummaryRows === 'function')
+                            ? this.getTimeseriesSummaryRows()
+                            : [],
+                        insights: (typeof this.getTimeseriesInsights === 'function')
+                            ? this.getTimeseriesInsights()
+                            : [],
+                        layer_summary: (this.timeseriesLayer && this.timeseriesLayer.summary) || {},
+                    };
                 } catch (err) {
                     console.warn('build frontend analysis payload failed', err);
                 }

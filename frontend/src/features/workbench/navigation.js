@@ -4,6 +4,7 @@
         H3_SETTINGS: 'h3_settings',
         POPULATION: 'population',
         NIGHTLIGHT: 'nightlight',
+        TIMESERIES: 'timeseries',
         SYNTAX: 'syntax',
         AGENT: 'agent',
     });
@@ -28,6 +29,7 @@
                         this.hasSimplifyDisplayTarget('h3')
                         || this.hasSimplifyDisplayTarget('population')
                         || this.hasSimplifyDisplayTarget('nightlight')
+                        || this.hasSimplifyDisplayTarget('timeseries')
                         || this.hasSimplifyDisplayTarget('syntax')
                     );
                 const displayAllowsPoi = (typeof this.hasSimplifyDisplayTarget === 'function')
@@ -96,6 +98,22 @@
                     this.rebuildPoiRuntimeSystem(this.allPoisDetails);
                 }
             },
+            resizeMapAfterSidebarLayoutChange() {
+                this.$nextTick(() => {
+                    const map = this.mapCore && this.mapCore.map ? this.mapCore.map : null;
+                    if (map && typeof map.resize === 'function') {
+                        map.resize();
+                    }
+                });
+            },
+            toggleStep3SidebarCollapsed(nextCollapsed) {
+                const shouldCollapse = typeof nextCollapsed === 'boolean'
+                    ? nextCollapsed
+                    : !this.isStep3SidebarCollapsed;
+                if (this.isStep3SidebarCollapsed === shouldCollapse) return;
+                this.isStep3SidebarCollapsed = shouldCollapse;
+                this.resizeMapAfterSidebarLayoutChange();
+            },
             selectStep3Panel(panelId) {
                 if (this.isDraggingNav) return;
                 const requestedPanelId = String(panelId || '');
@@ -156,6 +174,13 @@
                     this.clearNightlightDisplayOnLeave();
                 }
                 if (
+                    previousPanel === STEP3_PANEL_IDS.TIMESERIES
+                    && nextPanelId !== STEP3_PANEL_IDS.TIMESERIES
+                    && !(typeof this.hasSimplifyDisplayTarget === 'function' && this.hasSimplifyDisplayTarget('timeseries'))
+                ) {
+                    if (typeof this.clearTimeseriesDisplayOnLeave === 'function') this.clearTimeseriesDisplayOnLeave();
+                }
+                if (
                     previousPanel === STEP3_PANEL_IDS.POI
                     && previousPoiSubTab === 'grid'
                     && nextPanelId !== STEP3_PANEL_IDS.POI
@@ -202,6 +227,12 @@
                 if (nextPanelId === STEP3_PANEL_IDS.NIGHTLIGHT) {
                     this.ensureNightlightPanelEntryState();
                     this.restoreNightlightDisplayOnEnter();
+                    this.applySimplifyPointVisibility();
+                    return;
+                }
+                if (nextPanelId === STEP3_PANEL_IDS.TIMESERIES) {
+                    if (typeof this.ensureTimeseriesPanelEntryState === 'function') this.ensureTimeseriesPanelEntryState();
+                    if (typeof this.restoreTimeseriesDisplayOnEnter === 'function') this.restoreTimeseriesDisplayOnEnter();
                     this.applySimplifyPointVisibility();
                     return;
                 }
@@ -334,6 +365,9 @@
                             this.clearH3Grid();
                         }
                     }
+                    if (Number(targetStep) !== 2) {
+                        this.isStep3SidebarCollapsed = false;
+                    }
                     this.step = targetStep;
                 });
             },
@@ -362,6 +396,7 @@
                     this.clearAnalysisLayers();
                     this.sidebarView = 'start';
                     this.step = 1;
+                    this.isStep3SidebarCollapsed = false;
                     this.selectedPoint = null;
                     if (typeof this.clearCenterMarkerOverlay === 'function') {
                         this.clearCenterMarkerOverlay();

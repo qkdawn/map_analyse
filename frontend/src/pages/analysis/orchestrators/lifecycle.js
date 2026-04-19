@@ -120,11 +120,19 @@ function createAnalysisLifecycleHooks(options = {}) {
         if (oldPanel === 'nightlight' && newPanel !== 'nightlight' && !nightlightEnabled) {
           this.clearNightlightDisplayOnLeave()
         }
+        const timeseriesEnabled = (typeof this.hasSimplifyDisplayTarget === 'function')
+          && this.hasSimplifyDisplayTarget('timeseries')
+        if (oldPanel === 'timeseries' && newPanel !== 'timeseries' && !timeseriesEnabled) {
+          if (typeof this.clearTimeseriesDisplayOnLeave === 'function') this.clearTimeseriesDisplayOnLeave()
+        }
         if (newPanel === 'population') {
           this.ensurePopulationPanelEntryState()
         }
         if (newPanel === 'nightlight') {
           this.ensureNightlightPanelEntryState()
+        }
+        if (newPanel === 'timeseries') {
+          if (typeof this.ensureTimeseriesPanelEntryState === 'function') this.ensureTimeseriesPanelEntryState()
         }
         this.$nextTick(() => {
           this.refreshPoiKdeOverlay()

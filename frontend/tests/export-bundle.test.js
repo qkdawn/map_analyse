@@ -47,6 +47,16 @@ function createContext(overrides = {}) {
     getNightlightLegendNote() {
       return '地图轮廓仅表示核心/高亮/次级热点带边界。'
     },
+    timeseriesActiveTab: 'joint',
+    getTimeseriesSummaryRows() {
+      return [{ key: 'up_up', label: '人口增夜光增', value: '2' }]
+    },
+    getTimeseriesInsights() {
+      return [{ type: 'joint_quadrant', title: '人口增夜光增', value: 2, unit: '个' }]
+    },
+    timeseriesLayer: {
+      summary: { class_counts: { pop_up_light_up: 2 } },
+    },
     allPoisDetails: [{}, {}],
     poiSubTab: 'analysis',
     poiAnalysisSubTab: 'category',
@@ -54,7 +64,7 @@ function createContext(overrides = {}) {
   }
 }
 
-test('_buildFrontendAnalysisForExport includes population and nightlight analysis blocks', () => {
+test('_buildFrontendAnalysisForExport includes population, nightlight, and timeseries analysis blocks', () => {
   const ctx = createContext()
 
   const payload = ctx._buildFrontendAnalysisForExport()
@@ -67,4 +77,7 @@ test('_buildFrontendAnalysisForExport includes population and nightlight analysi
   assert.equal(payload.nightlight.analysis_view, 'hotspot')
   assert.equal(payload.nightlight.analysis.core_hotspot_count, 3)
   assert.match(payload.nightlight.legend_note, /热点带边界/)
+  assert.equal(payload.timeseries.active_tab, 'joint')
+  assert.equal(payload.timeseries.summary_rows[0].key, 'up_up')
+  assert.equal(payload.timeseries.insights[0].type, 'joint_quadrant')
 })

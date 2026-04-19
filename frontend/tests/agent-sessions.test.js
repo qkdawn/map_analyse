@@ -5,6 +5,8 @@ import {
   createAnalysisAgentInitialState,
   createAnalysisAgentSessionMethods,
   deriveAgentSessionPreview,
+  getAnalysisTaskDefinition,
+  resolveAnalysisTaskKeyFromTrace,
   normalizeAgentToolSummary,
   normalizeAgentTurnPayload,
   sortAgentSessions,
@@ -51,12 +53,21 @@ function createAgentContext(overrides = {}) {
     resultDataSource: 'local',
     poiDataSource: 'local',
     h3AnalysisCharts: {},
-    h3GridResolution: 9,
+    h3GridResolution: 10,
+    h3AnalysisGridFeatures: [],
+    isComputingH3Analysis: false,
+    isComputingPopulation: false,
+    isComputingNightlight: false,
+    isComputingRoadSyntax: false,
     h3NeighborRing: 1,
     roadSyntaxMetric: 'connectivity',
+    roadSyntaxMainTab: 'params',
     populationAnalysisView: 'analysis',
     nightlightAnalysisView: 'grid',
     lastNonAgentStep3Panel: 'poi',
+    getIsochronePolygonRing() {
+      return [[1, 1], [1, 2], [2, 2], [1, 1]]
+    },
     getIsochronePolygonPayload() {
       return [[1, 1], [1, 2], [2, 2], [1, 1]]
     },
@@ -65,6 +76,10 @@ function createAgentContext(overrides = {}) {
     },
     selectStep3Panel(panelId) {
       this.activeStep3Panel = panelId
+    },
+    $nextTick(callback) {
+      if (typeof callback === 'function') callback()
+      return Promise.resolve()
     },
   }
   return Object.assign(ctx, overrides)
@@ -232,6 +247,120 @@ test('backToAgentChat keeps conversation state and cached tools', () => {
   assert.equal(ctx.agentToolsLoaded, true)
 })
 
+test('agent tool detail dialog reads current tool without mutating sessions or tools', () => {
+  const tool = normalizeAgentToolSummary({
+    name: 'compute_population_overview_from_scope',
+    description: 'Build population overview',
+    ui_tier: 'foundation',
+    data_domain: 'population',
+    capability_type: 'analyze',
+    risk_level: 'safe',
+    readonly: true,
+    produces: ['current_population_summary'],
+  })
+  const ctx = createAgentContext({
+    agentWorkspaceView: 'tools',
+    agentTools: [tool],
+    agentToolsLoaded: true,
+  })
+  const originalTools = ctx.agentTools
+  const stopEvent = {
+    stopped: false,
+    stopPropagation() {
+      this.stopped = true
+    },
+  }
+
+  ctx.openAgentToolDetail(tool, stopEvent)
+
+  assert.equal(stopEvent.stopped, true)
+  assert.equal(ctx.agentToolDetailDialogOpen, true)
+  assert.equal(ctx.agentActiveToolDetailName, 'compute_population_overview_from_scope')
+  assert.equal(ctx.getAgentToolDetail().name, 'compute_population_overview_from_scope')
+  assert.equal(ctx.agentTools, originalTools)
+  assert.equal(ctx.agentSessions.length, 0)
+  assert.equal(ctx.agentWorkspaceView, 'tools')
+
+  ctx.closeAgentToolDetail()
+
+  assert.equal(ctx.agentToolDetailDialogOpen, false)
+  assert.equal(ctx.agentActiveToolDetailName, '')
+  assert.equal(ctx.getAgentToolDetail(), null)
+})
+
+test('analysis task registry maps backend tool traces to left panel tasks', () => {
+  assert.equal(getAnalysisTaskDefinition('poi_grid').panelId, 'poi')
+  assert.equal(resolveAnalysisTaskKeyFromTrace({
+    tool_name: 'compute_h3_metrics_from_scope_and_pois',
+    status: 'success',
+  }), 'poi_grid')
+  assert.equal(resolveAnalysisTaskKeyFromTrace({
+    tool_name: 'compute_population_overview_from_scope',
+    status: 'success',
+  }), 'population')
+  assert.equal(resolveAnalysisTaskKeyFromTrace({
+    tool_name: 'compute_nightlight_overview_from_scope',
+    status: 'success',
+  }), 'nightlight')
+  assert.equal(resolveAnalysisTaskKeyFromTrace({
+    tool_name: 'compute_road_syntax_from_scope',
+    status: 'success',
+  }), 'road_syntax')
+})
+
+test('agent task adjustment focuses the correct first and second level panels', () => {
+  const ctx = createAgentContext({
+    agentPendingTaskConfirmation: {
+      taskKey: 'poi_grid',
+      status: 'ready',
+    },
+  })
+
+  ctx.onAgentTaskAdjustClick()
+
+  assert.equal(ctx.sidebarView, 'wizard')
+  assert.equal(ctx.step, 2)
+  assert.equal(ctx.activeStep3Panel, 'poi')
+  assert.equal(ctx.poiSubTab, 'grid')
+
+  ctx.agentPendingTaskConfirmation = {
+    taskKey: 'road_syntax',
+    status: 'ready',
+  }
+  ctx.onAgentTaskAdjustClick()
+
+  assert.equal(ctx.activeStep3Panel, 'syntax')
+  assert.equal(ctx.roadSyntaxMainTab, 'params')
+})
+
+test('agent task start reuses current session and submits continuation after calculation', async () => {
+  const ctx = createAgentContext()
+  const session = ctx.createAgentSession('task bridge')
+  ctx.updateAgentSessions([session], { loaded: true })
+  ctx.applyAgentSessionSnapshot(session)
+  let computeCount = 0
+  let submittedPrompt = ''
+  ctx.computePopulationAnalysis = async () => {
+    computeCount += 1
+    ctx.populationOverview = { summary: { total_population: 100 } }
+  }
+  ctx.submitAgentTurn = async ({ prompt }) => {
+    submittedPrompt = prompt
+  }
+  ctx.setAgentTaskConfirmation({
+    taskKey: 'population',
+    status: 'ready',
+    canStart: true,
+  })
+
+  await ctx.onAgentTaskStartClick()
+
+  assert.equal(computeCount, 1)
+  assert.equal(ctx.activeAgentSessionId, session.id)
+  assert.equal(ctx.agentPendingTaskConfirmation.status, 'completed')
+  assert.match(submittedPrompt, /人口计算/)
+})
+
 test('clarification draft state is isolated from the main composer', () => {
   const ctx = createAgentContext({
     agentInput: '底部聊天框内容',
@@ -274,6 +403,22 @@ test('clarification draft submit uses inline input and keeps composer untouched'
   assert.equal(submittedPrompt, '比较人口和夜间活力哪个更弱')
   assert.equal(ctx.agentInput, '底部聊天框内容')
   assert.equal(ctx.agentClarificationSubmitting, true)
+})
+
+test('clarification helpers keep options capped and hide inline index without suggestions', () => {
+  const ctx = createAgentContext({
+    agentClarificationOptions: ['A', 'B', 'C', 'D'],
+  })
+
+  assert.deepEqual(ctx.getAgentClarificationOptions(), ['A', 'B', 'C'])
+  assert.equal(ctx.hasAgentClarificationOptions(), true)
+  assert.equal(ctx.getAgentClarificationInputIndexLabel(), '4.')
+
+  ctx.agentClarificationOptions = []
+
+  assert.deepEqual(ctx.getAgentClarificationOptions(), [])
+  assert.equal(ctx.hasAgentClarificationOptions(), false)
+  assert.equal(ctx.getAgentClarificationInputIndexLabel(), '')
 })
 
 test('applyAgentSessionSnapshot clears transient clarification draft state', () => {
@@ -1031,6 +1176,112 @@ test('getAgentVisibleProcessSteps keeps cumulative visible timeline items', () =
   assert.equal(ctx.getAgentVisibleProcessSteps()[1].items.includes('结果：scope_polygon 已读取'), true)
 })
 
+test('getAgentProcessRoleGroups groups role steps into first-level panels', () => {
+  const ctx = createAgentContext()
+
+  ctx.upsertAgentThinkingItem({
+    id: 'status-gating',
+    phase: 'gating',
+    title: '门卫判断',
+    detail: '正在判断问题是否清晰。',
+    state: 'completed',
+  })
+  ctx.upsertAgentThinkingItem({
+    id: 'thinking-gate-pass',
+    phase: 'gating',
+    title: '门卫通过',
+    detail: '问题已明确，可以进入规划。',
+    state: 'completed',
+  })
+  ctx.upsertAgentThinkingItem({
+    id: 'thinking-planning',
+    phase: 'planning',
+    title: '规划分析步骤',
+    detail: '正在决定要调用哪些工具。',
+    state: 'active',
+  })
+
+  const groups = ctx.getAgentProcessRoleGroups()
+
+  assert.deepEqual(groups.map((item) => item.key), ['gating', 'planning'])
+  assert.equal(groups[0].title, '门卫判断')
+  assert.deepEqual(groups[0].steps.map((item) => item.title), ['门卫判断', '门卫通过'])
+  assert.equal(groups[0].summary, '问题已明确，可以进入规划。')
+  assert.equal(groups[1].title, 'Planner')
+  assert.equal(groups[1].state, 'active')
+})
+
+test('getAgentProcessRoleGroups embeds planner checklist and tool calls', () => {
+  const ctx = createAgentContext({
+    agentPlan: {
+      steps: [
+        { tool_name: 'read_current_results', reason: '读取当前结果', evidence_goal: '确认已有摘要' },
+        { tool_name: 'analyze_poi_mix_from_scope', reason: '分析业态结构', evidence_goal: '形成商业画像' },
+      ],
+      followupSteps: [],
+      followupApplied: false,
+      summary: '先读取已有分析，再生成商业画像。',
+    },
+    agentExecutionTrace: [
+      {
+        tool_name: 'read_current_results',
+        status: 'success',
+        result_summary: '已有结果可复用',
+        produced_artifacts: ['current_analysis_summary'],
+      },
+    ],
+  })
+
+  ctx.upsertAgentThinkingItem({
+    id: 'thinking-planning',
+    phase: 'planning',
+    title: '规划分析步骤',
+    detail: '正在决定要调用哪些工具。',
+    state: 'completed',
+  })
+  ctx.upsertAgentThinkingItem({
+    id: 'trace-read-current-results',
+    phase: 'executing',
+    title: '执行成功 read_current_results',
+    detail: '已有结果可复用。',
+    state: 'completed',
+  })
+
+  const groups = ctx.getAgentProcessRoleGroups()
+  const plannerGroup = groups.find((item) => item.key === 'planning')
+  const executingGroup = groups.find((item) => item.key === 'executing')
+
+  assert.equal(plannerGroup.title, 'Planner')
+  assert.equal(plannerGroup.planChecklist.visible, true)
+  assert.equal(plannerGroup.planChecklist.groups[0].items.length, 2)
+  assert.equal(plannerGroup.countLabel.includes('1/2 已完成'), true)
+  assert.equal(executingGroup.title, '工具执行')
+  assert.equal(executingGroup.toolCallItems.length, 1)
+  assert.equal(executingGroup.toolCallItems[0].toolName, 'read_current_results')
+})
+
+test('getAgentProcessRoleGroups creates planner and tool panels without timeline steps', () => {
+  const ctx = createAgentContext({
+    agentPlan: {
+      steps: [{ tool_name: 'read_current_results', reason: '读取当前结果', evidence_goal: '确认已有摘要' }],
+      followupSteps: [],
+      followupApplied: false,
+      summary: '先读取已有分析。',
+    },
+    agentExecutionTrace: [{ tool_name: 'read_current_results', status: 'success' }],
+  })
+
+  const groups = ctx.getAgentProcessRoleGroups()
+
+  assert.deepEqual(groups.map((item) => item.key), ['planning', 'executing'])
+  assert.equal(groups[0].steps.length, 0)
+  assert.equal(groups[0].planChecklist.visible, true)
+  assert.equal(groups[0].countLabel, '1/1 已完成')
+  assert.equal(groups[1].steps.length, 0)
+  assert.equal(groups[1].toolCallItems.length, 1)
+  assert.equal(groups[1].countLabel, '1 次')
+})
+
 test('status events create visible process fallback steps', async () => {
   const ctx = createAgentContext()
   ctx.agentSessionsLoaded = true
@@ -1169,9 +1420,10 @@ test('applyAgentSessionSnapshot expands failed and risk confirmation thinking ti
   assert.equal(ctx.agentThinkingExpanded, false)
 })
 
-test('applyAgentSessionSnapshot defaults plan checklist to expanded when plan exists', () => {
+test('applyAgentSessionSnapshot keeps planner and tool calls collapsed for answered history', () => {
   const ctx = createAgentContext({
     agentPlanExpanded: false,
+    agentTraceExpanded: true,
   })
 
   ctx.applyAgentSessionSnapshot({
@@ -1197,7 +1449,9 @@ test('applyAgentSessionSnapshot defaults plan checklist to expanded when plan ex
     thinkingTimeline: [],
   })
 
-  assert.equal(ctx.agentPlanExpanded, true)
+  assert.equal(ctx.agentThinkingExpanded, false)
+  assert.equal(ctx.agentPlanExpanded, false)
+  assert.equal(ctx.agentTraceExpanded, false)
   assert.equal(ctx.agentPlan.summary, '先读取结果。')
 })
 
@@ -1233,8 +1487,46 @@ test('getAgentPlanChecklist derives grouped checklist states from plan and trace
   assert.equal(checklist.groups[1].items[0].status, 'pending')
   assert.equal(checklist.groups[1].items[0].optional, true)
 
+  ctx.agentPlanExpanded = true
   ctx.toggleAgentPlanExpanded()
   assert.equal(ctx.agentPlanExpanded, false)
+})
+
+test('getAgentToolCallItems normalizes trace cards and supports independent toggle state', () => {
+  const ctx = createAgentContext({
+    agentExecutionTrace: [
+      {
+        id: 'trace-1',
+        tool_name: 'read_current_results',
+        status: 'success',
+        message: '读取成功',
+        arguments_summary: 'scope=current',
+        result_summary: '返回摘要',
+        evidence_count: 2,
+        warning_count: 1,
+        produced_artifacts: ['current_results_summary'],
+      },
+      {
+        id: 'trace-2',
+        tool_name: 'run_area_character_pack',
+        status: 'blocked',
+        reason: '等待风险确认',
+      },
+    ],
+    agentTraceExpanded: true,
+  })
+
+  const items = ctx.getAgentToolCallItems()
+
+  assert.equal(items.length, 2)
+  assert.equal(items[0].toolName, 'read_current_results')
+  assert.equal(items[0].statusTone, 'success')
+  assert.deepEqual(items[0].producedArtifacts, ['current_results_summary'])
+  assert.equal(items[1].statusTone, 'blocked')
+  assert.equal(ctx.getAgentToolCallStatusLabel('blocked'), '等待确认')
+
+  ctx.toggleAgentTraceExpanded()
+  assert.equal(ctx.agentTraceExpanded, false)
 })
 
 test('maybePreloadPanelForAgentTool preloads matching panel once without switching active panel', async () => {
@@ -1410,7 +1702,9 @@ test('submitAgentTurn appends user message immediately and updates thinking time
   await pending
 
   assert.equal(ctx.agentThinkingTimeline.length, 5)
-  assert.equal(ctx.agentThinkingExpanded, true)
+  assert.equal(ctx.agentThinkingExpanded, false)
+  assert.equal(ctx.agentPlanExpanded, false)
+  assert.equal(ctx.agentTraceExpanded, false)
   assert.deepEqual(ctx.getAgentMessagesBeforeThinking().map((item) => item.content), ['总结这个区域'])
   assert.deepEqual(ctx.getAgentMessagesAfterThinking().map((item) => item.content), [])
   assert.deepEqual(
@@ -1434,6 +1728,72 @@ test('submitAgentTurn appends user message immediately and updates thinking time
   )
   assert.equal(ctx.findAgentSession(ctx.activeAgentSessionId).preview, '这里以社区商业为主')
   assert.equal(Object.prototype.hasOwnProperty.call(ctx.findAgentSession(ctx.activeAgentSessionId), 'reasoningBlocks'), false)
+})
+
+test('clarification follow-up continues in the same session instead of opening a new chat', async () => {
+  const ctx = createAgentContext()
+  ctx.agentSessionsLoaded = true
+  ctx.startNewAgentChat()
+  ctx.updateAgentSessionSnapshot(ctx.activeAgentSessionId, (session) => ({
+    ...session,
+    persisted: true,
+    snapshotLoaded: true,
+    status: 'requires_clarification',
+    stage: 'requires_clarification',
+    messages: [{ role: 'user', content: '总结这个区域' }],
+    clarificationQuestion: '你想重点看哪个方向？',
+    clarificationOptions: ['总结这个区域的商业特征', '哪里适合补充餐饮', '为什么这里路网较弱'],
+  }))
+  ctx.syncActiveAgentRuntimeView(ctx.activeAgentSessionId)
+
+  const originalSessionId = ctx.activeAgentSessionId
+  let capturedConversationId = ''
+  global.fetch = async (url, options = {}) => {
+    assert.equal(url, '/api/v1/analysis/agent/turn/stream')
+    const payload = JSON.parse(String(options.body || '{}'))
+    capturedConversationId = String(payload.conversation_id || '')
+    return createSseResponse([
+      {
+        type: 'final',
+        payload: {
+          response: {
+            status: 'answered',
+            stage: 'answered',
+            output: {
+              cards: [{ type: 'summary', title: '概览', content: '已继续在原会话中回答。', items: [] }],
+              clarification_question: '',
+              clarification_options: [],
+              risk_prompt: '',
+              next_suggestions: [],
+            },
+            diagnostics: {
+              execution_trace: [],
+              used_tools: [],
+              citations: [],
+              research_notes: [],
+              audit_issues: [],
+              thinking_timeline: [],
+              error: '',
+            },
+            context_summary: {},
+            plan: { steps: [], followup_steps: [], followup_applied: false, summary: '' },
+          },
+        },
+      },
+    ])
+  }
+
+  ctx.onAgentClarificationOptionClick('哪里适合补充餐饮')
+  await new Promise((resolve) => setTimeout(resolve, 0))
+
+  assert.equal(capturedConversationId, originalSessionId)
+  assert.equal(ctx.activeAgentSessionId, originalSessionId)
+  assert.equal(ctx.agentSessions.length, 1)
+  assert.equal(ctx.findAgentSession(originalSessionId).status, 'answered')
+  assert.deepEqual(
+    ctx.findAgentSession(originalSessionId).messages.map((item) => item.content),
+    ['总结这个区域', '哪里适合补充餐饮'],
+  )
 })
 
 test('multi-turn thinking keeps previous assistant above the new user turn', async () => {
@@ -1804,7 +2164,8 @@ test('submitAgentTurn shows streamed plan above final response and keeps checkli
 
   assert.equal(ctx.agentPlan.steps.length, 2)
   assert.equal(ctx.agentPlan.summary, '先读取已有分析，再生成商业画像。')
-  assert.equal(ctx.agentPlanExpanded, true)
+  assert.equal(ctx.agentPlanExpanded, false)
+  assert.equal(ctx.agentTraceExpanded, false)
   assert.equal(ctx.getAgentPlanChecklist().visible, true)
   assert.equal(ctx.getAgentPlanChecklist().groups[0].items[0].status, 'completed')
   assert.equal(ctx.getAgentPlanChecklist().groups[0].items[1].status, 'pending')

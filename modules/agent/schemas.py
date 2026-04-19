@@ -102,6 +102,44 @@ class AgentTurnRequest(BaseModel):
     governance_mode: GovernanceMode = "auto"
 
 
+class AgentSummaryRequest(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    conversation_id: str = ""
+    analysis_fingerprint: str = ""
+    analysis_snapshot: AnalysisSnapshot = Field(default_factory=AnalysisSnapshot)
+
+
+class AgentSummaryDataReadiness(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    checked: bool = False
+    ready: bool = False
+    missing_tasks: List[str] = Field(default_factory=list)
+    reused: List[str] = Field(default_factory=list)
+    fetched: List[str] = Field(default_factory=list)
+
+
+class AgentSummaryReadinessResponse(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    data_readiness: AgentSummaryDataReadiness = Field(default_factory=AgentSummaryDataReadiness)
+    error: str = ""
+    warnings: List[str] = Field(default_factory=list)
+    phases: List[str] = Field(default_factory=list)
+
+
+class AgentSummaryGenerateResponse(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    data_readiness: AgentSummaryDataReadiness = Field(default_factory=AgentSummaryDataReadiness)
+    panel_payloads: Dict[str, Any] = Field(default_factory=dict)
+    summary_pack: Dict[str, Any] = Field(default_factory=dict)
+    error: str = ""
+    warnings: List[str] = Field(default_factory=list)
+    phases: List[str] = Field(default_factory=list)
+
+
 class ToolSpec(BaseModel):
     model_config = ConfigDict(extra="ignore")
 

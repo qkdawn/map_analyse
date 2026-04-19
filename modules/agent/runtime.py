@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 from contextlib import suppress
-from typing import Any, AsyncIterator, Awaitable, Callable, List
+from typing import Any, AsyncIterator, Awaitable, Callable, Dict, List
 
 from core.config import settings
 
@@ -108,9 +108,10 @@ def _trace_to_thinking_payload(seed: dict[str, Any], fallback_id: str) -> dict[s
         items.append(f"警告：{payload.get('warning_count')} 条")
     if produced_artifacts:
         items.append(f"产物：{'、'.join(produced_artifacts[:6])}")
+    phase = str(payload.get("phase") or "executing")
     return {
         "id": str(payload.get("id") or payload.get("call_id") or fallback_id),
-        "phase": "executing",
+        "phase": phase,
         "title": f"{title_status} {tool_name}",
         "detail": str(payload.get("message") or payload.get("reason") or ""),
         "items": items,
@@ -121,6 +122,61 @@ def _trace_to_thinking_payload(seed: dict[str, Any], fallback_id: str) -> dict[s
         },
         "state": state,
     }
+
+
+async def _emit_preflight_trace(
+    *,
+    emit: StreamEmit | None,
+    step_tool_name: str,
+    step_index: int,
+    data_readiness: Dict[str, Any],
+) -> None:
+    if not emit or not isinstance(data_readiness, dict):
+        return
+    reused = [str(item) for item in (data_readiness.get("reused") or []) if str(item).strip()]
+    fetched = [str(item) for item in (data_readiness.get("fetched") or []) if str(item).strip()]
+    ready = bool(data_readiness.get("ready"))
+    await _maybe_emit(
+        emit,
+        "trace",
+        {
+            "id": f"precheck:{step_tool_name}:{step_index}",
+            "tool_name": "analysis_preflight",
+            "phase": "precheck",
+            "status": "success" if data_readiness.get("checked") else "failed",
+            "reason": "checked",
+            "message": "已完成现有数据检查",
+            "result_summary": f"复用: {', '.join(reused) if reused else '无'}",
+            "produced_artifacts": ["current_data_readiness"],
+        },
+    )
+    await _maybe_emit(
+        emit,
+        "trace",
+        {
+            "id": f"fetch-missing:{step_tool_name}:{step_index}",
+            "tool_name": "analysis_preflight",
+            "phase": "fetch_missing",
+            "status": "success" if ready else "failed",
+            "reason": "fetched_missing",
+            "message": "已按缺失维度补齐数据" if ready else "缺失维度补齐失败",
+            "result_summary": f"补齐: {', '.join(fetched) if fetched else '无'}",
+            "produced_artifacts": ["current_area_data_bundle", "current_data_readiness"],
+        },
+    )
+    await _maybe_emit(
+        emit,
+        "trace",
+        {
+            "id": f"analysis-start:{step_tool_name}:{step_index}",
+            "tool_name": "analysis_preflight",
+            "phase": "analysis",
+            "status": "start" if ready else "failed",
+            "reason": "analysis_started",
+            "message": "数据就绪，开始分析" if ready else "数据未就绪，阻止进入分析",
+            "produced_artifacts": ["current_data_readiness"],
+        },
+    )
 
 
 def _build_diagnostics(
@@ -225,12 +281,21 @@ async def _execute_planned_steps(
             artifacts=memory.artifacts,
             question=question,
         )
+        data_readiness = dict(result.result.get("data_readiness") or {}) if isinstance(result.result, dict) else {}
+        if data_readiness.get("checked"):
+            await _emit_preflight_trace(
+                emit=emit,
+                step_tool_name=step.tool_name,
+                step_index=len(used_tools) + 1,
+                data_readiness=data_readiness,
+            )
         await _maybe_emit(
             emit,
             "trace",
             {
                 "id": f"plan:{step.tool_name}:{len(used_tools) + 1}",
                 "tool_name": step.tool_name,
+                "phase": "analysis" if data_readiness.get("checked") else "executing",
                 "status": result.status,
                 "reason": step.reason,
                 "message": trace.message or ("执行成功" if result.status == "success" else "执行失败"),

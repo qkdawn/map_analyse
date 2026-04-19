@@ -20,6 +20,7 @@ from router.domains import (
     population_router,
     road_router,
     system_router,
+    timeseries_router,
 )
 
 router = APIRouter()
@@ -30,6 +31,7 @@ router.include_router(map_router)
 router.include_router(poi_router)
 router.include_router(population_router)
 router.include_router(nightlight_router)
+router.include_router(timeseries_router)
 router.include_router(export_router)
 router.include_router(history_router)
 router.include_router(h3_router)

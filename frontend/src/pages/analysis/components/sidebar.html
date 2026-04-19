@@ -1,7 +1,8 @@
-
+﻿
 
         <!-- Left Sidebar: Wizard Dashboard -->
-        <aside class="sidebar">
+        <aside class="sidebar"
+            :class="{ 'is-step3-collapsed': sidebarView === 'wizard' && Number(step) === 2 && isStep3SidebarCollapsed }">
             <div class="sidebar-header">
                 <div v-if="sidebarView === 'wizard'" class="step-header-nav" style="margin:0; width:100%;">
                     <button v-if="step === 1" class="btn-text-back" @click="backToHome">← 返回主页</button>
@@ -252,14 +253,39 @@
 
                     <!-- Step 2: Results & Filter -->
                     <div v-show="step === 2" class="wizard-step wizard-step-step3">
-                        <div class="step-header-nav">
-                            <h3>2. 结果分析</h3>
-                            <span v-if="activeStep3Panel !== 'agent'" class="count-badge" style="margin-left:10px;">
-                                数据源 {{ getPoiSourceLabel(resultDataSource) }}
-                            </span>
+                        <div v-show="!isStep3SidebarCollapsed" class="step-header-nav step3-header-nav">
+                            <div class="step3-header-main">
+                                <h3>2. 结果分析</h3>
+                            </div>
+                            <button
+                                type="button"
+                                class="btn-text-back step3-sidebar-toggle"
+                                title="收起侧边栏"
+                                aria-label="收起侧边栏"
+                                @click="toggleStep3SidebarCollapsed(true)">
+                                <svg class="step3-sidebar-toggle-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                    <rect x="3.5" y="4" width="17" height="16" rx="3"></rect>
+                                    <line x1="9" y1="4" x2="9" y2="20"></line>
+                                    <polyline points="11.5,12 14,9.5 14,14.5 11.5,12"></polyline>
+                                </svg>
+                            </button>
                         </div>
 
-                        <div class="step3-layout">
+                        <div class="step3-layout" :class="{ 'is-collapsed': isStep3SidebarCollapsed }">
+                            <div v-if="isStep3SidebarCollapsed" class="step3-collapsed-top">
+                                <button
+                                    type="button"
+                                    class="btn-text-back step3-sidebar-expand-toggle"
+                                    title="展开侧边栏"
+                                    aria-label="展开侧边栏"
+                                    @click="toggleStep3SidebarCollapsed(false)">
+                                    <svg class="step3-sidebar-toggle-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                        <rect x="3.5" y="4" width="17" height="16" rx="3"></rect>
+                                        <line x1="9" y1="4" x2="9" y2="20"></line>
+                                        <polyline points="14.5,12 12,9.5 12,14.5 14.5,12"></polyline>
+                                    </svg>
+                                </button>
+                            </div>
                             <div class="nav-rail">
                                 <div v-for="(item, index) in step3NavItems" :key="item.id" class="nav-item" :class="{
                                         active: activeStep3Panel === item.id,
@@ -279,7 +305,7 @@
                                 </div>
                             </div>
 
-                                <div class="panel-area panel-area-fill">
+                                <div v-show="!isStep3SidebarCollapsed" class="panel-area panel-area-fill">
                                     <div class="panel agent-panel agent-sidebar-panel" v-show="activeStep3Panel === 'agent'" @click="closeAgentSessionMenu">
                                         <button type="button" class="agent-sidebar-new-btn" @click="startNewAgentChat">
                                             <svg class="agent-sidebar-new-icon" viewBox="0 0 24 24" aria-hidden="true">
@@ -1082,6 +1108,170 @@
                                     </div>
                                 </div>
 
+                                <div class="panel poi-panel" v-show="activeStep3Panel === 'timeseries'">
+                                    <div class="poi-subpanel">
+                                        <div class="h3-subtabs population-view-tabs">
+                                            <button
+                                                type="button"
+                                                class="h3-subtab-pill"
+                                                v-for="item in getTimeseriesTabOptions()"
+                                                :key="`timeseries-tab-${item.value}`"
+                                                :class="{ active: timeseriesActiveTab === item.value }"
+                                                @click="setTimeseriesTab(item.value)">
+                                                {{ item.label }}
+                                            </button>
+                                        </div>
+
+                                        <div class="population-view-control-row">
+                                            <label v-if="timeseriesActiveTab === 'population'" class="population-inline-field">
+                                                <span>时段</span>
+                                                <select
+                                                    v-model="timeseriesPopulationPeriod"
+                                                    @change="onTimeseriesControlsChange"
+                                                    class="h3-params-select">
+                                                    <option
+                                                        v-for="item in getTimeseriesPeriods('population')"
+                                                        :key="`timeseries-pop-period-${item.value}`"
+                                                        :value="item.value">
+                                                        {{ item.label }}
+                                                    </option>
+                                                </select>
+                                            </label>
+                                            <label v-if="timeseriesActiveTab === 'nightlight'" class="population-inline-field">
+                                                <span>时段</span>
+                                                <select
+                                                    v-model="timeseriesNightlightPeriod"
+                                                    @change="onTimeseriesControlsChange"
+                                                    class="h3-params-select">
+                                                    <option
+                                                        v-for="item in getTimeseriesPeriods('nightlight')"
+                                                        :key="`timeseries-nl-period-${item.value}`"
+                                                        :value="item.value">
+                                                        {{ item.label }}
+                                                    </option>
+                                                </select>
+                                            </label>
+                                            <label v-if="timeseriesActiveTab === 'joint'" class="population-inline-field">
+                                                <span>时段</span>
+                                                <select
+                                                    v-model="timeseriesJointPeriod"
+                                                    @change="onTimeseriesControlsChange"
+                                                    class="h3-params-select">
+                                                    <option
+                                                        v-for="item in getTimeseriesPeriods('joint')"
+                                                        :key="`timeseries-joint-period-${item.value}`"
+                                                        :value="item.value">
+                                                        {{ item.label }}
+                                                    </option>
+                                                </select>
+                                            </label>
+
+                                            <label v-if="timeseriesActiveTab === 'population'" class="population-inline-field">
+                                                <span>图层</span>
+                                                <select
+                                                    v-model="timeseriesPopulationLayerView"
+                                                    @change="onTimeseriesControlsChange"
+                                                    class="h3-params-select">
+                                                    <option
+                                                        v-for="item in getTimeseriesPopulationViewOptions()"
+                                                        :key="`timeseries-pop-view-${item.value}`"
+                                                        :value="item.value">
+                                                        {{ item.label }}
+                                                    </option>
+                                                </select>
+                                            </label>
+                                            <label v-if="timeseriesActiveTab === 'nightlight'" class="population-inline-field">
+                                                <span>图层</span>
+                                                <select
+                                                    v-model="timeseriesNightlightLayerView"
+                                                    @change="onTimeseriesControlsChange"
+                                                    class="h3-params-select">
+                                                    <option
+                                                        v-for="item in getTimeseriesNightlightViewOptions()"
+                                                        :key="`timeseries-nl-view-${item.value}`"
+                                                        :value="item.value">
+                                                        {{ item.label }}
+                                                    </option>
+                                                </select>
+                                            </label>
+
+                                            <button
+                                                type="button"
+                                                class="btn-outline btn-compact"
+                                                :disabled="isComputingTimeseries"
+                                                @click="computeTimeseriesCurrent">
+                                                {{ isComputingTimeseries ? '计算中...' : '刷新时序分析' }}
+                                            </button>
+                                        </div>
+
+                                        <div
+                                            v-if="getCurrentTimeseriesPayload() && getCurrentTimeseriesPayload().layer && getCurrentTimeseriesPayload().layer.legend"
+                                            class="population-legend-card"
+                                            style="margin-top:10px;">
+                                            <div class="population-legend-title">
+                                                {{ getCurrentTimeseriesPayload().layer.legend.title }}
+                                                <span style="color:#6b7280; font-weight:400;">
+                                                    {{ getCurrentTimeseriesPayload().layer.legend.kind !== 'categorical' && getCurrentTimeseriesPayload().layer.legend.unit ? `（${getCurrentTimeseriesPayload().layer.legend.unit}）` : '' }}
+                                                </span>
+                                            </div>
+                                            <div
+                                                v-if="getCurrentTimeseriesPayload().layer.legend.kind !== 'categorical'"
+                                                class="population-legend-gradient"
+                                                :style="getTimeseriesLegendGradientStyle()"></div>
+                                            <div class="population-legend-grid">
+                                                <div
+                                                    v-for="(item, idx) in getCurrentTimeseriesPayload().layer.legend.stops"
+                                                    :key="`timeseries-legend-${idx}`"
+                                                    class="population-legend-item">
+                                                    <span class="population-legend-swatch" :style="{ background: item.color }"></span>
+                                                    <span>{{ getCurrentTimeseriesPayload().layer.legend.kind === 'categorical' ? (item.label || '-') : formatTimeseriesValue(item.value, 2) }}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div v-if="getCurrentTimeseriesPayload()" class="population-analysis-grid" style="margin-top:10px;">
+                                            <div
+                                                v-for="row in getTimeseriesSummaryRows()"
+                                                :key="`timeseries-summary-${row.key}`"
+                                                class="population-analysis-card">
+                                                <div class="population-analysis-card-label">{{ row.label }}</div>
+                                                <div class="population-analysis-card-value">{{ row.value }}</div>
+                                            </div>
+                                        </div>
+
+                                        <div v-if="getTimeseriesInsights().length" class="population-legend-card" style="margin-top:10px;">
+                                            <div class="population-legend-title">关键洞察</div>
+                                            <ul style="margin:8px 0 0; padding-left:18px; color:#334155; line-height:1.6;">
+                                                <li v-for="(item, idx) in getTimeseriesInsights()" :key="`timeseries-insight-${idx}`">
+                                                    {{ item }}
+                                                </li>
+                                            </ul>
+                                        </div>
+
+                                        <div v-if="getTimeseriesSeriesRows().length" class="population-legend-card" style="margin-top:10px;">
+                                            <div class="population-legend-title">时间序列</div>
+                                            <div class="population-legend-grid">
+                                                <div
+                                                    v-for="(row, idx) in getTimeseriesSeriesRows()"
+                                                    :key="`timeseries-series-${idx}`"
+                                                    class="population-legend-item"
+                                                    style="justify-content:space-between;">
+                                                    <span>{{ row.label || row.name || `序列${idx + 1}` }}</span>
+                                                    <span>{{ formatTimeseriesValue(row.value, 2) }}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div v-if="timeseriesStatus" class="panel-placeholder" style="margin-top:10px;">
+                                            {{ timeseriesStatus }}
+                                        </div>
+
+                                        <div v-if="!getCurrentTimeseriesPayload() && !timeseriesStatus" class="panel-placeholder" style="margin-top:10px;">
+                                            {{ isComputingTimeseries ? '正在自动计算时序分析...' : '进入时序面板后会自动计算并展示结果。' }}
+                                        </div>
+                                    </div>
+                                </div>
+
 
                                 <div class="panel" v-show="activeStep3Panel === 'syntax'">
                                     <h4>路网分析</h4>
@@ -1311,3 +1501,4 @@
             </div>
 
         </aside>
+

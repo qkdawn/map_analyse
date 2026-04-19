@@ -831,6 +831,70 @@ def _build_candidate_card_items(candidate_zones: List[Dict[str, Any]]) -> List[D
 
 def build_panel_payloads(question: str, snapshot: AnalysisSnapshot, artifacts: Dict[str, object]) -> Dict[str, Any]:
     payloads: Dict[str, Any] = {}
+    metrics = _summary_metrics(snapshot, artifacts)
+    one_line_conclusion = {
+        "type_tag": str(metrics.get("business_profile_label") or "待补充"),
+        "structure_desc": str(
+            metrics.get("commercial_hotspot_summary")
+            or metrics.get("h3_structure_summary")
+            or "待补充"
+        ),
+        "value_judgment": str(
+            metrics.get("target_supply_gap_summary")
+            or metrics.get("business_profile_summary")
+            or "待补充"
+        ),
+    }
+    icsc_tags = [
+        str(item).strip()
+        for item in (
+            (metrics.get("business_types") or [])
+            if isinstance(metrics.get("business_types"), list)
+            else []
+        )
+        if str(item).strip()
+    ]
+    if not icsc_tags:
+        icsc_tags = [
+            str(item).strip()
+            for item in (
+                (metrics.get("poi_structure_tags") or [])
+                if isinstance(metrics.get("poi_structure_tags"), list)
+                else []
+            )
+            if str(item).strip()
+        ]
+    evidence_refs = _build_default_citations(artifacts)
+    payloads["summary_pack"] = {
+        "one_line_conclusion": one_line_conclusion,
+        "icsc_tags": icsc_tags,
+        "key_metrics": {
+            "poi_structure": {
+                "poi_count": metrics.get("poi_count"),
+                "summary": metrics.get("poi_structure_summary") or "暂无 POI 结构摘要",
+            },
+            "population_structure": {
+                "population_total": metrics.get("population_total"),
+                "summary": metrics.get("population_profile_summary") or "暂无人口结构摘要",
+            },
+            "nightlight_data": {
+                "nightlight_mean_radiance": metrics.get("nightlight_mean_radiance"),
+                "summary": metrics.get("nightlight_pattern_summary") or "暂无夜光结构摘要",
+            },
+            "road_accessibility": {
+                "road_node_count": metrics.get("road_node_count"),
+                "road_edge_count": metrics.get("road_edge_count"),
+                "summary": metrics.get("road_pattern_summary") or "暂无路网可达性摘要",
+            },
+        },
+        "behavior_inference": {
+            "user_profile": metrics.get("business_profile_portrait") or metrics.get("business_profile_label") or "待补充",
+            "consumption_features": metrics.get("business_profile_summary") or metrics.get("target_supply_gap_summary") or "待补充",
+            "time_features": metrics.get("nightlight_pattern_summary") or "待补充",
+        },
+        "evidence_refs": evidence_refs,
+        "confidence": "moderate" if len(evidence_refs) >= 2 else "weak",
+    }
     if not (mentions_supply(question) or mentions_summary(question) or "current_h3" in artifacts or "current_h3_grid" in artifacts):
         return payloads
     current_h3 = artifacts.get("current_h3") if isinstance(artifacts.get("current_h3"), dict) else {}

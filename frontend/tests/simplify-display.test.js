@@ -51,6 +51,12 @@ function createH3Context(overrides = {}) {
     restoreNightlightDisplayOnEnter() {
       this.nightlightRestored = true
     },
+    clearTimeseriesDisplayOnLeave() {
+      this.timeseriesCleared = true
+    },
+    restoreTimeseriesDisplayOnEnter() {
+      this.timeseriesRestored = true
+    },
     resumeRoadSyntaxDisplay() {
       this.syntaxResumed = true
     },
@@ -102,6 +108,9 @@ function createNavigationContext(overrides = {}) {
     clearPoiKdeOverlay() {},
     ensurePopulationPanelEntryState() {},
     ensureNightlightPanelEntryState() {},
+    ensureTimeseriesPanelEntryState() {
+      this.timeseriesEnsured = true
+    },
     updatePopulationCharts() {},
     setRoadSyntaxMainTab(tab) {
       this.roadSyntaxMainTab = tab
@@ -112,7 +121,7 @@ function createNavigationContext(overrides = {}) {
 
 test('normalizeSimplifyTargets accepts analysis layers and keeps h3/population mutually exclusive', () => {
   const ctx = createH3Context({
-    h3SimplifyTargets: ['map', 'population', 'h3', 'syntax', 'invalid', 'poi', 'population'],
+    h3SimplifyTargets: ['map', 'population', 'h3', 'timeseries', 'syntax', 'invalid', 'poi', 'population'],
   })
 
   const normalized = h3Methods.normalizeSimplifyTargets.call(ctx)
@@ -167,6 +176,19 @@ test('selectStep3Panel switches to nightlight and activates its display target',
   assert.deepEqual(ctx.h3SimplifyTargets, ['map', 'nightlight'])
 })
 
+test('selectStep3Panel switches to timeseries and activates its display target', () => {
+  const ctx = createNavigationContext({
+    activeStep3Panel: 'nightlight',
+    h3SimplifyTargets: ['map', 'nightlight'],
+  })
+
+  navigationMethods.selectStep3Panel.call(ctx, 'timeseries')
+
+  assert.equal(ctx.activeStep3Panel, 'timeseries')
+  assert.deepEqual(ctx.h3SimplifyTargets, ['map', 'timeseries'])
+  assert.equal(ctx.timeseriesEnsured, true)
+})
+
 test('syncSimplifyResultLayerVisibility restores nightlight while hiding population and h3', () => {
   const ctx = createH3Context()
 
@@ -177,11 +199,34 @@ test('syncSimplifyResultLayerVisibility restores nightlight while hiding populat
   assert.equal(ctx.populationCleared, true)
 })
 
+test('syncSimplifyResultLayerVisibility restores timeseries while hiding population, nightlight, and h3', () => {
+  const ctx = createH3Context()
+
+  h3Methods.syncSimplifyResultLayerVisibility.call(ctx, ['map', 'timeseries'])
+
+  assert.equal(ctx.timeseriesRestored, true)
+  assert.equal(ctx.h3Cleared, true)
+  assert.equal(ctx.populationCleared, true)
+  assert.equal(ctx.nightlightCleared, true)
+})
+
 test('shouldShowPoiOnCurrentPanel hides poi when an analysis layer is visible', () => {
   const ctx = createNavigationContext({
     activeStep3Panel: 'poi',
     poiSubTab: 'grid',
     h3SimplifyTargets: ['map', 'poi', 'h3'],
+  })
+
+  const visible = navigationMethods.shouldShowPoiOnCurrentPanel.call(ctx)
+
+  assert.equal(visible, false)
+})
+
+test('shouldShowPoiOnCurrentPanel hides poi when timeseries layer is visible', () => {
+  const ctx = createNavigationContext({
+    activeStep3Panel: 'poi',
+    poiSubTab: 'grid',
+    h3SimplifyTargets: ['map', 'poi', 'timeseries'],
   })
 
   const visible = navigationMethods.shouldShowPoiOnCurrentPanel.call(ctx)

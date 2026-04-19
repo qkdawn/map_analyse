@@ -7,6 +7,9 @@ from fastapi.responses import StreamingResponse
 from modules.agent.runtime import process_agent_turn, stream_agent_turn
 from modules.agent.schemas import (
     AgentToolSummary,
+    AgentSummaryGenerateResponse,
+    AgentSummaryReadinessResponse,
+    AgentSummaryRequest,
     AgentTurnStreamEvent,
     AgentSessionDetail,
     AgentSessionMetadataPatchRequest,
@@ -15,6 +18,7 @@ from modules.agent.schemas import (
     AgentTurnRequest,
     AgentTurnResponse,
 )
+from modules.agent.summary_service import evaluate_summary_readiness, generate_summary_pack
 from modules.agent.session_service import (
     delete_agent_session,
     get_agent_session_detail,
@@ -127,6 +131,16 @@ async def get_agent_tools():
             )
         )
     return tools
+
+
+@router.post("/api/v1/analysis/agent/summary/readiness", response_model=AgentSummaryReadinessResponse)
+async def get_agent_summary_readiness(payload: AgentSummaryRequest):
+    return await evaluate_summary_readiness(payload)
+
+
+@router.post("/api/v1/analysis/agent/summary/generate", response_model=AgentSummaryGenerateResponse)
+async def post_agent_summary_generate(payload: AgentSummaryRequest):
+    return await generate_summary_pack(payload)
 
 
 @router.get("/api/v1/analysis/agent/sessions/{session_id}", response_model=AgentSessionDetail)

@@ -51,18 +51,41 @@ async def run_area_character_pack(
     policy = resolve_policy(arguments.get("policy_key"), fallback="district_summary")
     local_artifacts = dict(artifacts or {})
 
-    data_bundle = await get_area_data_bundle(
-        arguments={
-            "policy_key": policy["policy_key"],
-            "source": arguments.get("source"),
-            "mode": arguments.get("mode") or policy.get("mode"),
-            "resolution": arguments.get("resolution") or policy.get("h3_resolution"),
-        },
-        snapshot=snapshot,
-        artifacts=local_artifacts,
-        question=question,
-    )
-    local_artifacts.update(data_bundle.artifacts or {})
+    existing_bundle = local_artifacts.get("current_area_data_bundle")
+    existing_readiness = local_artifacts.get("current_data_readiness")
+    if not isinstance(existing_bundle, dict) or not isinstance(existing_readiness, dict) or not existing_readiness.get("ready"):
+        data_bundle = await get_area_data_bundle(
+            arguments={
+                "policy_key": policy["policy_key"],
+                "source": arguments.get("source"),
+                "mode": arguments.get("mode") or policy.get("mode"),
+                "resolution": arguments.get("resolution") or policy.get("h3_resolution"),
+            },
+            snapshot=snapshot,
+            artifacts=local_artifacts,
+            question=question,
+        )
+        local_artifacts.update(data_bundle.artifacts or {})
+    else:
+        data_bundle = ToolResult(
+            tool_name="get_area_data_bundle",
+            status="success",
+            result=dict(existing_bundle),
+            artifacts=dict(local_artifacts),
+        )
+    if data_bundle.status == "failed":
+        return ToolResult(
+            tool_name="run_area_character_pack",
+            status="failed",
+            result={
+                "policy_key": policy["policy_key"],
+                "policy_params": policy,
+                "data_readiness": dict(local_artifacts.get("current_data_readiness") or {}),
+            },
+            warnings=list(data_bundle.warnings or []),
+            error=data_bundle.error or "area_data_bundle_failed",
+            artifacts=dict(local_artifacts),
+        )
 
     poi_result = await analyze_poi_structure(arguments={}, snapshot=snapshot, artifacts=local_artifacts, question=question)
     local_artifacts.update(poi_result.artifacts or {})
@@ -106,6 +129,7 @@ async def run_area_character_pack(
         "policy_params": policy,
         "analysis_mode": str(arguments.get("analysis_mode") or "district_summary"),
         "summary_text": labels.get("summary_text") or "",
+        "data_readiness": dict(local_artifacts.get("current_data_readiness") or {}),
     }
     return ToolResult(
         tool_name="run_area_character_pack",

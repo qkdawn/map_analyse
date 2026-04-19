@@ -5,8 +5,8 @@ import httpx
 
 from core.config import settings
 from modules.agent.context_builder import build_context_bundle
-from modules.agent.providers.llm_provider import generate_answer_output_with_llm, plan_with_llm, run_llm_tool_loop
-from modules.agent.schemas import AgentMessage, AnalysisSnapshot, PlanStep, ToolResult, ToolSpec, WorkingMemory
+from modules.agent.providers.llm_provider import generate_answer_output_with_llm, plan_with_llm, run_gate_with_llm, run_llm_tool_loop
+from modules.agent.schemas import AgentMessage, AnalysisSnapshot, GateDecision, PlanStep, ToolResult, ToolSpec, WorkingMemory
 from modules.agent.tools import RegisteredTool, get_tool_registry
 
 
@@ -441,3 +441,69 @@ def test_plan_with_llm_uses_site_advice_archetype_for_target_supply_questions(mo
 
     assert any(step.tool_name == "run_site_selection_pack" for step in plan.steps)
     assert captured["user_payload"]["question_archetype"] == "site_selection"
+
+
+def test_run_gate_with_llm_preserves_llm_clarification_options(monkeypatch):
+    snapshot = _snapshot_with_scope()
+    context = build_context_bundle(snapshot)
+
+    async def fake_invoke_json_role(*, system_prompt, user_payload, emit, phase, title, reasoning_id):
+        del system_prompt, user_payload, emit, phase, title, reasoning_id
+        return {
+            "status": "clarify",
+            "question_type": "area_character",
+            "summary": "还需要先收窄分析方向。",
+            "clarification_question": "你更想先看哪个方向？",
+            "clarification_options": ["总结商业特征", "哪里适合补充餐饮", "为什么这里路网较弱"],
+        }
+
+    monkeypatch.setattr("modules.agent.providers.llm_provider._invoke_json_role", fake_invoke_json_role)
+
+    decision = asyncio.run(
+        run_gate_with_llm(
+            messages=[AgentMessage(role="user", content="总结这个区域的商业特征")],
+            snapshot=snapshot,
+            context=context,
+        )
+    )
+
+    assert decision.status == "clarify"
+    assert decision.clarification_question == "你更想先看哪个方向？"
+    assert decision.clarification_options == ["总结商业特征", "哪里适合补充餐饮", "为什么这里路网较弱"]
+
+
+def test_run_gate_with_llm_backfills_missing_clarification_options(monkeypatch):
+    snapshot = _snapshot_with_scope()
+    context = build_context_bundle(snapshot)
+
+    async def fake_invoke_json_role(*, system_prompt, user_payload, emit, phase, title, reasoning_id):
+        del system_prompt, user_payload, emit, phase, title, reasoning_id
+        return {
+            "status": "clarify",
+            "question_type": "area_character",
+            "summary": "POI 口径还需要先收窄。",
+            "clarification_questions": ["你更想先看商业、人口还是路网？"],
+            "clarification_options": [],
+        }
+
+    monkeypatch.setattr("modules.agent.providers.llm_provider._invoke_json_role", fake_invoke_json_role)
+    monkeypatch.setattr(
+        "modules.agent.providers.llm_provider.run_gate",
+        lambda messages, snapshot: GateDecision(status="pass", question_type="area_character", summary="问题已足够清晰。"),
+    )
+
+    decision = asyncio.run(
+        run_gate_with_llm(
+            messages=[AgentMessage(role="user", content="分析一下这个区域")],
+            snapshot=snapshot,
+            context=context,
+        )
+    )
+
+    assert decision.status == "clarify"
+    assert decision.clarification_question.startswith("1. ")
+    assert decision.clarification_options == [
+        "总结这个区域的商业特征",
+        "哪里适合补充餐饮",
+        "为什么这里夜间活力强",
+    ]

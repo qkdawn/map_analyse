@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException, Query
 
+from modules.road import analyze_road_syntax
 from modules.road.progress import get_road_syntax_progress, update_road_syntax_progress
 from modules.road.schemas import RoadSyntaxRequest, RoadSyntaxResponse
 
@@ -15,8 +16,6 @@ router = APIRouter()
 
 @router.post("/api/v1/analysis/road-syntax", response_model=RoadSyntaxResponse)
 async def analyze_road_syntax_api(payload: RoadSyntaxRequest):
-    import router.app as app_module
-
     run_id = str(payload.run_id or "").strip() or uuid.uuid4().hex
     update_road_syntax_progress(
         run_id,
@@ -41,7 +40,7 @@ async def analyze_road_syntax_api(payload: RoadSyntaxRequest):
 
     try:
         result = await asyncio.to_thread(
-            app_module.analyze_road_syntax,
+            analyze_road_syntax,
             polygon=payload.polygon,
             coord_type=payload.coord_type,
             mode=payload.mode,

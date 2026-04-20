@@ -128,6 +128,9 @@ export function runAnalysisBootstrapApp() {
                       if (typeof this.destroyAllAgentRuns === 'function') {
                           this.destroyAllAgentRuns();
                       }
+                      if (typeof this.stopAllSummaryTaskLogTracking === 'function') {
+                          this.stopAllSummaryTaskLogTracking();
+                      }
                       this.agentWorkspaceView = 'chat';
                       this.activeAgentSessionId = '';
                       this.agentConversationId = '';
@@ -173,6 +176,7 @@ export function runAnalysisBootstrapApp() {
                       this.agentToolsLoaded = false;
                       this.agentToolsLoading = false;
                       this.agentToolsError = '';
+                      this.summaryTaskLogTrackers = {};
                   },
                   async generateH3Grid() {
                       const rawRing = this.getIsochronePolygonRing();
@@ -3003,6 +3007,12 @@ export function runAnalysisBootstrapApp() {
                               this.roadSyntaxSetStatus('已取消旧请求，正在使用最新参数计算...');
                               return;
                           }
+                          this.roadSyntaxSummary = null;
+                          this.roadSyntaxRoadFeatures = [];
+                          this.roadSyntaxNodes = [];
+                          this.roadSyntaxDiagnostics = null;
+                          this.roadSyntaxWebglPayload = null;
+                          this.roadSyntaxWebglStatus = '';
                           console.error(e);
                           const rawMessage = (e && e.message ? e.message : String(e));
                           const overpassTimeout = (

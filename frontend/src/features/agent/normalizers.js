@@ -27,6 +27,11 @@ function cloneRecordMap(value) {
   }, {})
 }
 
+function normalizeAgentSessionKind(value) {
+  const kind = asText(value).toLowerCase()
+  return ['summary', 'followup'].includes(kind) ? kind : ''
+}
+
 function stableAgentHash(value) {
   const text = typeof value === 'string' ? value : JSON.stringify(value ?? '')
   let hash = 2166136261
@@ -578,6 +583,7 @@ function createAgentSessionRecord(seed = {}) {
   const turn = normalizeAgentTurnPayload(seed)
   const messages = stripMirroredSummaryAssistantMessage(seed.messages, turn.output.cards)
   const titleSource = asText(seed.titleSource || seed.title_source || 'fallback') || 'fallback'
+  const sessionKind = normalizeAgentSessionKind(seed.sessionKind || seed.session_kind)
   const session = {
     id: asText(seed.id),
     title: clampText(seed.title, 60) || deriveAgentSessionTitle(messages),
@@ -620,6 +626,9 @@ function createAgentSessionRecord(seed = {}) {
     persisted: !!seed.persisted,
     snapshotLoaded: !!seed.snapshotLoaded,
     titleSource,
+    sessionKind,
+    hasSummaryPack: !!seed.hasSummaryPack,
+    hasFollowupMessages: !!seed.hasFollowupMessages || cloneArray(messages).some((item) => asText(item && item.role) === 'user' && asText(item && item.content)),
   }
   if (!session.preview) {
     session.preview = deriveAgentSessionPreview(session)
@@ -703,7 +712,14 @@ function normalizeAgentSessionSummary(item = {}, existing = null) {
     persisted: true,
     snapshotLoaded: !!base.snapshotLoaded,
     titleSource: item.title_source || base.titleSource || 'fallback',
+    sessionKind: item.session_kind || base.sessionKind || '',
     analysisFingerprint: item.analysis_fingerprint || base.analysisFingerprint || '',
+    hasSummaryPack: Object.prototype.hasOwnProperty.call(item, 'has_summary_pack')
+      ? !!item.has_summary_pack
+      : !!base.hasSummaryPack,
+    hasFollowupMessages: Object.prototype.hasOwnProperty.call(item, 'has_followup_messages')
+      ? !!item.has_followup_messages
+      : !!base.hasFollowupMessages,
   })
   return session
 }

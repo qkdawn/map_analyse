@@ -32,11 +32,47 @@ def _extract_snapshot_meta(snapshot: Any) -> Dict[str, Any]:
     return meta if isinstance(meta, dict) else {}
 
 
+def _normalize_session_kind(value: Any) -> str:
+    kind = str(value or "").strip().lower()
+    if kind in {"summary", "followup"}:
+        return kind
+    return ""
+
+
+def _extract_snapshot_session_flags(snapshot: Any) -> tuple[str, bool, bool]:
+    if not isinstance(snapshot, dict):
+        return "", False, False
+    meta = _extract_snapshot_meta(snapshot)
+    session_kind = _normalize_session_kind(meta.get("session_kind"))
+    output = snapshot.get("output") if isinstance(snapshot.get("output"), dict) else {}
+    panel_payloads = output.get("panel_payloads") if isinstance(output.get("panel_payloads"), dict) else {}
+    summary_pack = panel_payloads.get("summary_pack") if isinstance(panel_payloads.get("summary_pack"), dict) else {}
+    has_summary_pack = bool(summary_pack)
+    messages = snapshot.get("messages")
+    has_followup_messages = False
+    if isinstance(messages, list):
+        for row in messages:
+            if not isinstance(row, dict):
+                continue
+            if str(row.get("role") or "").strip() != "user":
+                continue
+            if str(row.get("content") or "").strip():
+                has_followup_messages = True
+                break
+    if not session_kind:
+        if has_summary_pack and not has_followup_messages:
+            session_kind = "summary"
+        elif has_followup_messages:
+            session_kind = "followup"
+    return session_kind, has_summary_pack, has_followup_messages
+
+
 class AgentSessionRepo:
     @staticmethod
     def _build_summary_payload(record: AgentSession) -> Dict[str, Any]:
         snapshot = record.snapshot if isinstance(record.snapshot, dict) else {}
         meta = _extract_snapshot_meta(snapshot)
+        session_kind, has_summary_pack, has_followup_messages = _extract_snapshot_session_flags(snapshot)
         return {
             "id": str(record.id or ""),
             "title": str(record.title or ""),
@@ -45,6 +81,9 @@ class AgentSessionRepo:
             "analysis_fingerprint": str(meta.get("analysis_fingerprint") or ""),
             "is_pinned": bool(record.is_pinned),
             "title_source": _normalize_title_source(meta.get("title_source")),
+            "session_kind": session_kind,
+            "has_summary_pack": has_summary_pack,
+            "has_followup_messages": has_followup_messages,
             "created_at": record.created_at,
             "updated_at": record.updated_at,
             "pinned_at": record.pinned_at,

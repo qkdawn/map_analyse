@@ -31,7 +31,7 @@ def test_upsert_and_get_agent_session_record(monkeypatch):
             "input": "",
             "messages": [{"role": "user", "content": "总结这个区域"}],
             "cards": [{"type": "summary", "title": "概览", "content": "已完成分析", "items": []}],
-            "_meta": {"analysis_fingerprint": "fp-current"},
+            "_meta": {"analysis_fingerprint": "fp-current", "session_kind": "summary"},
         },
         title_source="fallback",
     )
@@ -44,6 +44,7 @@ def test_upsert_and_get_agent_session_record(monkeypatch):
     assert record["preview"] == "总结这个区域"
     assert record["status"] == "answered"
     assert record["analysis_fingerprint"] == "fp-current"
+    assert record["session_kind"] == "summary"
     assert record["title_source"] == "fallback"
     assert record["snapshot"]["messages"][0]["content"] == "总结这个区域"
 
@@ -114,3 +115,42 @@ def test_missing_agent_session_fingerprint_defaults_empty(monkeypatch):
     records = repo.list_records()
 
     assert records[0]["analysis_fingerprint"] == ""
+
+
+def test_list_records_exposes_summary_and_followup_flags(monkeypatch):
+    repo, _ = _install_repo(monkeypatch)
+
+    repo.upsert_record(
+        "agent-summary",
+        title="总结会话",
+        preview="summary",
+        status="answered",
+        snapshot={
+            "messages": [],
+            "output": {
+                "panel_payloads": {
+                    "summary_pack": {
+                        "headline_judgment": {"summary": "社区型生活消费商业区"},
+                    }
+                }
+            },
+        },
+    )
+    repo.upsert_record(
+        "agent-followup",
+        title="追问会话",
+        preview="followup",
+        status="answered",
+        snapshot={
+            "messages": [{"role": "user", "content": "为什么这里夜间活跃度低？"}],
+            "output": {"panel_payloads": {}},
+        },
+    )
+
+    by_id = {item["id"]: item for item in repo.list_records()}
+    assert by_id["agent-summary"]["session_kind"] == "summary"
+    assert by_id["agent-summary"]["has_summary_pack"] is True
+    assert by_id["agent-summary"]["has_followup_messages"] is False
+    assert by_id["agent-followup"]["session_kind"] == "followup"
+    assert by_id["agent-followup"]["has_summary_pack"] is False
+    assert by_id["agent-followup"]["has_followup_messages"] is True

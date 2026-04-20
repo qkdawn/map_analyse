@@ -11,6 +11,7 @@
             historyFetchAbortController: null,
             isSelectionMode: false,
             selectedHistoryIds: [],
+            currentHistoryRecordId: 0,
         };
     }
 
@@ -256,6 +257,11 @@
                     this.historyList = this.historyList.filter((item) => !removedIds.has(item.id));
                     this.historyListRaw = this.historyListRaw.filter((item) => !removedIds.has(item.id));
                     this.historyLoadedCount = this.historyList.length;
+                    if (typeof this.loadAgentSessionSummaries === 'function') {
+                        this.loadAgentSessionSummaries(true).catch((err) => {
+                            console.warn('Agent session summaries refresh failed after history delete', err);
+                        });
+                    }
                     this.selectedHistoryIds = [];
                     this.isSelectionMode = false;
                 } catch (e) {
@@ -270,6 +276,11 @@
                     this.historyList = this.historyList.filter((item) => item.id !== id);
                     this.historyListRaw = this.historyListRaw.filter((item) => item.id !== id);
                     this.historyLoadedCount = this.historyList.length;
+                    if (typeof this.loadAgentSessionSummaries === 'function') {
+                        this.loadAgentSessionSummaries(true).catch((err) => {
+                            console.warn('Agent session summaries refresh failed after history delete', err);
+                        });
+                    }
                 } catch (e) {
                     console.error(e);
                 }

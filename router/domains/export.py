@@ -2,6 +2,7 @@ import asyncio
 
 from fastapi import APIRouter, HTTPException, Request, Response
 
+from modules.h3.arcgis_bridge import run_arcgis_h3_export
 from modules.export import (
     AnalysisExportBundleRequest,
     AnalysisExportEmptyError,
@@ -18,11 +19,9 @@ router = APIRouter()
 
 @router.post("/api/v1/analysis/h3/export")
 async def export_h3_analysis(payload: H3ExportRequest):
-    import router.app as app_module
-
     try:
         export_result = await asyncio.to_thread(
-            app_module.run_arcgis_h3_export,
+            run_arcgis_h3_export,
             export_format=payload.format,
             include_poi=payload.include_poi,
             style_mode=payload.style_mode,

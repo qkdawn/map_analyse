@@ -600,6 +600,10 @@ function createAgentRuntimeMethods() {
       }
     },
     buildAgentAnalysisFingerprint() {
+      const historyId = Number(this.currentHistoryRecordId || 0)
+      if (asText(this.scopeSource) === 'history' && Number.isFinite(historyId) && historyId > 0) {
+        return `history:${Math.floor(historyId)}`
+      }
       const scope = this.getIsochronePolygonPayload()
       const drawnScope = (typeof this.getDrawnScopePolygonPoints === 'function') ? this.getDrawnScopePolygonPoints() : []
       const scopeForFingerprint = Array.isArray(scope) && scope.length >= 3 ? scope : drawnScope
@@ -681,6 +685,7 @@ function createAgentRuntimeMethods() {
       return {
         title,
         analysis_fingerprint: asText(merged.analysisFingerprint) || this.getCurrentAgentAnalysisFingerprint(),
+        session_kind: asText(merged.sessionKind),
         preview: clampText(merged.preview, 120) || deriveAgentSessionPreview(merged),
         status: asText(merged.status || 'idle') || 'idle',
         stage: asText(merged.stage || 'gating') || 'gating',
@@ -790,14 +795,14 @@ function createAgentRuntimeMethods() {
       const detail = await res.json()
       return this.mergeAgentSessionDetail(detail)
     },
-    async submitAgentTurn(options = {}) {
+    buildTurnContext(options = {}) {
       const question = String((options && options.prompt) || this.agentInput || '').trim()
-      if (!question || this.agentSessionHydrating) return
+      if (!question || this.agentSessionHydrating) return null
       this.ensureAgentPanelReady()
       if (typeof this.ensureAgentFollowupTabForPrompt === 'function') {
         this.ensureAgentFollowupTabForPrompt(question)
       }
-      const currentSession = this.syncCurrentAgentSession() || this.findAgentSession(this.activeAgentSessionId)
+      const currentSession = this.syncCurrentAgentSession() || this.readSessionState(this.activeAgentSessionId)
       const targetSessionId = asText((currentSession && currentSession.id) || this.activeAgentSessionId || this.agentConversationId) || this.createAgentSession().id
       const wasPersisted = !!(currentSession && currentSession.persisted)
       const analysisFingerprint = this.getCurrentAgentAnalysisFingerprint()
@@ -805,12 +810,70 @@ function createAgentRuntimeMethods() {
       const requestRiskConfirmations = Array.isArray(options && options.riskConfirmations)
         ? options.riskConfirmations
         : this.agentRiskConfirmations
-      const nextMessages = [
-        ...cloneArray((currentSession && currentSession.messages) || this.agentMessages),
-        { role: 'user', content: question },
-      ]
+      let baseMessages = cloneArray((currentSession && currentSession.messages) || [])
+      if (!baseMessages.length && typeof this.getAgentActiveFollowupTab === 'function') {
+        const activeFollowupTab = this.getAgentActiveFollowupTab()
+        const threadMessages = cloneArray(activeFollowupTab && activeFollowupTab.thread && activeFollowupTab.thread.messages)
+        if (threadMessages.length) {
+          baseMessages = threadMessages
+        }
+      }
+      if (!baseMessages.length) {
+        baseMessages = cloneArray(this.agentMessages)
+      }
+      const nextMessages = [...baseMessages, { role: 'user', content: question }]
+      return {
+        question,
+        currentSession,
+        targetSessionId,
+        wasPersisted,
+        analysisFingerprint,
+        requestAbortController,
+        requestRiskConfirmations,
+        nextMessages,
+      }
+    },
+    async consumeTurnStream(res, handler) {
+      await consumeSseStream(res, handler)
+    },
+    async commitTurnResult(turnContext = {}, finalResponse = null) {
+      const targetSessionId = asText(turnContext.targetSessionId)
+      this.stopAgentThinkingTimer(targetSessionId)
+      if (!turnContext.wasPersisted && String((finalResponse || {}).status || '') === 'answered') {
+        try {
+          await this.loadAgentSessionDetail(targetSessionId)
+        } catch (detailErr) {
+          console.warn('Agent session detail load failed after first streamed turn', detailErr)
+        }
+      }
+    },
+    syncUiAfterTurn(turnContext = {}) {
+      const targetSessionId = asText(turnContext.targetSessionId)
+      this.stopAgentThinkingTimer(targetSessionId)
+      const runState = this.getAgentRunState(targetSessionId)
+      if (runState && runState.abortController === turnContext.requestAbortController) {
+        this.clearAgentRunState(targetSessionId)
+      }
+      if (targetSessionId === asText(this.activeAgentSessionId)) {
+        this.agentClarificationSubmitting = false
+        this.syncActiveAgentRuntimeView(targetSessionId)
+      }
+    },
+    async submitAgentTurn(options = {}) {
+      const turnContext = this.buildTurnContext(options)
+      if (!turnContext) return
+      const {
+        question,
+        targetSessionId,
+        wasPersisted,
+        analysisFingerprint,
+        requestAbortController,
+        requestRiskConfirmations,
+        nextMessages,
+      } = turnContext
       this.updateAgentSessionSnapshot(targetSessionId, (session) => ({
         ...session,
+        sessionKind: 'followup',
         persisted: wasPersisted,
         snapshotLoaded: true,
         analysisFingerprint,
@@ -880,7 +943,7 @@ function createAgentRuntimeMethods() {
           throw new Error(`/api/v1/analysis/agent/turn/stream 请求失败(${res.status})`)
         }
         let finalResponse = null
-        await consumeSseStream(res, ({ type, payload }) => {
+        await this.consumeTurnStream(res, ({ type, payload }) => {
           const markStreamActive = () => {
             this.setAgentRunState(targetSessionId, { streamState: 'streaming' })
             if (targetSessionId === asText(this.activeAgentSessionId)) {
@@ -1044,6 +1107,7 @@ function createAgentRuntimeMethods() {
           }
           this.updateAgentSessionSnapshot(targetSessionId, (session) => ({
             ...session,
+            sessionKind: 'followup',
             persisted: true,
             snapshotLoaded: true,
             status: nextStatus,
@@ -1106,14 +1170,7 @@ function createAgentRuntimeMethods() {
         if (!finalResponse) {
           throw new Error('Agent 流式执行未返回最终结果')
         }
-        this.stopAgentThinkingTimer(targetSessionId)
-        if (!wasPersisted && String(finalResponse.status || '') === 'answered') {
-          try {
-            await this.loadAgentSessionDetail(targetSessionId)
-          } catch (detailErr) {
-            console.warn('Agent session detail load failed after first streamed turn', detailErr)
-          }
-        }
+        await this.commitTurnResult(turnContext, finalResponse)
       } catch (err) {
         if (err && (err.name === 'AbortError' || String(err.message || '').includes('aborted'))) {
           this.stopAgentThinkingTimer(targetSessionId)
@@ -1166,15 +1223,7 @@ function createAgentRuntimeMethods() {
           this.agentThinkingExpanded = true
         }
       } finally {
-        this.stopAgentThinkingTimer(targetSessionId)
-        const runState = this.getAgentRunState(targetSessionId)
-        if (runState && runState.abortController === requestAbortController) {
-          this.clearAgentRunState(targetSessionId)
-        }
-        if (targetSessionId === asText(this.activeAgentSessionId)) {
-          this.agentClarificationSubmitting = false
-          this.syncActiveAgentRuntimeView(targetSessionId)
-        }
+        this.syncUiAfterTurn(turnContext)
       }
     },
     cancelAgentTurn(sessionId = '') {

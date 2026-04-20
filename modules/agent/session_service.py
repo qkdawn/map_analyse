@@ -26,6 +26,8 @@ from .schemas import (
 TITLE_SOURCE_USER = "user"
 TITLE_SOURCE_AI = "ai"
 TITLE_SOURCE_FALLBACK = "fallback"
+SESSION_KIND_SUMMARY = "summary"
+SESSION_KIND_FOLLOWUP = "followup"
 
 
 def serialize_datetime(value: Any) -> str:
@@ -54,6 +56,13 @@ def normalize_agent_session_title_source(value: Any) -> str:
     if source in {TITLE_SOURCE_USER, TITLE_SOURCE_AI, TITLE_SOURCE_FALLBACK}:
         return source
     return TITLE_SOURCE_FALLBACK
+
+
+def normalize_agent_session_kind(value: Any) -> str:
+    kind = _normalize_text(value, max_length=16).lower()
+    if kind in {SESSION_KIND_SUMMARY, SESSION_KIND_FOLLOWUP}:
+        return kind
+    return ""
 
 
 def derive_agent_session_title(messages: List[Dict[str, Any]] | List[AgentMessage] | None) -> str:
@@ -128,6 +137,19 @@ def _get_record_analysis_fingerprint(record: Optional[Dict[str, Any]]) -> str:
     return ""
 
 
+def _get_record_session_kind(record: Optional[Dict[str, Any]]) -> str:
+    if not isinstance(record, dict):
+        return ""
+    direct = normalize_agent_session_kind(record.get("session_kind"))
+    if direct:
+        return direct
+    snapshot = record.get("snapshot") if isinstance(record.get("snapshot"), dict) else {}
+    meta = snapshot.get("_meta") if isinstance(snapshot, dict) else {}
+    if isinstance(meta, dict):
+        return normalize_agent_session_kind(meta.get("session_kind"))
+    return ""
+
+
 def _resolve_upsert_title(
     request: AgentSessionSnapshotRequest,
     existing_record: Optional[Dict[str, Any]],
@@ -191,8 +213,13 @@ def build_snapshot_payload(request: AgentSessionSnapshotRequest) -> Dict[str, An
         "risk_confirmations": [str(item) for item in request.risk_confirmations],
     }
     analysis_fingerprint = _normalize_text(request.analysis_fingerprint, max_length=512)
-    if analysis_fingerprint:
-        payload["_meta"] = {"analysis_fingerprint": analysis_fingerprint}
+    session_kind = normalize_agent_session_kind(request.session_kind)
+    if analysis_fingerprint or session_kind:
+        payload["_meta"] = {}
+        if analysis_fingerprint:
+            payload["_meta"]["analysis_fingerprint"] = analysis_fingerprint
+        if session_kind:
+            payload["_meta"]["session_kind"] = session_kind
     return payload
 
 
@@ -212,6 +239,7 @@ def build_turn_persist_payload(payload: AgentTurnRequest, response: AgentTurnRes
         status=response.status,
         stage=response.stage,
         analysis_fingerprint=_normalize_text(payload.analysis_fingerprint, max_length=512),
+        session_kind=SESSION_KIND_FOLLOWUP,
         input="" if response.status == "answered" else str(payload.messages[-1].content if payload.messages else ""),
         messages=[AgentMessage(**item) for item in messages],
         output=response.output,
@@ -270,6 +298,9 @@ def _build_summary_model(record: Dict[str, Any]) -> AgentSessionSummary:
         analysis_fingerprint=_get_record_analysis_fingerprint(record),
         is_pinned=bool(record.get("is_pinned")),
         title_source=_get_record_title_source(record),
+        session_kind=_get_record_session_kind(record),
+        has_summary_pack=bool(record.get("has_summary_pack")),
+        has_followup_messages=bool(record.get("has_followup_messages")),
         created_at=serialize_datetime(record.get("created_at")),
         updated_at=serialize_datetime(record.get("updated_at")),
         pinned_at=serialize_datetime(record.get("pinned_at")) if record.get("pinned_at") else None,
@@ -309,6 +340,8 @@ def upsert_agent_session(session_id: str, request: AgentSessionSnapshotRequest, 
     existing_record = repo.get_record(session_id)
     if not _normalize_text(request.analysis_fingerprint):
         request.analysis_fingerprint = _get_record_analysis_fingerprint(existing_record)
+    if not normalize_agent_session_kind(request.session_kind):
+        request.session_kind = _get_record_session_kind(existing_record)
     title, title_source = _resolve_upsert_title(request, existing_record)
     preview = _normalize_text(request.preview, max_length=120) or derive_agent_session_preview(build_snapshot_payload(request))
     record = repo.upsert_record(

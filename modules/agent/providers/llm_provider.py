@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import inspect
 import json
-from typing import Any, Awaitable, Callable, Dict, List
+from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 import httpx
 
@@ -40,291 +40,93 @@ from ..schemas import (
     WorkingMemory,
 )
 from ..tools import RegisteredTool
+from .chat_parser import (
+    extract_chat_completion_text as _extract_chat_completion_text_from_module,
+    extract_json_object as _extract_json_object_from_module,
+    extract_text_content as _extract_text_content_from_module,
+    finalize_tool_calls as _finalize_tool_calls_from_module,
+    merge_tool_call_delta as _merge_tool_call_delta_from_module,
+    parse_chat_completion_response as _parse_chat_completion_response_from_module,
+)
+from .client import (
+    LLMProviderClient,
+    LLMProviderSpec,
+    get_llm_provider_client as _get_llm_provider_client_from_module,
+    get_llm_provider_spec as _get_llm_provider_spec_from_module,
+    is_llm_enabled as _is_llm_enabled_from_module,
+)
+from .prompts import (
+    auditor_system_prompt as _auditor_system_prompt_from_module,
+    gate_system_prompt as _gate_system_prompt_from_module,
+    loop_system_prompt as _loop_system_prompt_from_module,
+    planner_system_prompt as _planner_system_prompt_from_module,
+    synthesizer_system_prompt as _synthesizer_system_prompt_from_module,
+)
+from .tool_loop import (
+    artifact_digest as _artifact_digest_from_module,
+    chat_completion_tools as _chat_completion_tools_from_module,
+    compact_json as _compact_json_from_module,
+    context_digest as _context_digest_from_module,
+    is_reusable_tool_call as _is_reusable_tool_call_from_module,
+    llm_visible_registry as _llm_visible_registry_from_module,
+    planner_question_archetype as _planner_question_archetype_from_module,
+    planner_tool_routing_hints as _planner_tool_routing_hints_from_module,
+    snapshot_digest as _snapshot_digest_from_module,
+    summarize_tool_arguments as _summarize_tool_arguments_from_module,
+    summarize_tool_result as _summarize_tool_result_from_module,
+    tool_cache_key as _tool_cache_key_from_module,
+    tool_catalog as _tool_catalog_from_module,
+    tool_output_payload as _tool_output_payload_from_module,
+    trim_messages as _trim_messages_from_module,
+)
 
 LoopEmit = Callable[[str, Dict[str, Any]], Awaitable[None] | None]
 
 
+def get_llm_provider_spec(provider: Optional[str] = None) -> Optional[LLMProviderSpec]:
+    return _get_llm_provider_spec_from_module(provider)
+
+
 def is_llm_enabled() -> bool:
-    return bool(
-        settings.ai_enabled
-        and str(settings.ai_provider or "").strip() == "deepseek"
-        and str(settings.ai_base_url or "").strip()
-        and str(settings.ai_api_key or "").strip()
-        and str(settings.ai_model or "").strip()
-    )
+    return _is_llm_enabled_from_module()
+
+
+def get_llm_provider_client(provider: Optional[str] = None) -> Optional[LLMProviderClient]:
+    return _get_llm_provider_client_from_module(provider)
 
 
 def _trim_messages(messages: List[AgentMessage]) -> List[Dict[str, str]]:
-    max_turns = max(1, int(settings.ai_max_context_turns or 12))
-    kept = messages[-max_turns:]
-    normalized: List[Dict[str, str]] = []
-    for item in kept:
-        role = str(item.role or "").strip() or "user"
-        content = str(item.content or "").strip()
-        if content:
-            normalized.append({"role": role, "content": content})
-    return normalized
+    return _trim_messages_from_module(messages)
 
 
 def _snapshot_digest(snapshot: AnalysisSnapshot) -> Dict[str, Any]:
-    scope = snapshot.scope if isinstance(snapshot.scope, dict) else {}
-    context = snapshot.context if isinstance(snapshot.context, dict) else {}
-    current_filters = snapshot.current_filters if isinstance(snapshot.current_filters, dict) else {}
-    h3_payload = snapshot.h3 if isinstance(snapshot.h3, dict) else {}
-    road_payload = snapshot.road if isinstance(snapshot.road, dict) else {}
-    population_payload = snapshot.population if isinstance(snapshot.population, dict) else {}
-    nightlight_payload = snapshot.nightlight if isinstance(snapshot.nightlight, dict) else {}
-    frontend_analysis = snapshot.frontend_analysis if isinstance(snapshot.frontend_analysis, dict) else {}
-    return {
-        "context": {
-            "mode": context.get("mode"),
-            "time_min": context.get("time_min"),
-            "source": context.get("source"),
-            "scope_source": context.get("scope_source"),
-            "year": context.get("year"),
-        },
-        "scope": {
-            "has_polygon": bool(scope.get("polygon") or scope.get("drawn_polygon")),
-            "has_isochrone_feature": bool(scope.get("isochrone_feature")),
-        },
-        "poi": {
-            "count": len(snapshot.pois or []),
-            "summary": snapshot.poi_summary or {},
-        },
-        "h3": {
-            "summary": h3_payload.get("summary") or {},
-            "grid_count": h3_payload.get("grid_count") or 0,
-        },
-        "road": {"summary": road_payload.get("summary") or {}},
-        "population": {"summary": population_payload.get("summary") or {}},
-        "nightlight": {"summary": nightlight_payload.get("summary") or {}},
-        "frontend_analysis_keys": list(frontend_analysis.keys())[:20],
-        "active_panel": snapshot.active_panel,
-        "current_filters": current_filters,
-    }
+    return _snapshot_digest_from_module(snapshot)
 
 
 def _context_digest(context: ContextBundle) -> Dict[str, Any]:
-    return {
-        "facts": dict(context.facts or {}),
-        "analysis": dict(context.analysis or {}),
-        "limits": list(context.limits or []),
-        "available_artifacts": list(context.available_artifacts or []),
-        "context_summary": context.context_summary.model_dump(),
-    }
+    return _context_digest_from_module(context)
 
 
 def _tool_catalog(registry: Dict[str, RegisteredTool]) -> List[Dict[str, Any]]:
-    catalog: List[Dict[str, Any]] = []
-    for name, registered in registry.items():
-        spec = registered.spec
-        catalog.append(
-            {
-                "name": name,
-                "description": spec.description,
-                "category": spec.category,
-                "layer": spec.layer,
-                "ui_tier": spec.ui_tier,
-                "data_domain": spec.data_domain,
-                "capability_type": spec.capability_type,
-                "scene_type": spec.scene_type,
-                "llm_exposure": spec.llm_exposure,
-                "toolkit_id": spec.toolkit_id,
-                "default_policy_key": spec.default_policy_key,
-                "applicable_scenarios": list(spec.applicable_scenarios or []),
-                "cautions": list(spec.cautions or []),
-                "evidence_contract": list(spec.evidence_contract or []),
-                "requires": list(spec.requires or []),
-                "produces": list(spec.produces or []),
-                "readonly": bool(spec.readonly),
-                "cost_level": spec.cost_level,
-                "risk_level": spec.risk_level,
-                "input_schema": spec.input_schema,
-            }
-        )
-    return catalog
-
+    return _tool_catalog_from_module(registry)
 
 def _llm_visible_registry(registry: Dict[str, RegisteredTool], *, include_secondary: bool = False) -> Dict[str, RegisteredTool]:
-    visible: Dict[str, RegisteredTool] = {}
-    for name, registered in registry.items():
-        exposure = str(registered.spec.llm_exposure or "secondary")
-        if exposure == "primary" or (include_secondary and exposure == "secondary"):
-            visible[name] = registered
-    return visible
-
+    return _llm_visible_registry_from_module(registry, include_secondary=include_secondary)
 
 def _planner_question_archetype(question: str) -> str:
-    text = str(question or "").strip()
-    question_type = classify_question_type(text)
-    return question_type or "general"
-
+    return _planner_question_archetype_from_module(question)
 
 def _artifact_digest(snapshot: AnalysisSnapshot, memory: WorkingMemory) -> Dict[str, Any]:
-    artifacts = memory.artifacts if isinstance(memory.artifacts, dict) else {}
-    poi_structure = artifacts.get("current_poi_structure_analysis") if isinstance(artifacts.get("current_poi_structure_analysis"), dict) else {}
-    h3_structure = artifacts.get("current_h3_structure_analysis") if isinstance(artifacts.get("current_h3_structure_analysis"), dict) else build_h3_structure_analysis(snapshot, artifacts)
-    population_profile = artifacts.get("current_population_profile_analysis") if isinstance(artifacts.get("current_population_profile_analysis"), dict) else build_population_profile_analysis(snapshot, artifacts)
-    nightlight_pattern = artifacts.get("current_nightlight_pattern_analysis") if isinstance(artifacts.get("current_nightlight_pattern_analysis"), dict) else build_nightlight_pattern_analysis(snapshot, artifacts)
-    road_pattern = artifacts.get("current_road_pattern_analysis") if isinstance(artifacts.get("current_road_pattern_analysis"), dict) else build_road_pattern_analysis(snapshot, artifacts)
-    analysis_readiness = {
-        "poi": is_poi_structure_ready(poi_structure),
-        "h3": is_h3_structure_ready(h3_structure),
-        "population": is_population_profile_ready(population_profile),
-        "nightlight": is_nightlight_pattern_ready(nightlight_pattern),
-        "road": is_road_pattern_ready(road_pattern),
-    }
-    summary_keys = [
-        key
-        for key in (
-            "current_poi_summary",
-            "current_h3_summary",
-            "current_population_summary",
-            "current_nightlight_summary",
-            "current_road_summary",
-        )
-        if isinstance(artifacts.get(key), dict) and artifacts.get(key)
-    ]
-    if not summary_keys:
-        if isinstance(snapshot.poi_summary, dict) and snapshot.poi_summary:
-            summary_keys.append("snapshot.poi_summary")
-        for key in ("h3", "population", "nightlight", "road"):
-            payload = getattr(snapshot, key, {})
-            if isinstance(payload, dict) and isinstance(payload.get("summary"), dict) and payload.get("summary"):
-                summary_keys.append(f"snapshot.{key}.summary")
-    analysis_keys = [
-        key
-        for key, ready in (
-            ("current_poi_structure_analysis", analysis_readiness["poi"]),
-            ("current_h3_structure_analysis", analysis_readiness["h3"]),
-            ("current_population_profile_analysis", analysis_readiness["population"]),
-            ("current_nightlight_pattern_analysis", analysis_readiness["nightlight"]),
-            ("current_road_pattern_analysis", analysis_readiness["road"]),
-        )
-        if ready and isinstance(artifacts.get(key), dict) and artifacts.get(key)
-    ]
-    frontend_analysis = snapshot.frontend_analysis if isinstance(snapshot.frontend_analysis, dict) else {}
-    frontend_keys = [key for key, value in frontend_analysis.items() if isinstance(value, dict) and value][:10]
-    derived_keys = [
-        key
-        for key in (
-            "current_business_profile",
-            "current_commercial_hotspots",
-            "current_target_supply_gap",
-            "business_site_advice",
-        )
-        if isinstance(artifacts.get(key), dict) and artifacts.get(key)
-    ]
-    return {
-        "summary_artifacts": summary_keys,
-        "analysis_artifacts": analysis_keys,
-        "analysis_readiness": analysis_readiness,
-        "empty_analysis_dimensions": [key for key, ready in analysis_readiness.items() if not ready and key != "poi"],
-        "derived_artifacts": derived_keys,
-        "frontend_analysis_keys": frontend_keys,
-        "available_artifacts": list(artifacts.keys()),
-    }
-
+    return _artifact_digest_from_module(snapshot, memory)
 
 def _planner_tool_routing_hints() -> Dict[str, Any]:
-    return {
-        "layers": {
-            "foundation": [
-                "read_current_scope",
-                "read_current_results",
-                "fetch_pois_in_scope",
-                "compute_h3_metrics_from_scope_and_pois",
-                "compute_population_overview_from_scope",
-                "compute_nightlight_overview_from_scope",
-                "compute_road_syntax_from_scope",
-            ],
-            "capability": [
-                "get_area_data_bundle",
-                "analyze_poi_structure",
-                "analyze_spatial_structure",
-                "infer_area_labels",
-                "score_site_candidates",
-            ],
-            "scenario": [
-                "run_area_character_pack",
-                "run_site_selection_pack",
-            ],
-        },
-        "priority_rules": [
-            "优先场景工具，其次能力工具，最后基础工具。",
-            "区域画像/调性判断默认优先 run_area_character_pack。",
-            "开店/选址/补位/目标业态建议默认优先 run_site_selection_pack。",
-            "只有用户明确只看单项人口、夜光、路网时，才直接调用单维基础工具。",
-            "frontend_analysis 有键不等于可直接复用；analysis_readiness=false 时不要把空结构当证据。",
-            "如果 audit_feedback 已经限定缺失证据，只补相关能力或基础工具，不要为了求全重跑全部场景包。",
-        ],
-        "dependencies": {
-            "run_area_character_pack": ["scope_polygon"],
-            "run_site_selection_pack": ["scope_polygon", "place_type 或问题中的目标业态"],
-            "infer_area_labels": [
-                "current_poi_structure_analysis",
-                "current_population_profile_analysis",
-                "current_nightlight_pattern_analysis",
-                "current_road_pattern_analysis",
-            ],
-            "score_site_candidates": ["current_target_supply_gap"],
-        },
-        "question_routes": {
-            "area_character": [
-                "read_current_results",
-                "run_area_character_pack",
-            ],
-            "site_selection": [
-                "read_current_results",
-                "run_site_selection_pack",
-            ],
-            "population": ["read_current_results", "compute_population_overview_from_scope"],
-            "nightlight": ["read_current_results", "compute_nightlight_overview_from_scope"],
-            "road": ["read_current_results", "compute_road_syntax_from_scope"],
-        },
-    }
-
+    return _planner_tool_routing_hints_from_module()
 
 def _extract_text_content(payload: Dict[str, Any]) -> str:
-    if not isinstance(payload, dict):
-        raise ValueError("invalid_chat_completion_payload")
-    choices = payload.get("choices") or []
-    if not choices:
-        raise ValueError("invalid_chat_completion_payload")
-    message = (choices[0] or {}).get("message") or {}
-    content = message.get("content")
-    if isinstance(content, str):
-        return content
-    if isinstance(content, list):
-        chunks: List[str] = []
-        for item in content:
-            if not isinstance(item, dict):
-                continue
-            text = item.get("text")
-            if isinstance(text, str) and text.strip():
-                chunks.append(text.strip())
-        if chunks:
-            return "\n".join(chunks)
-    raise ValueError("invalid_chat_completion_payload")
-
+    return _extract_text_content_from_module(payload)
 
 def _extract_json_object(raw_text: str) -> Dict[str, Any]:
-    text = str(raw_text or "").strip()
-    if not text:
-        raise ValueError("empty_llm_output")
-    if text.startswith("```"):
-        lines = text.splitlines()
-        if len(lines) >= 3:
-            text = "\n".join(lines[1:-1]).strip()
-    try:
-        return json.loads(text)
-    except json.JSONDecodeError:
-        start = text.find("{")
-        end = text.rfind("}")
-        if start >= 0 and end > start:
-            return json.loads(text[start:end + 1])
-        raise
-
+    return _extract_json_object_from_module(raw_text)
 
 async def generate_title_with_llm(
     *,
@@ -415,43 +217,10 @@ async def _iter_sse_data(response: httpx.Response):
 
 
 def _merge_tool_call_delta(accumulator: List[Dict[str, Any]], raw_call: Dict[str, Any]) -> None:
-    if not isinstance(raw_call, dict):
-        return
-    raw_index = raw_call.get("index")
-    index = int(raw_index) if isinstance(raw_index, int) or str(raw_index).isdigit() else len(accumulator)
-    while len(accumulator) <= index:
-        accumulator.append({"id": "", "type": "function", "function": {"name": "", "arguments": ""}})
-    current = accumulator[index]
-    if raw_call.get("id"):
-        current["id"] = str(raw_call.get("id") or "")
-    if raw_call.get("type"):
-        current["type"] = str(raw_call.get("type") or "function")
-    function_delta = raw_call.get("function") if isinstance(raw_call.get("function"), dict) else {}
-    current_function = current.setdefault("function", {"name": "", "arguments": ""})
-    if function_delta.get("name"):
-        current_function["name"] = str(current_function.get("name") or "") + str(function_delta.get("name") or "")
-    if function_delta.get("arguments") is not None:
-        current_function["arguments"] = str(current_function.get("arguments") or "") + str(function_delta.get("arguments") or "")
-
+    _merge_tool_call_delta_from_module(accumulator, raw_call)
 
 def _finalize_tool_calls(accumulator: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    finalized: List[Dict[str, Any]] = []
-    for item in accumulator:
-        function_payload = item.get("function") if isinstance(item.get("function"), dict) else {}
-        if not (str(item.get("id") or "").strip() or str(function_payload.get("name") or "").strip()):
-            continue
-        finalized.append(
-            {
-                "id": str(item.get("id") or function_payload.get("name") or "").strip(),
-                "type": str(item.get("type") or "function"),
-                "function": {
-                    "name": str(function_payload.get("name") or "").strip(),
-                    "arguments": str(function_payload.get("arguments") or ""),
-                },
-            }
-        )
-    return finalized
-
+    return _finalize_tool_calls_from_module(accumulator)
 
 async def _stream_chat_completion(
     *,
@@ -538,143 +307,31 @@ async def _stream_chat_completion(
 
 
 def _loop_system_prompt() -> str:
-    return (
-        "你是 gaode-map 的 GIS Agent 工具调度器。"
-        "你的职责是基于用户问题、当前 analysis snapshot 摘要、上下文限制和可用工具，决定是否调用工具。"
-        "要求："
-        "1. 只通过已提供的 tools 调用函数，不要虚构工具名；"
-        "2. 缺少 scope 时不要编造结论；"
-        "3. 优先复用 read_current_scope / read_current_results；"
-        "4. 只有在确实需要新证据时才调用高成本工具；"
-        "5. 当现有证据足够时，停止调用工具并输出简短中文总结；"
-        "6. 区域画像/调性判断优先调用 run_area_character_pack；"
-        "7. 遇到开店、选址、补位、目标业态建议类问题时，优先调用 run_site_selection_pack；"
-        "8. 只有用户只问单项指标时才直接调用人口、夜光、路网等基础工具；"
-        "9. 不要把 GIS 指标直接推断成客流、消费能力或经营收益。"
-    )
-
+    return _loop_system_prompt_from_module()
 
 def _parse_chat_completion_response(payload: Dict[str, Any]) -> Dict[str, Any]:
-    function_calls: List[Dict[str, Any]] = []
-    texts: List[str] = []
-    warnings: List[str] = []
-    choices = payload.get("choices") or []
-    if not choices or not isinstance(choices[0], dict):
-        return {"function_calls": function_calls, "texts": texts, "warnings": warnings}
-    choice = choices[0]
-    message = choice.get("message") if isinstance(choice.get("message"), dict) else {}
-    content = message.get("content")
-    if isinstance(content, str) and content.strip():
-        texts.append(content.strip())
-    raw_tool_calls = message.get("tool_calls") or []
-    for item in raw_tool_calls:
-        if not isinstance(item, dict):
-            continue
-        function_payload = item.get("function") if isinstance(item.get("function"), dict) else {}
-        arguments: Dict[str, Any] = {}
-        argument_error = ""
-        raw_arguments = function_payload.get("arguments")
-        if isinstance(raw_arguments, dict):
-            arguments = raw_arguments
-        elif isinstance(raw_arguments, str) and raw_arguments.strip():
-            try:
-                parsed = json.loads(raw_arguments)
-            except json.JSONDecodeError as exc:
-                argument_error = f"invalid_tool_call_arguments_json:{exc}"
-            else:
-                if isinstance(parsed, dict):
-                    arguments = parsed
-                else:
-                    argument_error = "invalid_tool_call_arguments_shape"
-        function_calls.append(
-            {
-                "tool_name": str(function_payload.get("name") or "").strip(),
-                "arguments": arguments,
-                "call_id": str(item.get("id") or "").strip(),
-                "argument_error": argument_error,
-            }
-        )
-    finish_reason = str(choice.get("finish_reason") or "").strip()
-    if finish_reason and finish_reason not in {"tool_calls", "stop"}:
-        warnings.append(f"unexpected_finish_reason:{finish_reason}")
-    return {"function_calls": function_calls, "texts": texts, "warnings": warnings}
-
+    return _parse_chat_completion_response_from_module(payload)
 
 def _extract_chat_completion_text(payload: Dict[str, Any]) -> str:
-    parsed = _parse_chat_completion_response(payload)
-    texts = [str(item).strip() for item in parsed.get("texts") or [] if str(item).strip()]
-    if texts:
-        return "\n".join(texts)
-    raise ValueError("invalid_chat_completion_output_text")
-
+    return _extract_chat_completion_text_from_module(payload)
 
 def _tool_output_payload(result: ToolResult) -> str:
-    return json.dumps(
-        {
-            "tool_name": result.tool_name,
-            "status": result.status,
-            "result": result.result,
-            "evidence": result.evidence,
-            "warnings": result.warnings,
-            "error": result.error,
-        },
-        ensure_ascii=False,
-    )
-
+    return _tool_output_payload_from_module(result)
 
 def _compact_json(value: Any, *, max_length: int = 160) -> str:
-    if value in (None, "", [], {}):
-        return ""
-    text = json.dumps(value, ensure_ascii=False, default=str)
-    if len(text) > max_length:
-        return f"{text[:max_length]}..."
-    return text
-
+    return _compact_json_from_module(value, max_length=max_length)
 
 def _summarize_tool_arguments(arguments: Dict[str, Any]) -> str:
-    if not isinstance(arguments, dict) or not arguments:
-        return "无参数"
-    preferred = ("place_type", "types", "keywords", "resolution", "include_mode", "mode", "graph_model", "highway_filter", "year", "max_count", "coord_type")
-    items = []
-    for key in preferred:
-        if key in arguments and arguments.get(key) not in (None, "", [], {}):
-            items.append(f"{key}={arguments.get(key)}")
-    if not items:
-        for key, value in list(arguments.items())[:4]:
-            if value not in (None, "", [], {}):
-                items.append(f"{key}={_compact_json(value, max_length=40)}")
-    return "；".join(items) or "无参数"
-
+    return _summarize_tool_arguments_from_module(arguments)
 
 def _summarize_tool_result(result: ToolResult) -> str:
-    if result.status == "failed":
-        return str(result.error or "执行失败")
-    payload = result.result if isinstance(result.result, dict) else {}
-    if not payload:
-        return "执行成功"
-    preferred = ("place_type", "poi_count", "h3_grid_count", "grid_count", "resolution", "road_node_count", "road_edge_count", "population_total", "nightlight_mean_radiance", "source", "total")
-    items = []
-    for key in preferred:
-        if key in payload and payload.get(key) not in (None, "", [], {}):
-            items.append(f"{key}={payload.get(key)}")
-    if not items:
-        for key, value in list(payload.items())[:4]:
-            if value not in (None, "", [], {}):
-                items.append(f"{key}={_compact_json(value, max_length=50)}")
-    return "；".join(items) or "执行成功"
-
+    return _summarize_tool_result_from_module(result)
 
 def _is_reusable_tool_call(registered: RegisteredTool, step: PlanStep) -> bool:
-    return bool(
-        registered.spec.readonly
-        and registered.spec.name in {"read_current_scope", "read_current_results"}
-        and not (step.arguments or {})
-    )
-
+    return _is_reusable_tool_call_from_module(registered, step)
 
 def _tool_cache_key(step: PlanStep) -> str:
-    return f"{step.tool_name}:{json.dumps(step.arguments or {}, ensure_ascii=False, sort_keys=True, default=str)}"
-
+    return _tool_cache_key_from_module(step)
 
 async def _maybe_emit(emit: LoopEmit | None, event_type: str, payload: Dict[str, Any]) -> None:
     if emit is None:
@@ -774,88 +431,16 @@ async def _invoke_json_role(
 
 
 def _gate_system_prompt() -> str:
-    return (
-        "你是 gaode-map 的门卫节点 Gatekeeper。"
-        "你的任务是判断用户问题是否足够清晰、是否可以进入规划阶段。"
-        "只输出 JSON。"
-        "JSON 结构："
-        "{\"status\":\"pass|clarify|block\",\"question_type\":\"area_character|site_selection|population|nightlight|road|vitality|tod|livability|facility_gap|renewal_priority|metric|general\","
-        "\"summary\":\"...\",\"missing_information\":[\"...\"],\"clarification_questions\":[\"...\"],\"clarification_question\":\"...\",\"clarification_options\":[\"...\"],\"blocked_reason\":\"...\"}"
-        "规则："
-        "1. 如果问题已经足够清晰，返回 pass；"
-        "2. 如果问题不清晰，只问最关键的 1 到 3 个问题；"
-        "3. 澄清问题要具体，不要泛泛而谈；"
-        "4. 不要编造 scope、结果或用户意图；"
-        "5. clarification_questions 最多 3 条。"
-        "6. 当 status=clarify 时，clarification_options 必须提供 1 到 3 条可直接点击的建议回答，使用用户口吻，避免和 clarification_question 重复。"
-    )
-
+    return _gate_system_prompt_from_module()
 
 def _planner_system_prompt() -> str:
-    return (
-        "你是 gaode-map 的规划师 Planner。"
-        "你的职责不是直接回答用户，而是基于用户问题、当前 analysis snapshot、已有 artifacts、审计反馈和工具目录，"
-        "输出一份最小必要、证据驱动、可执行的结构化计划。"
-        "只输出 JSON。"
-        "JSON 结构："
-        "{\"goal\":\"...\",\"question_type\":\"area_character|site_selection|population|nightlight|road|vitality|tod|livability|facility_gap|renewal_priority|metric|general\","
-        "\"summary\":\"...\",\"requires_tools\":true,\"stop_condition\":\"...\",\"evidence_focus\":[\"...\"],"
-        "\"steps\":[{\"tool_name\":\"...\",\"arguments\":{},\"reason\":\"...\",\"evidence_goal\":\"...\",\"expected_artifacts\":[\"...\"],\"optional\":false}]}"
-        "规划原则："
-        "1. 先识别任务类型：area_character、site_selection、population、nightlight、road、vitality、tod、livability、facility_gap、renewal_priority、metric 或 general；"
-        "2. 默认优先场景工具，其次能力工具，最后基础工具；"
-        "3. 区域画像/调性判断默认优先 run_area_character_pack；"
-        "4. 开店/选址/补位/目标业态建议默认优先 run_site_selection_pack；"
-        "5. 用户只问单项人口、夜光、路网时，才直接规划对应单维基础工具；"
-        "6. 只有审计反馈要求补局部证据，或场景工具明显过重时，才下钻到能力工具或基础工具；"
-        "7. frontend_analysis 中键存在不等于有可用分析；analysis_readiness=false 时不能把空结构当证据；"
-        "8. 所有场景工具优先带 policy_key 或 analysis_mode，不要让模型自由发明细粒度 GIS 参数；"
-        "9. 如果 audit_feedback 提供 missing_evidence，本轮优先只补这些缺口；"
-        "10. steps 必须按执行顺序输出，reason、evidence_goal、expected_artifacts 必须具体；"
-        "11. 如果已有证据足以直接回答，可以 requires_tools=false 且 steps 为空；"
-        "12. 不要输出 registry 中不存在的工具名，不要把 GIS 指标直接当成客流、消费能力、营业额或收益证据。"
-    )
-
+    return _planner_system_prompt_from_module()
 
 def _auditor_system_prompt() -> str:
-    return (
-        "你是 gaode-map 的审计员 Auditor。"
-        "你的任务是检查当前证据是否真的足够回答用户问题。"
-        "只输出 JSON。"
-        "JSON 结构："
-        "{\"status\":\"pass|replan|fail\",\"summary\":\"...\",\"issues\":[\"...\"],\"missing_evidence\":[\"...\"],"
-        "\"replan_instructions\":\"...\",\"should_answer\":true}"
-        "规则："
-        "1. 不要只看是否执行了工具，要看是否真正覆盖了问题维度；"
-        "2. 证据不够时返回 replan，并明确缺什么、为什么缺；"
-        "3. 无法可靠回答时返回 fail；"
-        "4. 不要把 GIS 指标推断成客流、消费能力、营业额或收益。"
-    )
-
+    return _auditor_system_prompt_from_module()
 
 def _synthesizer_system_prompt() -> str:
-    return (
-        "你是 gaode-map 的综合分析师 Synthesizer。"
-        "请基于提供的结构化证据，输出最终 JSON 结果。"
-        "必须只输出 JSON，不要输出 markdown。"
-        "JSON 结构固定为："
-        "{\"decision\":{\"summary\":\"...\",\"mode\":\"cognition|judgment|action\",\"strength\":\"strong|moderate|weak\",\"can_act\":true},"
-        "\"support\":[{\"key\":\"...\",\"metric\":\"...\",\"headline\":\"...\",\"value\":{},\"interpretation\":\"...\",\"source\":\"...\",\"confidence\":\"strong|moderate|weak\",\"limitation\":\"...\",\"supports\":[\"core_judgment\"],\"is_key\":true}],"
-        "\"counterpoints\":[{\"kind\":\"conflict|missing|boundary\",\"title\":\"...\",\"detail\":\"...\"}],"
-        "\"actions\":[{\"title\":\"...\",\"detail\":\"...\",\"condition\":\"...\",\"target\":\"...\",\"prompt\":\"...\"}],"
-        "\"boundary\":[{\"title\":\"...\",\"detail\":\"...\"}],"
-        "\"cards\":[{\"type\":\"summary|evidence|recommendation\",\"title\":\"...\",\"content\":\"...\",\"items\":[\"...\"]}],"
-        "\"next_suggestions\":[\"...\"]}"
-        "规则："
-        "1. decision 必须先回答当前能下什么判断，以及是否适合立刻行动；"
-        "2. support 最多 3 条，每条都要能支撑主判断，不允许只列指标清单；"
-        "3. counterpoints 必须覆盖冲突证据、缺失证据或解释边界，不能只给正向总结；"
-        "4. actions 必须是可执行的下一步，不要写“建议继续分析”这种泛建议；"
-        "5. boundary 必须明确哪些结论不能直接推出，尤其不能把 GIS 指标翻译成客流、消费能力、营业额或经营收益；"
-        "6. cards 仍需输出三类卡片：summary 标题为“核心判断”，evidence 标题为“证据依据”，recommendation 标题为“下一步建议”；"
-        "7. 只能使用给定证据，不要编造不存在的数据。"
-    )
-
+    return _synthesizer_system_prompt_from_module()
 
 def _merge_plan_steps(primary: List[PlanStep], fallback: List[PlanStep]) -> List[PlanStep]:
     merged: List[PlanStep] = []

@@ -150,7 +150,72 @@ test('_applyHistoryDetailBaseResult resets nightlight analysis state while prese
   assert.equal(ctx.activeStep3Panel, 'poi')
   assert.equal(ctx.step, 2)
   assert.equal(ctx.sidebarView, 'wizard')
+  assert.equal(ctx.scopeSource, 'history')
   assert.deepEqual(ctx.resetPanelCalls, [{ panelId: 'poi', options: { apply: false } }])
+})
+
+test('loadHistoryDetail keeps restored history id and history scope source', async () => {
+  const originalFetch = global.fetch
+  const originalWindow = global.window
+  const ctx = Object.assign(
+    createHistoryRestoreContext(),
+    historyMethods,
+    {
+      historyDetailLoadToken: 0,
+      historyDetailAbortController: null,
+      historyFetchAbortController: null,
+      cancelHistoryLoading() {},
+      cancelHistoryDetailLoading() {
+        this.historyDetailLoadToken += 1
+        this.historyDetailAbortController = null
+      },
+      stopScopeDrawing() {},
+      clearIsochroneDebugState() {},
+      $nextTick() {
+        return Promise.resolve()
+      },
+      async _restoreHistoryPoisAsync(id) {
+        this.restoredPoiHistoryId = id
+        this.allPoisDetails = [{ id: 'history-poi' }]
+      },
+    },
+  )
+  global.window = {
+    requestAnimationFrame(callback) {
+      callback()
+    },
+  }
+  global.fetch = async (url) => {
+    assert.equal(url, '/api/v1/analysis/history/123?include_pois=false')
+    return {
+      ok: true,
+      async json() {
+        return {
+          params: {
+            center: [121.48, 31.23],
+            mode: 'walking',
+            time_min: 15,
+            source: 'local',
+            drawn_polygon: [],
+          },
+          polygon: [[121.47, 31.22], [121.49, 31.22], [121.49, 31.24], [121.47, 31.22]],
+          poi_count: 1,
+        }
+      },
+    }
+  }
+
+  try {
+    await ctx.loadHistoryDetail(123)
+  } finally {
+    global.fetch = originalFetch
+    global.window = originalWindow
+  }
+
+  assert.equal(ctx.currentHistoryRecordId, 123)
+  assert.equal(ctx.scopeSource, 'history')
+  assert.equal(ctx.restoredPoiHistoryId, 123)
+  assert.deepEqual(ctx.allPoisDetails, [{ id: 'history-poi' }])
 })
 
 test('ensureNightlightPanelEntryState recomputes after history reset cleared previous results', async () => {

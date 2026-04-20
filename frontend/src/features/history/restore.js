@@ -2,6 +2,7 @@
         return {
             historyDetailAbortController: null,
             historyDetailLoadToken: 0,
+            currentHistoryRecordId: 0,
         };
     }
 
@@ -324,6 +325,7 @@
                 let controller = null;
                 let baseRestored = false;
                 try {
+                    this.currentHistoryRecordId = historyId;
                     this.cancelHistoryLoading();
                     this.cancelHistoryDetailLoading();
                     this.stopScopeDrawing();
@@ -361,9 +363,17 @@
                     if (!data || token !== this.historyDetailLoadToken) return;
 
                     this._applyHistoryDetailBaseResult(data);
+                    this.currentHistoryRecordId = historyId;
+                    if (this.lastIsochroneGeoJSON) {
+                        this.scopeSource = 'history';
+                    }
                     baseRestored = true;
                     const restoredSnapshots = await this._restoreHistoryAnalysisSnapshotsAsync(data, token);
                     if (token !== this.historyDetailLoadToken) return;
+                    this.currentHistoryRecordId = historyId;
+                    if (this.lastIsochroneGeoJSON) {
+                        this.scopeSource = 'history';
+                    }
                     const poiCountHint = Math.max(
                         0,
                         Number((data && data.poi_count) || (((data || {}).poi_summary || {}).total) || 0)
@@ -388,6 +398,12 @@
                         this.errorMessage = `加载历史失败: ${(e && e.message) || e}`;
                     }
                 } finally {
+                    if (baseRestored) {
+                        this.currentHistoryRecordId = historyId;
+                        if (this.lastIsochroneGeoJSON) {
+                            this.scopeSource = 'history';
+                        }
+                    }
                     if (controller && this.historyDetailAbortController === controller) {
                         this.historyDetailAbortController = null;
                     }

@@ -90,11 +90,13 @@ function createAnalysisAgentInitialState() {
         content: {},
         evidenceRefs: [],
       },
+      summaryTabs: [],
       followupTabs: [],
-      activeTabId: 'summary',
+      activeTabId: '',
       followupLimit: 6,
       nextFollowupNumber: 1,
     },
+    agentCreateTabMenuOpen: false,
     agentSummaryReadiness: {
       checked: false,
       ready: false,
@@ -107,6 +109,12 @@ function createAnalysisAgentInitialState() {
     agentSummaryProgressPhase: '',
     agentSummaryError: '',
     agentSummaryWarnings: [],
+    summaryTaskBoard: {
+      runState: 'idle',
+      tasks: [],
+      lastRunAt: '',
+    },
+    summaryTaskLogTrackers: {},
   }
 }
 

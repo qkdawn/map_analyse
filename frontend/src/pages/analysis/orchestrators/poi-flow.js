@@ -1,7 +1,8 @@
 function createAnalysisPoiFlowOrchestratorMethods() {
   return {
-    async fetchPois() {
+    async fetchPois(options = {}) {
       if (!this.lastIsochroneGeoJSON) return
+      const preserveCurrentPanel = !!(options && options.preserveCurrentPanel)
       this.isFetchingPois = true
       this.fetchProgress = 0
       this.poiStatus = '准备抓取...'
@@ -127,16 +128,21 @@ function createAnalysisPoiFlowOrchestratorMethods() {
         // Integration with Legacy Filter Panel (single render path).
         this.rebuildPoiRuntimeSystem(this.allPoisDetails)
 
-        setTimeout(() => {
-          this.activeStep3Panel = 'poi'
-          this.lastNonAgentStep3Panel = 'poi'
-          if (typeof this.resetAnalysisDisplayTargetsForPanel === 'function') {
-            this.resetAnalysisDisplayTargetsForPanel('poi', { apply: false })
-          }
-          this.applySimplifyConfig()
+        if (preserveCurrentPanel) {
           this.updatePoiCharts()
           this.resizePoiChart()
-        }, 120)
+        } else {
+          setTimeout(() => {
+            this.activeStep3Panel = 'poi'
+            this.lastNonAgentStep3Panel = 'poi'
+            if (typeof this.resetAnalysisDisplayTargetsForPanel === 'function') {
+              this.resetAnalysisDisplayTargetsForPanel('poi', { apply: false })
+            }
+            this.applySimplifyConfig()
+            this.updatePoiCharts()
+            this.resizePoiChart()
+          }, 120)
+        }
         this.saveAnalysisHistoryAsync(polygon, selectedCats, this.allPoisDetails)
       } catch (e) {
         if (e.name !== 'AbortError') {

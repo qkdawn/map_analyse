@@ -161,6 +161,35 @@ def transform_polygon_payload_coords(raw: Any, transformer) -> list:
     return nested
 
 
+def transform_nested_coords(raw: Any, transformer) -> Any:
+    if not isinstance(raw, list):
+        return raw
+    if len(raw) >= 2 and isinstance(raw[0], (int, float)) and isinstance(raw[1], (int, float)):
+        try:
+            nx, ny = transformer(float(raw[0]), float(raw[1]))
+            out = [nx, ny]
+            if len(raw) > 2:
+                out.extend(raw[2:])
+            return out
+        except Exception:
+            return raw
+    return [transform_nested_coords(item, transformer) for item in raw]
+
+
+def transform_geojson_coordinates(value: Any, transformer) -> Any:
+    if isinstance(value, dict):
+        out = {}
+        for key, item in value.items():
+            if key == "coordinates":
+                out[key] = transform_nested_coords(item, transformer)
+            else:
+                out[key] = transform_geojson_coordinates(item, transformer)
+        return out
+    if isinstance(value, list):
+        return [transform_geojson_coordinates(item, transformer) for item in value]
+    return value
+
+
 def build_scope_id(geom_wgs84: BaseGeometry, *parts: Any) -> str:
     prefix = ":".join(str(part) for part in parts if part is not None).encode("utf-8")
     digest = sha1(prefix + b":" + geom_wgs84.wkb).hexdigest()

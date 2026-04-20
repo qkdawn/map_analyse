@@ -1,6 +1,37 @@
 import { asText, cloneArray, cloneObject } from './normalizers.js'
 
 const ANALYSIS_TASKS = Object.freeze({
+  poi_fetch: {
+    key: 'poi_fetch',
+    label: 'POI 抓取',
+    panelId: 'poi',
+    subPanelLabel: 'POI 分类抓取',
+    estimate: '约 1-3 分钟',
+    description: '使用当前分析范围抓取 POI 基础数据。',
+    resultUsage: '完成后将作为网格与总结分析的基础输入。',
+    toolNames: ['fetch_pois_in_scope'],
+    producedArtifacts: ['current_pois', 'current_poi_summary'],
+    runningFlag: 'isFetchingPois',
+    hasResult(ctx) {
+      return hasPoiFetchResult(ctx)
+    },
+    focus(ctx) {
+      focusStep2Panel(ctx, 'poi')
+      if (typeof ctx.setPoiSubTab === 'function') {
+        ctx.setPoiSubTab('load')
+      } else {
+        ctx.poiSubTab = 'load'
+      }
+    },
+    async run(ctx, options = {}) {
+      if (typeof ctx.fetchPois !== 'function') {
+        throw new Error('POI 抓取入口不可用')
+      }
+      await ctx.fetchPois({
+        preserveCurrentPanel: options.focus === false,
+      })
+    },
+  },
   poi_grid: {
     key: 'poi_grid',
     label: 'POI 网格计算',
@@ -100,7 +131,12 @@ const ANALYSIS_TASKS = Object.freeze({
     producedArtifacts: ['current_road', 'current_road_summary', 'road_syntax_summary'],
     runningFlag: 'isComputingRoadSyntax',
     hasResult(ctx) {
-      return !!(ctx && ctx.roadSyntaxSummary)
+      if (!ctx || !ctx.roadSyntaxSummary) return false
+      const statusText = asText(ctx.roadSyntaxStatus || '')
+      if (/(^失败[:：]?|计算失败|渲染失败|未就绪|error|failed)/i.test(statusText)) {
+        return false
+      }
+      return true
     },
     focus(ctx) {
       focusStep2Panel(ctx, 'syntax')
@@ -130,6 +166,17 @@ function focusStep2Panel(ctx, panelId = '') {
   }
 }
 
+function hasPoiFetchResult(ctx) {
+  if (!ctx) return false
+  if (Array.isArray(ctx.allPoisDetails) && ctx.allPoisDetails.length > 0) return true
+  const markerManager = ctx.markerManager
+  if (markerManager && typeof markerManager.getVisiblePoints === 'function') {
+    const points = markerManager.getVisiblePoints()
+    if (Array.isArray(points) && points.length > 0) return true
+  }
+  return false
+}
+
 function getAnalysisTaskDefinition(taskKey = '') {
   return ANALYSIS_TASKS[asText(taskKey)] || null
 }
@@ -151,6 +198,10 @@ function hasAnalysisTaskScope(ctx) {
 function getAnalysisTaskParameterSummary(ctx, taskKey = '') {
   const task = getAnalysisTaskDefinition(taskKey)
   if (!task) return ''
+  if (task.key === 'poi_fetch') {
+    const source = ctx && (ctx.resultDataSource || ctx.poiDataSource) ? `数据源 ${ctx.resultDataSource || ctx.poiDataSource}` : '当前 POI 数据源'
+    return source
+  }
   if (task.key === 'poi_grid') {
     const resolution = ctx && ctx.h3GridResolution ? `res=${ctx.h3GridResolution}` : '默认网格级别'
     const source = ctx && (ctx.resultDataSource || ctx.poiDataSource) ? `数据源 ${ctx.resultDataSource || ctx.poiDataSource}` : '当前 POI 数据'
@@ -255,16 +306,18 @@ function buildAnalysisTaskConfirmationFromTurn(ctx, turn = {}) {
   })
 }
 
-async function runAnalysisTask(ctx, taskKey = '') {
+async function runAnalysisTask(ctx, taskKey = '', options = {}) {
   const task = getAnalysisTaskDefinition(taskKey)
   if (!ctx || !task) {
     throw new Error('未知分析任务')
   }
-  task.focus(ctx)
+  if (options.focus !== false) {
+    task.focus(ctx)
+  }
   if (typeof ctx.$nextTick === 'function') {
     await ctx.$nextTick()
   }
-  await task.run(ctx)
+  await task.run(ctx, options)
   return buildAnalysisTaskConfirmation(ctx, task.key, { status: 'completed' })
 }
 

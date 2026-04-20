@@ -18,6 +18,7 @@
                 this.poiKdeStats = this.createEmptyPoiKdeStats();
                 this.populationSubTab = 'analysis';
                 this.scopeSource = '';
+                this.currentHistoryRecordId = 0;
                 this.drawnScopePolygon = [];
                 this.lastIsochroneGeoJSON = null;
                 this.h3GridStatus = '';
@@ -113,6 +114,7 @@
                 this.populationSubTab = 'analysis';
                 this.resultDataSource = this.normalizePoiSource(this.poiDataSource, 'local');
                 this.scopeSource = '';
+                this.currentHistoryRecordId = 0;
                 this.drawnScopePolygon = [];
                 this.lastIsochroneGeoJSON = null;
                 this.h3ExportMenuOpen = false;

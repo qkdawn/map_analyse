@@ -1,4 +1,4 @@
-import test from 'node:test'
+﻿import test from 'node:test'
 import assert from 'node:assert/strict'
 
 import {
@@ -83,6 +83,16 @@ function createAgentContext(overrides = {}) {
     },
   }
   return Object.assign(ctx, overrides)
+}
+
+function buildSummaryPack(summary = '当前总结') {
+  return {
+    headline_judgment: { summary },
+    secondary_conclusions: ['次级结论'],
+    user_profile: { headline: '用户画像', traits: ['稳定客群'] },
+    behavior_inference: { headline: '行为判断', traits: ['停留时长中等'] },
+    evidence_refs: ['evidence-1'],
+  }
 }
 
 test('sortAgentSessions keeps pinned sessions before newer unpinned sessions', () => {
@@ -755,11 +765,8 @@ test('startNewAgentChat keeps new draft out of visible history until first turn 
   assert.equal(ctx.getAgentHistorySessions().length, 0)
   assert.equal(ctx.findAgentSession(ctx.activeAgentSessionId).persisted, false)
 
-  let fetchIndex = 0
   global.fetch = async (url, options = {}) => {
-    fetchIndex += 1
-    if (fetchIndex === 1) {
-      assert.equal(url, '/api/v1/analysis/agent/turn/stream')
+    if (url === '/api/v1/analysis/agent/turn/stream') {
       const payload = JSON.parse(String(options.body || '{}'))
       assert.equal(payload.conversation_id, ctx.activeAgentSessionId)
       assert.equal(payload.governance_mode, 'auto')
@@ -809,7 +816,7 @@ test('startNewAgentChat keeps new draft out of visible history until first turn 
         },
       ])
     }
-    assert.equal(url, `/api/v1/analysis/agent/sessions/${encodeURIComponent(ctx.activeAgentSessionId)}`)
+
     return {
       ok: true,
       async json() {
@@ -2611,6 +2618,55 @@ test('deleteAgentSession falls back to hidden draft when no persisted history re
   assert.equal(ctx.getAgentHistorySessions().length, 0)
   assert.equal(ctx.agentSessions.length, 1)
   assert.equal(ctx.findAgentSession(ctx.activeAgentSessionId).persisted, false)
+})
+
+test('createAgentSummaryTab opens a new summary window instead of reusing the default summary tab', () => {
+  const ctx = createAgentContext({
+    agentPanelPayloads: {
+      summary_pack: buildSummaryPack('这是一个以日常生活消费为主的社区级商业区，适合继续补齐业态结构证据'),
+      summary_status: { status: 'ready', generated: true },
+    },
+    agentSummaryReadiness: {
+      checked: true,
+      ready: true,
+      missingTasks: [],
+      reused: [],
+      fetched: [],
+    },
+  })
+
+  const tabs = ctx.ensureAgentTabs(true)
+  assert.equal(tabs.summaryTabs.length, 1)
+  assert.equal(tabs.summaryTabs[0].id, 'summary-current')
+
+  const firstId = ctx.createAgentSummaryTab()
+  const secondId = ctx.createAgentSummaryTab()
+
+  assert.notEqual(firstId, 'summary-current')
+  assert.notEqual(secondId, 'summary-current')
+  assert.notEqual(firstId, secondId)
+  assert.equal(ctx.agentTabs.summaryTabs.length, 3)
+  assert.equal(ctx.agentTabs.summaryTabs[0].id, 'summary-current')
+  assert.equal(ctx.agentTabs.activeTabId, secondId)
+})
+
+test('getAgentSummaryGateProgressText only shows readiness checking while loading', () => {
+  const ctx = createAgentContext()
+  ctx.agentSummaryLoading = false
+  ctx.agentSummaryGenerating = false
+  ctx.agentSummaryProgressPhase = ''
+  ctx.agentSummaryReadiness = {
+    checked: true,
+    ready: false,
+    missingTasks: ['poi_fetch', 'population'],
+    reused: [],
+    fetched: [],
+  }
+
+  assert.equal(ctx.getAgentSummaryGateProgressText(), '已完成数据检查，还缺 2 项')
+
+  ctx.agentSummaryLoading = true
+  assert.equal(ctx.getAgentSummaryGateProgressText(), '正在检查数据就绪度…')
 })
 
 function ctxSessionBase(id, title) {

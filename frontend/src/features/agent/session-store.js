@@ -35,6 +35,7 @@ function createAgentSessionStoreMethods() {
         preview: '开始一段新的分析对话',
         analysisFingerprint: this.getCurrentAgentAnalysisFingerprint(),
         status: 'idle',
+        sessionKind: 'followup',
         persisted: false,
         snapshotLoaded: true,
         titleSource: 'fallback',
@@ -46,33 +47,124 @@ function createAgentSessionStoreMethods() {
     getCurrentAgentAnalysisFingerprint() {
       return asText(this.buildAgentAnalysisFingerprint())
     },
-    getAgentCurrentRangeSessions() {
+    getCurrentAgentRangeFingerprints() {
+      const fingerprints = new Set()
       const currentFingerprint = this.getCurrentAgentAnalysisFingerprint()
-      if (!currentFingerprint) return []
-      return this.getAgentHistorySessions().filter((item) => asText(item && item.analysisFingerprint) === currentFingerprint)
+      if (currentFingerprint) fingerprints.add(currentFingerprint)
+      const historyId = Number(this.currentHistoryRecordId || 0)
+      if (asText(this.scopeSource) === 'history' && Number.isFinite(historyId) && historyId > 0) {
+        fingerprints.add(`history:${Math.floor(historyId)}`)
+      }
+      const isAgentContext = asText(this.activeStep3Panel) === 'agent'
+        || (typeof this.isAgentSummaryTabActive === 'function' && this.isAgentSummaryTabActive())
+      if (isAgentContext) {
+        const activeId = asText(this.activeAgentSessionId || this.agentConversationId)
+        const activeSession = activeId ? this.readSessionState(activeId) : null
+        const activeFingerprint = asText(activeSession && activeSession.analysisFingerprint)
+        if (activeFingerprint) fingerprints.add(activeFingerprint)
+      }
+      return Array.from(fingerprints)
+    },
+    getAgentCurrentRangeSessions() {
+      const currentFingerprints = new Set(this.getCurrentAgentRangeFingerprints())
+      if (!currentFingerprints.size) return []
+      return this.getAgentHistorySessions().filter((item) => currentFingerprints.has(asText(item && item.analysisFingerprint)))
     },
     getAgentOtherRangeSessions() {
-      const currentFingerprint = this.getCurrentAgentAnalysisFingerprint()
+      const currentFingerprints = new Set(this.getCurrentAgentRangeFingerprints())
       return this.getAgentHistorySessions().filter((item) => {
         const sessionFingerprint = asText(item && item.analysisFingerprint)
-        return !currentFingerprint || sessionFingerprint !== currentFingerprint
+        return !currentFingerprints.size || !currentFingerprints.has(sessionFingerprint)
       })
     },
+    isAgentSummaryHistorySession(session = null) {
+      if (!session || typeof session !== 'object') return false
+      if (asText(session.sessionKind) === 'summary') return true
+      if (asText(session.sessionKind) === 'followup') return false
+      if (Object.prototype.hasOwnProperty.call(session, 'hasSummaryPack')) {
+        return !!session.hasSummaryPack
+      }
+      const payloads = cloneObject(session.panelPayloads)
+      const pack = cloneObject(payloads.summary_pack)
+      return !!(
+        asText((pack.headline_judgment || {}).summary)
+        || (Array.isArray(pack.secondary_conclusions) && pack.secondary_conclusions.length > 0)
+      )
+    },
+    isAgentFollowupHistorySession(session = null) {
+      if (!session || typeof session !== 'object') return false
+      if (asText(session.sessionKind) === 'followup') return true
+      if (asText(session.sessionKind) === 'summary') return false
+      if (Object.prototype.hasOwnProperty.call(session, 'hasFollowupMessages')) {
+        return !!session.hasFollowupMessages
+      }
+      return cloneArray(session.messages).some((item) => asText(item && item.role) === 'user' && asText(item && item.content))
+    },
+    splitAgentHistorySessionsByPanel(sessions = []) {
+      const summary = []
+      const followup = []
+      cloneArray(sessions).forEach((session) => {
+        if (this.isAgentFollowupHistorySession(session)) {
+          followup.push(session)
+          return
+        }
+        if (this.isAgentSummaryHistorySession(session)) {
+          summary.push(session)
+          return
+        }
+        followup.push(session)
+      })
+      return { summary, followup }
+    },
     getAgentRangeSessionGroups() {
+      const currentSplit = this.splitAgentHistorySessionsByPanel(this.getAgentCurrentRangeSessions())
+      const otherSplit = this.splitAgentHistorySessionsByPanel(this.getAgentOtherRangeSessions())
       return [
         {
           id: 'current',
           title: '当前范围',
-          count: this.getAgentCurrentRangeSessions().length,
+          count: currentSplit.summary.length + currentSplit.followup.length,
           emptyText: '当前范围暂无历史对话',
-          sessions: this.getAgentCurrentRangeSessions(),
+          sessions: [],
+          panels: [
+            {
+              id: 'summary',
+              title: '总结历史',
+              count: currentSplit.summary.length,
+              emptyText: '当前范围暂无总结历史',
+              sessions: currentSplit.summary,
+            },
+            {
+              id: 'followup',
+              title: '追问历史',
+              count: currentSplit.followup.length,
+              emptyText: '当前范围暂无追问历史',
+              sessions: currentSplit.followup,
+            },
+          ],
         },
         {
           id: 'other',
           title: '其他范围',
-          count: this.getAgentOtherRangeSessions().length,
+          count: otherSplit.summary.length + otherSplit.followup.length,
           emptyText: '其他范围暂无历史对话',
-          sessions: this.getAgentOtherRangeSessions(),
+          sessions: [],
+          panels: [
+            {
+              id: 'summary',
+              title: '总结历史',
+              count: otherSplit.summary.length,
+              emptyText: '其他范围暂无总结历史',
+              sessions: otherSplit.summary,
+            },
+            {
+              id: 'followup',
+              title: '追问历史',
+              count: otherSplit.followup.length,
+              emptyText: '其他范围暂无追问历史',
+              sessions: otherSplit.followup,
+            },
+          ],
         },
       ]
     },
@@ -80,6 +172,41 @@ function createAgentSessionStoreMethods() {
       const nextId = asText(sessionId)
       if (!nextId) return null
       return this.agentSessions.find((item) => asText(item && item.id) === nextId) || null
+    },
+    readSessionState(sessionId = '') {
+      const nextId = asText(sessionId || this.activeAgentSessionId || this.agentConversationId)
+      const session = nextId ? this.findAgentSession(nextId) : null
+      return session ? cloneAgentSessionRecord(session) : null
+    },
+    patchSessionState(sessionId = '', patch = null, options = {}) {
+      const nextId = asText(sessionId || this.activeAgentSessionId || this.agentConversationId)
+      if (!nextId) return null
+      const updater = typeof patch === 'function'
+        ? patch
+        : ((session) => ({
+          ...session,
+          ...(patch && typeof patch === 'object' ? patch : {}),
+        }))
+      return this.updateAgentSessionSnapshot(nextId, updater, options)
+    },
+    applyStreamEvent(sessionId = '', eventPatch = null, options = {}) {
+      return this.patchSessionState(sessionId, eventPatch, options)
+    },
+    deriveActiveViewState(sessionId = '') {
+      const session = this.readSessionState(sessionId)
+      const activeTabId = asText(((this.agentTabs || {}).activeTabId) || '')
+      const activeTopTab = typeof this.getAgentActiveTopTab === 'function'
+        ? this.getAgentActiveTopTab()
+        : null
+      const isSummaryTab = asText(activeTopTab && activeTopTab.kind) === 'summary'
+      return {
+        session,
+        activeTabId,
+        isSummaryTab,
+        followupThread: isSummaryTab
+          ? null
+          : cloneObject(this.getAgentActiveFollowupTab && this.getAgentActiveFollowupTab()),
+      }
     },
     updateAgentSessionSnapshot(sessionId = '', updater = null, options = {}) {
       const nextId = asText(sessionId)
@@ -108,6 +235,9 @@ function createAgentSessionStoreMethods() {
     },
     applyAgentSessionSnapshot(session, options = {}) {
       if (!session || typeof session !== 'object') return
+      if (typeof this.stopAllSummaryTaskLogTracking === 'function') {
+        this.stopAllSummaryTaskLogTracking()
+      }
       const previousActiveSessionId = asText(this.activeAgentSessionId)
       this.agentConversationId = String(session.id || '')
       this.activeAgentSessionId = String(session.id || '')
@@ -130,6 +260,9 @@ function createAgentSessionStoreMethods() {
       this.agentPanelPayloads = cloneObject(session.panelPayloads)
       if (typeof this.syncAgentSummaryReadinessFromPanelPayload === 'function') {
         this.syncAgentSummaryReadinessFromPanelPayload(this.agentPanelPayloads)
+      }
+      if (typeof this.syncSummaryTaskBoardFromPanelPayload === 'function') {
+        this.syncSummaryTaskBoardFromPanelPayload(this.agentPanelPayloads)
       }
       this.agentClarificationQuestion = String(session.clarificationQuestion || '')
       this.agentClarificationOptions = cloneArray(session.clarificationOptions)
@@ -219,6 +352,7 @@ function createAgentSessionStoreMethods() {
         persisted: true,
         snapshotLoaded: true,
         titleSource: detail && detail.title_source,
+        sessionKind: detail && detail.session_kind,
         createdAt: detail && detail.created_at,
         updatedAt: detail && detail.updated_at,
         pinnedAt: detail && detail.pinned_at,
@@ -233,17 +367,24 @@ function createAgentSessionStoreMethods() {
       if (typeof this.captureAgentActiveFollowupTabState === 'function') {
         this.captureAgentActiveFollowupTabState()
       }
-      const existing = this.findAgentSession(activeId)
-      let messages = cloneArray(this.agentMessages)
+      const existing = this.readSessionState(activeId)
+      let messages = cloneArray((existing && existing.messages) || [])
+      if (!messages.length) {
+        messages = cloneArray(this.agentMessages)
+      }
       if (typeof this.getAgentActiveFollowupTab === 'function') {
         const activeFollowupTab = this.getAgentActiveFollowupTab()
-        if (activeFollowupTab && activeFollowupTab.thread) {
-          messages = cloneArray(activeFollowupTab.thread.messages)
+        const threadMessages = cloneArray(activeFollowupTab && activeFollowupTab.thread && activeFollowupTab.thread.messages)
+        if (threadMessages.length) {
+          messages = threadMessages
         }
       }
       const panelPayloads = cloneObject(this.agentPanelPayloads)
       if (typeof this.buildAgentTabsUiState === 'function') {
         panelPayloads.agent_tabs = this.buildAgentTabsUiState()
+      }
+      if (typeof this.buildSummaryTaskBoardUiState === 'function') {
+        panelPayloads.summary_task_board = this.buildSummaryTaskBoardUiState()
       }
       const existingTitleSource = asText(existing && existing.titleSource) || 'fallback'
       const shouldPreserveTitle = existing && ['user', 'ai'].includes(existingTitleSource)
@@ -267,6 +408,9 @@ function createAgentSessionStoreMethods() {
         analysisFingerprint: Object.prototype.hasOwnProperty.call(options || {}, 'analysisFingerprint')
           ? asText(options.analysisFingerprint)
           : (asText(existing && existing.analysisFingerprint) || this.getCurrentAgentAnalysisFingerprint()),
+        sessionKind: Object.prototype.hasOwnProperty.call(options || {}, 'sessionKind')
+          ? asText(options.sessionKind)
+          : asText(existing && existing.sessionKind),
         status: String(this.agentStatus || 'idle'),
         stage: String(this.agentStage || 'gating'),
         input: String(this.agentInput || ''),

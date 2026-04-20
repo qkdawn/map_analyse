@@ -15,10 +15,35 @@ from modules.history.service import (
     serialize_created_at,
 )
 from .database import SessionLocal
-from .models import AnalysisHistory, PoiResult
+from .models import AgentSession, AnalysisHistory, PoiResult
 
 
 class HistoryRepo:
+    @staticmethod
+    def _extract_analysis_fingerprint(snapshot: Any) -> str:
+        if not isinstance(snapshot, dict):
+            return ""
+        meta = snapshot.get("_meta")
+        if not isinstance(meta, dict):
+            return ""
+        return str(meta.get("analysis_fingerprint") or "").strip()
+
+    @staticmethod
+    def _build_history_agent_count_map(session: Session) -> Dict[int, int]:
+        rows = session.query(AgentSession.id, AgentSession.snapshot).all()
+        counter: Dict[int, int] = {}
+        for _, snapshot in rows:
+            fingerprint = HistoryRepo._extract_analysis_fingerprint(snapshot)
+            if not fingerprint.startswith("history:"):
+                continue
+            raw_id = fingerprint.split(":", 1)[1].strip()
+            try:
+                history_id = int(raw_id)
+            except (TypeError, ValueError):
+                continue
+            counter[history_id] = int(counter.get(history_id, 0)) + 1
+        return counter
+
     @staticmethod
     def _json_extract_expr(dialect_name: str, path: str):
         extracted = func.json_extract(AnalysisHistory.params, path)
@@ -77,6 +102,7 @@ class HistoryRepo:
     def get_list(self, limit: int = 0) -> List[Dict]:
         session: Session = SessionLocal()
         try:
+            ai_count_map = self._build_history_agent_count_map(session)
             bind = session.get_bind()
             dialect_name = bind.dialect.name if bind is not None else ""
             if dialect_name in {"mysql", "sqlite"}:
@@ -123,6 +149,7 @@ class HistoryRepo:
                         "description": row.description,
                         "created_at": serialize_created_at(row.created_at),
                         "params": list_params,
+                        "ai_session_count": int(ai_count_map.get(int(row.id), 0)),
                     }
                 )
             return result
@@ -173,6 +200,14 @@ class HistoryRepo:
     def delete_record(self, history_id: int) -> bool:
         session: Session = SessionLocal()
         try:
+            target_fingerprint = f"history:{int(history_id)}"
+            linked_agent_ids: List[str] = []
+            for row in session.query(AgentSession.id, AgentSession.snapshot).all():
+                fingerprint = self._extract_analysis_fingerprint(row.snapshot)
+                if fingerprint == target_fingerprint:
+                    linked_agent_ids.append(str(row.id))
+            if linked_agent_ids:
+                session.query(AgentSession).filter(AgentSession.id.in_(linked_agent_ids)).delete(synchronize_session=False)
             session.query(PoiResult).filter_by(history_id=history_id).delete()
             rows = session.query(AnalysisHistory).filter_by(id=history_id).delete()
             session.commit()

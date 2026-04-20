@@ -57,6 +57,7 @@ PersistedAgentStatus = Literal[
     "requires_risk_confirmation",
     "failed",
 ]
+AgentSessionKind = Literal["", "summary", "followup"]
 ToolStatus = Literal["success", "failed", "skipped"]
 ToolLoopStatus = Literal["completed", "requires_risk_confirmation", "failed"]
 CardType = Literal["summary", "evidence", "recommendation"]
@@ -120,6 +121,14 @@ class AgentSummaryDataReadiness(BaseModel):
     fetched: List[str] = Field(default_factory=list)
 
 
+class AgentSummaryProgressStep(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    key: str = ""
+    label: str = ""
+    status: Literal["pending", "running", "completed", "failed"] = "pending"
+
+
 class AgentSummaryReadinessResponse(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
@@ -127,6 +136,7 @@ class AgentSummaryReadinessResponse(BaseModel):
     error: str = ""
     warnings: List[str] = Field(default_factory=list)
     phases: List[str] = Field(default_factory=list)
+    progress_steps: List[AgentSummaryProgressStep] = Field(default_factory=list)
 
 
 class AgentSummaryGenerateResponse(BaseModel):
@@ -138,6 +148,7 @@ class AgentSummaryGenerateResponse(BaseModel):
     error: str = ""
     warnings: List[str] = Field(default_factory=list)
     phases: List[str] = Field(default_factory=list)
+    progress_steps: List[AgentSummaryProgressStep] = Field(default_factory=list)
 
 
 class ToolSpec(BaseModel):
@@ -572,6 +583,9 @@ class AgentSessionSummary(BaseModel):
     analysis_fingerprint: str = ""
     is_pinned: bool = False
     title_source: AgentSessionTitleSource = "fallback"
+    session_kind: AgentSessionKind = ""
+    has_summary_pack: bool = False
+    has_followup_messages: bool = False
     created_at: str = ""
     updated_at: str = ""
     pinned_at: Optional[str] = None
@@ -585,6 +599,7 @@ class AgentSessionSnapshotRequest(BaseModel):
     status: PersistedAgentStatus = "idle"
     stage: AgentStage = "gating"
     analysis_fingerprint: str = ""
+    session_kind: AgentSessionKind = ""
     is_pinned: Optional[bool] = None
     input: str = ""
     messages: List[AgentMessage] = Field(default_factory=list)

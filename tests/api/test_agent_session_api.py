@@ -54,6 +54,7 @@ def test_agent_session_crud_api(monkeypatch):
                 "preview": "开始一段新的分析对话",
                 "status": "idle",
                 "analysis_fingerprint": "fp-current",
+                "session_kind": "summary",
                 "is_pinned": False,
                 "input": "",
                 "messages": [{"role": "user", "content": "总结这个区域"}],
@@ -74,6 +75,7 @@ def test_agent_session_crud_api(monkeypatch):
         assert put_resp.status_code == 200
         assert put_resp.json()["title"] == "商业分析"
         assert put_resp.json()["analysis_fingerprint"] == "fp-current"
+        assert put_resp.json()["session_kind"] == "summary"
         assert put_resp.json()["title_source"] == "user"
 
         patch_resp = client.patch(
@@ -91,6 +93,7 @@ def test_agent_session_crud_api(monkeypatch):
         assert len(list_resp.json()) == 1
         assert list_resp.json()[0]["id"] == "agent-1"
         assert list_resp.json()[0]["analysis_fingerprint"] == "fp-current"
+        assert list_resp.json()[0]["session_kind"] == "summary"
 
         detail_resp = client.get("/api/v1/analysis/agent/sessions/agent-1")
         assert detail_resp.status_code == 200

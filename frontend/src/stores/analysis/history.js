@@ -32,7 +32,7 @@ export function createAnalysisHistoryInitialState() {
     selectedHistoryIds: [],
     historyDetailAbortController: null,
     historyDetailLoadToken: 0,
-    currentHistoryRecordId: 0,
+    currentHistoryRecordId: '',
   }
 }
 

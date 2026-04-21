@@ -61,7 +61,7 @@ class AnalysisHistory(Base):
     """
     __tablename__ = "analysis_history"
 
-    id = Column(Integer, primary_key=True, autoincrement=True)
+    id = Column(String(64), primary_key=True)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     
     # 存储分析参数 (中心点, 时长, 出行方式)
@@ -81,7 +81,7 @@ class PoiResult(Base):
     __tablename__ = "poi_results"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    history_id = Column(Integer, ForeignKey("analysis_history.id", ondelete="CASCADE"), nullable=False, index=True)
+    history_id = Column(String(64), ForeignKey("analysis_history.id", ondelete="CASCADE"), nullable=False, index=True)
     
     # 完整的 POI 数据列表
     poi_data = Column(JSON, nullable=False)

@@ -260,6 +260,50 @@ function createAgentUiMethods() {
         : {}
       return cloneObject(pack)
     },
+    getAgentSummarySecondaryConclusions(panelPayloads = null) {
+      const pack = this.getAgentSummaryPack(panelPayloads)
+      const rows = Array.isArray(pack.secondary_conclusions) ? pack.secondary_conclusions : []
+      const sectionOrder = [
+        ['spatial_structure', '空间结构'],
+        ['poi_structure', 'POI结构'],
+        ['consumption_vitality', '消费活力'],
+        ['business_support', '业态承接'],
+      ]
+      const mapped = sectionOrder.map(([sectionKey, fallbackTitle]) => {
+        const matched = rows.find((item) => {
+          const key = asText(item && (item.section_key || item.sectionKey))
+          const title = asText(item && item.title)
+          return key === sectionKey || title === fallbackTitle
+        })
+        if (!matched || typeof matched !== 'object') return null
+        const dimensions = Array.isArray(matched.dimensions) ? matched.dimensions : []
+        return {
+          sectionKey,
+          title: asText(matched.title || fallbackTitle) || fallbackTitle,
+          reasoning: asText(matched.reasoning),
+          dimensions: dimensions
+            .map((item) => ({
+              key: asText(item && item.key),
+              label: asText(item && item.label),
+              conclusion: asText(item && item.conclusion),
+            }))
+            .filter((item) => item.conclusion),
+        }
+      }).filter((item) => item && item.reasoning)
+      if (mapped.length === sectionOrder.length) return mapped
+      return rows.map((item, index) => ({
+        sectionKey: asText(item && (item.section_key || item.sectionKey)) || `legacy-${index}`,
+        title: asText(item && item.title) || '-',
+        reasoning: asText(item && item.reasoning) || '-',
+        dimensions: Array.isArray(item && item.dimensions)
+          ? item.dimensions.map((dim) => ({
+            key: asText(dim && dim.key),
+            label: asText(dim && dim.label),
+            conclusion: asText(dim && dim.conclusion),
+          })).filter((dim) => dim.conclusion)
+          : [],
+      }))
+    },
     getAgentSummaryStatus(panelPayloads = null) {
       const payloads = panelPayloads && typeof panelPayloads === 'object'
         ? cloneObject(panelPayloads)
@@ -279,6 +323,12 @@ function createAgentUiMethods() {
         errorStage: asText(status.error_stage || ''),
         retryable: Object.prototype.hasOwnProperty.call(status, 'retryable') ? !!status.retryable : true,
       }
+    },
+    syncAgentSummaryStateFromPanelPayload(panelPayloads = null) {
+      const payloads = cloneObject(panelPayloads || this.getAgentActiveSummaryPanelPayloads())
+      this.syncAgentSummaryReadinessFromPanelPayload(payloads)
+      this.syncSummaryTaskBoardFromPanelPayload(payloads)
+      return payloads
     },
     hasAgentSummaryPack(summaryPackSeed = null) {
       const summaryPack = summaryPackSeed && typeof summaryPackSeed === 'object'
@@ -303,14 +353,14 @@ function createAgentUiMethods() {
     getAgentSummaryGateTitle() {
       const status = this.getAgentSummaryStatus()
       if (!this.agentSummaryReadiness.ready) {
-        return '总结待生成'
+        return '商业总结'
       }
-      return status.title || '总结待生成'
+      return status.title || '商业总结'
     },
     getAgentSummaryGateDescription() {
       const status = this.getAgentSummaryStatus()
       if (!this.agentSummaryReadiness.ready) {
-        return '该区域需要先补齐 POI / 人口 / 夜光 / 路网分析结果，完成后将一次性生成完整总结。'
+        return ''
       }
       return status.description || '基础分析结果已就绪，但当前还没有可展示的商业判断型总结。'
     },
@@ -479,7 +529,17 @@ function createAgentUiMethods() {
       const key = asText(taskKey)
       return this.getSummaryTaskBoardTasks().find((item) => asText(item && item.key) === key) || null
     },
-    getSummaryTaskStatusLabel(status = '') {
+    summaryTaskHasReusableResult(taskKey = '') {
+      const key = asText(taskKey)
+      const def = getAnalysisTaskDefinition(key)
+      return !!(def && typeof def.hasResult === 'function' && def.hasResult(this))
+    },
+    getSummaryTaskStatusLabel(taskOrStatus = '') {
+      const task = taskOrStatus && typeof taskOrStatus === 'object' ? taskOrStatus : null
+      const status = asText(task ? task.status : taskOrStatus)
+      if (task && status === 'pending' && this.summaryTaskHasReusableResult(task.key)) {
+        return '已有结果'
+      }
       const mapping = {
         pending: '待执行',
         running: '运行中',
@@ -487,7 +547,18 @@ function createAgentUiMethods() {
         completed: '已完成',
         failed: '失败',
       }
-      return mapping[asText(status)] || '待执行'
+      return mapping[status] || '待执行'
+    },
+    getSummaryTaskEmptyLogText(task = null) {
+      const current = task && typeof task === 'object' ? task : {}
+      const status = asText(current.status)
+      if (status === 'pending' && this.summaryTaskHasReusableResult(current.key)) {
+        return '已有结果，可直接复用'
+      }
+      if (status === 'reused') {
+        return '已复用现有结果'
+      }
+      return '暂无日志'
     },
     isSummaryTaskTerminalStatus(status = '') {
       const key = asText(status)
@@ -739,6 +810,12 @@ function createAgentUiMethods() {
       const board = this.ensureSummaryTaskBoard(false)
       return board.runState !== 'running'
     },
+    canRerunSummaryTask(task = null) {
+      const current = task && typeof task === 'object' ? task : {}
+      const key = asText(current.key)
+      if (!key || this.isAgentSummaryBusy()) return false
+      return asText(current.status) !== 'running'
+    },
     canGenerateSummaryAfterTasks() {
       const readiness = this.normalizeAgentSummaryReadiness(this.agentSummaryReadiness)
       if (readiness.ready) return true
@@ -840,6 +917,14 @@ function createAgentUiMethods() {
         this.stopSummaryTaskLogTracking(key)
       }
     },
+    async rerunSummaryTask(taskKey = '') {
+      const key = asText(taskKey)
+      const task = this.getSummaryTaskByKey(key)
+      if (!this.canRerunSummaryTask(task)) return
+      this.agentSummaryError = ''
+      await this.runSummaryTask(key, { force: true, source: 'manual-rerun' })
+      await this.refreshAgentSummaryReadiness(true)
+    },
     async startSummaryParallelFill() {
       if (!this.canRunSummaryParallelFill()) return
       await this.refreshAgentSummaryReadiness(true)
@@ -911,8 +996,8 @@ function createAgentUiMethods() {
         summary_status: {
           status: 'idle',
           generated: false,
-          title: '总结待生成',
-          description: '从 POI 抓取重新开始补齐分析，完成后再生成新的总结版本。',
+          title: '商业总结',
+          description: '',
           message: '',
         },
         summary_pack: {},
@@ -1464,6 +1549,9 @@ function createAgentUiMethods() {
       const targetSummary = cloneArray(tabs.summaryTabs).find((item) => item.id === nextId)
       if (targetSummary) {
         this.syncActiveAgentRuntimeView(this.activeAgentSessionId)
+        this.syncAgentSummaryStateFromPanelPayload(
+          asText(targetSummary.source) === 'current' ? this.agentPanelPayloads : targetSummary.panelPayloads,
+        )
       } else {
         const target = tabs.followupTabs.find((item) => item.id === nextId)
         if (target) {

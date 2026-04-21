@@ -600,15 +600,17 @@ function createAgentRuntimeMethods() {
       }
     },
     buildAgentAnalysisFingerprint() {
-      const historyId = Number(this.currentHistoryRecordId || 0)
-      if (asText(this.scopeSource) === 'history' && Number.isFinite(historyId) && historyId > 0) {
-        return `history:${Math.floor(historyId)}`
+      const historyId = asText(this.currentHistoryRecordId)
+      if (asText(this.scopeSource) === 'history' && historyId) {
+        return `history:${historyId}`
       }
       const scope = this.getIsochronePolygonPayload()
       const drawnScope = (typeof this.getDrawnScopePolygonPoints === 'function') ? this.getDrawnScopePolygonPoints() : []
       const scopeForFingerprint = Array.isArray(scope) && scope.length >= 3 ? scope : drawnScope
-      if (!Array.isArray(scopeForFingerprint) || scopeForFingerprint.length < 3) return ''
-      return `scope:${stableAgentHash(scopeForFingerprint)}`
+      if (Array.isArray(scopeForFingerprint) && scopeForFingerprint.length >= 3) {
+        return `scope:${stableAgentHash(scopeForFingerprint)}`
+      }
+      return ''
     },
     buildAgentAnalysisSnapshot() {
       const pois = Array.isArray(this.allPoisDetails) ? this.allPoisDetails.slice(0, 500) : []
@@ -629,6 +631,7 @@ function createAgentRuntimeMethods() {
           time_min: Number(this.timeHorizon || 0) || 0,
           source: this.resultDataSource || this.poiDataSource || '',
           scope_source: this.scopeSource || '',
+          history_id: asText(this.currentHistoryRecordId),
         },
         scope: {
           polygon: this.getIsochronePolygonPayload(),

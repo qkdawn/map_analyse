@@ -9,10 +9,14 @@ from sqlalchemy.orm import Session
 from modules.history.service import (
     build_detail_payload,
     build_history_list_dedupe_key,
-    build_history_overwrite_key,
     build_lightweight_list_params,
     build_list_params_from_params,
     serialize_created_at,
+)
+from .history_keys import (
+    build_history_record_id,
+    build_scope_fingerprint_from_polygon,
+    extract_history_key_from_fingerprint,
 )
 from .database import SessionLocal
 from .models import AgentSession, AnalysisHistory, PoiResult
@@ -29,17 +33,20 @@ class HistoryRepo:
         return str(meta.get("analysis_fingerprint") or "").strip()
 
     @staticmethod
-    def _build_history_agent_count_map(session: Session) -> Dict[int, int]:
+    def _build_history_agent_count_map(session: Session) -> Dict[str, int]:
+        history_scope_map = {
+            str(row.id): build_scope_fingerprint_from_polygon(row.result_polygon)
+            for row in session.query(AnalysisHistory.id, AnalysisHistory.result_polygon).all()
+        }
+        scope_to_history = {scope: history_id for history_id, scope in history_scope_map.items() if scope}
         rows = session.query(AgentSession.id, AgentSession.snapshot).all()
-        counter: Dict[int, int] = {}
+        counter: Dict[str, int] = {}
         for _, snapshot in rows:
             fingerprint = HistoryRepo._extract_analysis_fingerprint(snapshot)
-            if not fingerprint.startswith("history:"):
-                continue
-            raw_id = fingerprint.split(":", 1)[1].strip()
-            try:
-                history_id = int(raw_id)
-            except (TypeError, ValueError):
+            history_id = extract_history_key_from_fingerprint(fingerprint)
+            if not history_id and fingerprint.startswith("scope:"):
+                history_id = scope_to_history.get(fingerprint, "")
+            if not history_id:
                 continue
             counter[history_id] = int(counter.get(history_id, 0)) + 1
         return counter
@@ -50,49 +57,44 @@ class HistoryRepo:
         if dialect_name == "mysql":
             return func.json_unquote(extracted)
         return extracted
-
-    def _find_same_history_ids_for_overwrite(self, session: Session, params: Dict[str, Any]) -> List[int]:
-        incoming_key = build_history_overwrite_key(build_list_params_from_params(params))
-        rows = (
-            session.query(AnalysisHistory.id, AnalysisHistory.params)
-            .order_by(desc(AnalysisHistory.id))
-            .all()
-        )
-        matched_ids: List[int] = []
-        for row in rows:
-            row_key = build_history_overwrite_key(build_list_params_from_params(row.params))
-            if row_key == incoming_key:
-                matched_ids.append(int(row.id))
-        return matched_ids
-
-    def create_record(self, params: Dict, polygon: List, pois: List[Dict], description: str = "") -> int:
+    def create_record(self, params: Dict, polygon: List, pois: List[Dict], description: str = "") -> str:
         session: Session = SessionLocal()
         try:
-            same_ids = self._find_same_history_ids_for_overwrite(session, params)
-            if same_ids:
-                session.query(PoiResult).filter(PoiResult.history_id.in_(same_ids)).delete(synchronize_session=False)
-                session.query(AnalysisHistory).filter(AnalysisHistory.id.in_(same_ids)).delete(synchronize_session=False)
+            history_id = build_history_record_id(params, polygon)
+            history = session.get(AnalysisHistory, history_id)
+            if history is None:
+                history = AnalysisHistory(
+                    id=history_id,
+                    params=params,
+                    result_polygon=polygon,
+                    description=description,
+                    created_at=datetime.utcnow(),
+                )
+                session.add(history)
+            else:
+                history.params = params
+                history.result_polygon = polygon
+                history.description = description
+                history.created_at = datetime.utcnow()
 
-            history = AnalysisHistory(
-                params=params,
-                result_polygon=polygon,
-                description=description,
-                created_at=datetime.utcnow(),
-            )
-            session.add(history)
-            session.flush()
-
+            poi_record = session.query(PoiResult).filter_by(history_id=history_id).first()
             if pois:
-                session.add(
-                    PoiResult(
-                        history_id=history.id,
+                if poi_record is None:
+                    poi_record = PoiResult(
+                        history_id=history_id,
                         poi_data=pois,
                         summary={"total": len(pois)},
                     )
-                )
+                    session.add(poi_record)
+                else:
+                    poi_record.poi_data = pois
+                    poi_record.summary = {"total": len(pois)}
+                    poi_record.created_at = datetime.utcnow()
+            elif poi_record is not None:
+                session.delete(poi_record)
 
             session.commit()
-            return history.id
+            return history_id
         except Exception:
             session.rollback()
             raise
@@ -117,7 +119,7 @@ class HistoryRepo:
                         self._json_extract_expr(dialect_name, "$.mode").label("mode"),
                         self._json_extract_expr(dialect_name, "$.source").label("source"),
                     )
-                    .order_by(desc(AnalysisHistory.id))
+                    .order_by(desc(AnalysisHistory.created_at))
                 )
                 build_list_params = build_lightweight_list_params
             else:
@@ -128,7 +130,7 @@ class HistoryRepo:
                         AnalysisHistory.created_at,
                         AnalysisHistory.params,
                     )
-                    .order_by(desc(AnalysisHistory.id))
+                    .order_by(desc(AnalysisHistory.created_at))
                 )
                 build_list_params = lambda row: build_list_params_from_params(row.params)
             if isinstance(limit, int) and limit > 0:
@@ -149,14 +151,14 @@ class HistoryRepo:
                         "description": row.description,
                         "created_at": serialize_created_at(row.created_at),
                         "params": list_params,
-                        "ai_session_count": int(ai_count_map.get(int(row.id), 0)),
+                        "ai_session_count": int(ai_count_map.get(str(row.id), 0)),
                     }
                 )
             return result
         finally:
             session.close()
 
-    def get_detail(self, history_id: int, include_pois: bool = True) -> Optional[Dict]:
+    def get_detail(self, history_id: str, include_pois: bool = True) -> Optional[Dict]:
         session: Session = SessionLocal()
         try:
             history = session.query(AnalysisHistory).filter_by(id=history_id).first()
@@ -184,7 +186,7 @@ class HistoryRepo:
         finally:
             session.close()
 
-    def get_pois(self, history_id: int) -> Optional[Dict]:
+    def get_pois(self, history_id: str) -> Optional[Dict]:
         session: Session = SessionLocal()
         try:
             history_exists = session.query(AnalysisHistory.id).filter_by(id=history_id).first()
@@ -197,10 +199,10 @@ class HistoryRepo:
         finally:
             session.close()
 
-    def delete_record(self, history_id: int) -> bool:
+    def delete_record(self, history_id: str) -> bool:
         session: Session = SessionLocal()
         try:
-            target_fingerprint = f"history:{int(history_id)}"
+            target_fingerprint = f"history:{str(history_id).strip()}"
             linked_agent_ids: List[str] = []
             for row in session.query(AgentSession.id, AgentSession.snapshot).all():
                 fingerprint = self._extract_analysis_fingerprint(row.snapshot)

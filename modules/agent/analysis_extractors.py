@@ -259,6 +259,45 @@ def _nearby_landmarks(snapshot: AnalysisSnapshot, artifacts: Dict[str, Any], cen
     return [item for item in fallback_points if item.get("name")][:3]
 
 
+def _band_metric(
+    value: float | None,
+    *,
+    strong_at: float,
+    moderate_at: float,
+    reverse: bool = False,
+) -> str:
+    if value is None:
+        return "unknown"
+    if reverse:
+        if value <= strong_at:
+            return "strong"
+        if value <= moderate_at:
+            return "moderate"
+        return "weak"
+    if value >= strong_at:
+        return "strong"
+    if value >= moderate_at:
+        return "moderate"
+    return "weak"
+
+
+def _combine_signal(signals: List[str]) -> str:
+    filtered = [item for item in signals if item in {"strong", "moderate", "weak"}]
+    if not filtered:
+        return "unknown"
+    score = 0
+    for item in filtered:
+        if item == "strong":
+            score += 1
+        elif item == "weak":
+            score -= 1
+    if score >= 1:
+        return "strong"
+    if score <= -1:
+        return "weak"
+    return "moderate"
+
+
 def _format_approx_address(*, label: str, h3_id: str, center_point: Dict[str, float] | None, nearby: List[Dict[str, Any]]) -> str:
     if nearby:
         primary = nearby[0]
@@ -472,6 +511,41 @@ def build_road_pattern_analysis(snapshot: AnalysisSnapshot, artifacts: Dict[str,
     regression_r2 = _to_float(regression.get("r2"), None)
     metric = str(road_panel.get("metric") or "").strip()
     main_tab = str(road_panel.get("main_tab") or "").strip()
+    avg_connectivity = _to_float(road_summary.get("avg_connectivity"), None)
+    avg_control = _to_float(road_summary.get("avg_control"), None)
+    avg_depth = _to_float(road_summary.get("avg_depth"), None)
+    avg_choice_global = _to_float(road_summary.get("avg_choice_global"), None)
+    avg_choice_local = _to_float(road_summary.get("avg_choice_local"), None)
+    avg_integration_global = _to_float(road_summary.get("avg_integration_global"), None)
+    avg_integration_local = _to_float(road_summary.get("avg_integration_local"), None)
+    avg_intelligibility = _to_float(road_summary.get("avg_intelligibility"), None)
+    avg_intelligibility_r2 = _to_float(
+        road_summary.get("avg_intelligibility_r2"),
+        regression_r2,
+    )
+    default_radius_label = str(road_summary.get("default_radius_label") or "").strip()
+    radius_labels = [str(item).strip() for item in _safe_list(road_summary.get("radius_labels")) if str(item).strip()]
+    connectivity_signal = _combine_signal(
+        [
+            _band_metric(avg_connectivity, strong_at=3.5, moderate_at=2.5),
+            _band_metric(avg_control, strong_at=1.2, moderate_at=0.8),
+        ]
+    )
+    access_signal = _combine_signal(
+        [
+            _band_metric(avg_depth, strong_at=4.0, moderate_at=6.0, reverse=True),
+            _band_metric(avg_choice_local, strong_at=0.015, moderate_at=0.005),
+            _band_metric(avg_choice_global, strong_at=0.015, moderate_at=0.005),
+            _band_metric(avg_integration_local, strong_at=1.2, moderate_at=0.8),
+            _band_metric(avg_integration_global, strong_at=1.2, moderate_at=0.8),
+        ]
+    )
+    readability_signal = _combine_signal(
+        [
+            _band_metric(avg_intelligibility, strong_at=0.5, moderate_at=0.25),
+            _band_metric(avg_intelligibility_r2, strong_at=0.45, moderate_at=0.2),
+        ]
+    )
     pattern_tags: List[str] = []
     if node_count >= 1000 and edge_count >= 1000:
         pattern_tags.append("路网规模较大")
@@ -479,6 +553,18 @@ def build_road_pattern_analysis(snapshot: AnalysisSnapshot, artifacts: Dict[str,
         pattern_tags.append("连接较充分")
     if regression_r2 is not None and regression_r2 >= 0.5:
         pattern_tags.append("结构可读性较强")
+    if connectivity_signal == "strong":
+        pattern_tags.append("内部连通顺畅")
+    elif connectivity_signal == "weak":
+        pattern_tags.append("内部连通偏弱")
+    if access_signal == "strong":
+        pattern_tags.append("主路径承接较强")
+    elif access_signal == "weak":
+        pattern_tags.append("通达效率一般")
+    if readability_signal == "strong":
+        pattern_tags.append("动线识别清晰")
+    elif readability_signal == "weak":
+        pattern_tags.append("动线可读性有限")
     if metric:
         pattern_tags.append(f"当前关注指标:{metric}")
     summary_text = (
@@ -493,6 +579,20 @@ def build_road_pattern_analysis(snapshot: AnalysisSnapshot, artifacts: Dict[str,
         "node_count": node_count,
         "edge_count": edge_count,
         "regression_r2": regression_r2,
+        "avg_connectivity": avg_connectivity,
+        "avg_control": avg_control,
+        "avg_depth": avg_depth,
+        "avg_choice_global": avg_choice_global,
+        "avg_choice_local": avg_choice_local,
+        "avg_integration_global": avg_integration_global,
+        "avg_integration_local": avg_integration_local,
+        "avg_intelligibility": avg_intelligibility,
+        "avg_intelligibility_r2": avg_intelligibility_r2,
+        "default_radius_label": default_radius_label,
+        "radius_labels": radius_labels,
+        "connectivity_signal": connectivity_signal,
+        "access_signal": access_signal,
+        "readability_signal": readability_signal,
         "pattern_tags": pattern_tags,
         "summary_text": summary_text,
     }

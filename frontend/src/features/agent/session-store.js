@@ -18,6 +18,7 @@ import {
   normalizeAgentPanelPreloadNotes,
   normalizeAgentPlanEnvelope,
   normalizeAgentSessionSummary,
+  stableAgentHash,
   sortAgentSessions,
 } from './normalizers.js'
 import {
@@ -47,21 +48,30 @@ function createAgentSessionStoreMethods() {
     getCurrentAgentAnalysisFingerprint() {
       return asText(this.buildAgentAnalysisFingerprint())
     },
+    getCurrentAgentScopeFingerprint() {
+      const scope = typeof this.getIsochronePolygonPayload === 'function' ? this.getIsochronePolygonPayload() : []
+      const drawnScope = (typeof this.getDrawnScopePolygonPoints === 'function') ? this.getDrawnScopePolygonPoints() : []
+      const scopeForFingerprint = Array.isArray(scope) && scope.length >= 3 ? scope : drawnScope
+      if (!Array.isArray(scopeForFingerprint) || scopeForFingerprint.length < 3) return ''
+      return `scope:${stableAgentHash(scopeForFingerprint)}`
+    },
     getCurrentAgentRangeFingerprints() {
       const fingerprints = new Set()
-      const currentFingerprint = this.getCurrentAgentAnalysisFingerprint()
-      if (currentFingerprint) fingerprints.add(currentFingerprint)
-      const historyId = Number(this.currentHistoryRecordId || 0)
-      if (asText(this.scopeSource) === 'history' && Number.isFinite(historyId) && historyId > 0) {
-        fingerprints.add(`history:${Math.floor(historyId)}`)
+      const currentHistoryId = asText(this.currentHistoryRecordId)
+      if (asText(this.scopeSource) === 'history' && currentHistoryId) {
+        fingerprints.add(`history:${currentHistoryId}`)
       }
+      const currentScopeFingerprint = this.getCurrentAgentScopeFingerprint()
+      if (currentScopeFingerprint) fingerprints.add(currentScopeFingerprint)
       const isAgentContext = asText(this.activeStep3Panel) === 'agent'
         || (typeof this.isAgentSummaryTabActive === 'function' && this.isAgentSummaryTabActive())
       if (isAgentContext) {
         const activeId = asText(this.activeAgentSessionId || this.agentConversationId)
         const activeSession = activeId ? this.readSessionState(activeId) : null
         const activeFingerprint = asText(activeSession && activeSession.analysisFingerprint)
-        if (activeFingerprint) fingerprints.add(activeFingerprint)
+        if (activeFingerprint && activeFingerprint === currentScopeFingerprint) {
+          fingerprints.add(activeFingerprint)
+        }
       }
       return Array.from(fingerprints)
     },
@@ -483,8 +493,12 @@ function createAgentSessionStoreMethods() {
           ? data.map((item) => normalizeAgentSessionSummary(item, existingById.get(asText(item && item.id))))
           : []
         const persistedIds = new Set(persistedSessions.map((item) => item.id))
+        const localPersisted = this.agentSessions.filter((item) => {
+          const sessionId = asText(item && item.id)
+          return !!(item && item.persisted && sessionId && !persistedIds.has(sessionId))
+        })
         const localDrafts = this.agentSessions.filter((item) => !item.persisted && !persistedIds.has(asText(item && item.id)))
-        this.updateAgentSessions([...persistedSessions, ...localDrafts], { loaded: true })
+        this.updateAgentSessions([...persistedSessions, ...localPersisted, ...localDrafts], { loaded: true })
         return this.agentSessions
       } finally {
         this.agentSessionsLoading = false

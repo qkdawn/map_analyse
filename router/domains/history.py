@@ -18,15 +18,15 @@ async def get_history_list(limit: int = Query(0, ge=0)):
 
 
 @router.get("/api/v1/analysis/history/{id}/pois")
-async def get_history_pois(id: int):
+async def get_history_pois(id: str):
     return history_service.get_history_pois_payload(id, history_repo)
 
 
 @router.get("/api/v1/analysis/history/{id}")
-async def get_history_detail(id: int, include_pois: bool = Query(True)):
+async def get_history_detail(id: str, include_pois: bool = Query(True)):
     return history_service.get_history_detail_payload(id, include_pois, history_repo)
 
 
 @router.delete("/api/v1/analysis/history/{id}")
-async def delete_history(id: int):
+async def delete_history(id: str):
     return history_service.delete_history_record(id, history_repo)

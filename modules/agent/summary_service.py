@@ -11,6 +11,7 @@ from .analysis_extractors import (
     build_poi_structure_analysis,
     build_population_profile_analysis,
     build_road_pattern_analysis,
+    detect_commercial_hotspots,
     infer_area_character_labels,
     is_h3_structure_ready,
     is_nightlight_pattern_ready,
@@ -39,6 +40,17 @@ _DIMENSION_TO_TASK = {
 }
 _STRUCTURED_TASK_ORDER = ["poi_structure", "spatial_structure", "area_labels"]
 _PHASE_ORDER = ["precheck", "fetch_missing", "derive_analysis", "analysis_started"]
+_SUMMARY_SECTION_SPECS = [
+    ("spatial_structure", "空间结构"),
+    ("poi_structure", "POI结构"),
+    ("consumption_vitality", "消费活力"),
+    ("business_support", "业态承接"),
+]
+_SPATIAL_DIMENSION_SPECS = [
+    ("aggregation", "集聚性"),
+    ("mixing", "混合性"),
+    ("morphology", "形态性"),
+]
 
 
 def _json_safe(value: Any) -> Any:
@@ -200,6 +212,320 @@ def _clean_text(value: Any) -> str:
     return str(value or "").strip()
 
 
+def _safe_float(value: Any) -> float | None:
+    try:
+        if value in (None, ""):
+            return None
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _current_summary(snapshot: Any, artifacts: Dict[str, Any], key: str) -> Dict[str, Any]:
+    artifact = artifacts.get(f"current_{key}_summary")
+    if isinstance(artifact, dict):
+        return dict(artifact)
+    payload = getattr(snapshot, key, {})
+    if isinstance(payload, dict) and isinstance(payload.get("summary"), dict):
+        return dict(payload.get("summary") or {})
+    return {}
+
+
+def _current_commercial_hotspots(snapshot: Any, artifacts: Dict[str, Any], h3_structure: Dict[str, Any]) -> Dict[str, Any]:
+    payload = artifacts.get("current_commercial_hotspots")
+    if isinstance(payload, dict):
+        return dict(payload)
+    return detect_commercial_hotspots(snapshot, artifacts, h3_structure=h3_structure)
+
+
+def _normalize_summary_section_key(value: Any) -> str:
+    text = _clean_text(value).lower()
+    if text in {key for key, _ in _SUMMARY_SECTION_SPECS}:
+        return text
+    aliases = {
+        "空间结构": "spatial_structure",
+        "结构": "spatial_structure",
+        "poi_structure": "poi_structure",
+        "poi结构": "poi_structure",
+        "POI结构": "poi_structure",
+        "业态结构": "poi_structure",
+        "POI占比": "poi_structure",
+        "consumption_vitality": "consumption_vitality",
+        "消费活力": "consumption_vitality",
+        "商业活力": "consumption_vitality",
+        "business_support": "business_support",
+        "业态承接": "business_support",
+        "业态支撑": "business_support",
+        "商业承接": "business_support",
+    }
+    return aliases.get(_clean_text(value), "")
+
+
+def _section_title_for(key: str) -> str:
+    for item_key, label in _SUMMARY_SECTION_SPECS:
+        if item_key == key:
+            return label
+    return ""
+
+
+def _normalize_spatial_dimension_key(value: Any) -> str:
+    text = _clean_text(value).lower()
+    if text in {key for key, _ in _SPATIAL_DIMENSION_SPECS}:
+        return text
+    aliases = {
+        "集聚性": "aggregation",
+        "混合性": "mixing",
+        "形态性": "morphology",
+    }
+    return aliases.get(_clean_text(value), "")
+
+
+def _normalize_spatial_dimensions(items: Any) -> List[Dict[str, str]]:
+    rows = items if isinstance(items, list) else []
+    normalized: List[Dict[str, str]] = []
+    for expected_key, expected_label in _SPATIAL_DIMENSION_SPECS:
+        matched = next(
+            (
+                item for item in rows
+                if isinstance(item, dict) and _normalize_spatial_dimension_key(item.get("key") or item.get("label")) == expected_key
+            ),
+            None,
+        )
+        conclusion = _clean_text((matched or {}).get("conclusion"))
+        if conclusion:
+            normalized.append({"key": expected_key, "label": expected_label, "conclusion": conclusion})
+    return normalized
+
+
+def _should_rewrite_section_reasoning(key: str, text: str) -> bool:
+    content = _clean_text(text)
+    if not content:
+        return True
+    descriptive_openers = {
+        "poi_structure": ("POI构成", "POI结构"),
+        "consumption_vitality": ("夜光模式", "夜间灯光", "消费活力"),
+        "business_support": ("路网条件", "路网结构", "空间条件"),
+    }
+    if any(content.startswith(prefix) for prefix in descriptive_openers.get(key, ())):
+        return True
+    if any(token in content for token in ("反映了", "揭示了", "提供了", "体现了", "呈现了")):
+        judgment_tokens = ("主导", "偏", "较强", "较弱", "明显", "有限", "集中", "分散", "承接", "活跃", "不足", "更像", "适合")
+        return not any(token in content for token in judgment_tokens)
+    return False
+
+
+def _build_poi_structure_judgment(source_payload: Dict[str, Any]) -> str:
+    poi = source_payload.get("poi_structure") if isinstance(source_payload.get("poi_structure"), dict) else {}
+    business = source_payload.get("business_profile") if isinstance(source_payload.get("business_profile"), dict) else {}
+    tags = [str(item).strip() for item in (poi.get("structure_tags") or []) if str(item).strip()]
+    dominant = [str(item).strip() for item in (poi.get("dominant_categories") or []) if str(item).strip()]
+    business_label = _clean_text(business.get("label"))
+    if "生活消费主导" in tags or business_label == "生活消费主导":
+        first = "业态以生活消费为主"
+    elif business_label:
+        first = f"业态呈现{business_label}特征"
+    elif tags:
+        first = f"业态以{tags[0]}为主"
+    else:
+        first = "业态结构已有明确主次"
+    if len(dominant) >= 2:
+        second = f"{dominant[0]}与{dominant[1]}构成主要供给"
+    elif dominant:
+        second = f"{dominant[0]}是最核心的供给类型"
+    else:
+        second = ""
+    extras = [item for item in tags if item not in {business_label, "生活消费主导"}]
+    third = f"{extras[0]}进一步强化了功能定位" if extras else ""
+    return "，".join(part for part in [first, second, third] if part) + "。"
+
+
+def _build_consumption_vitality_judgment(source_payload: Dict[str, Any]) -> str:
+    nightlight = source_payload.get("nightlight_pattern") if isinstance(source_payload.get("nightlight_pattern"), dict) else {}
+    pattern_tags = [str(item).strip() for item in (nightlight.get("pattern_tags") or []) if str(item).strip()]
+    core_hotspot_count = int(nightlight.get("core_hotspot_count") or 0)
+    if core_hotspot_count > 0:
+        first = "夜间活力存在明确热点"
+    elif any("亮灯覆盖高" in item for item in pattern_tags):
+        first = "夜间活力覆盖较广但强核心不足"
+    else:
+        first = "夜间消费活力整体偏弱"
+    if any("中心亮度突出" in item for item in pattern_tags):
+        second = "消费强度更容易集中在少数核心点位"
+    elif core_hotspot_count > 0:
+        second = "消费高峰更可能集中在傍晚到夜间"
+    else:
+        second = "更像日间与傍晚主导的日常消费场景"
+    return "，".join(part for part in [first, second] if part) + "。"
+
+
+def _build_business_support_judgment(source_payload: Dict[str, Any]) -> str:
+    road = source_payload.get("road_pattern") if isinstance(source_payload.get("road_pattern"), dict) else {}
+    business = source_payload.get("business_profile") if isinstance(source_payload.get("business_profile"), dict) else {}
+    connectivity = _clean_text(((road.get("connectivity") or {}).get("signal")))
+    access = _clean_text(((road.get("access") or {}).get("signal")))
+    readability = _clean_text(((road.get("readability") or {}).get("signal")))
+    business_label = _clean_text(business.get("label")) or "当前业态"
+
+    connectivity_sentence = {
+        "strong": "内部路网连通顺畅，节点之间互达性较好",
+        "moderate": "内部路网连通性中等，片区内到达基本顺畅",
+        "weak": "内部路网连通偏弱，局部转换效率受限",
+    }.get(connectivity, "内部路网已有基本支撑")
+    access_sentence = {
+        "strong": "主路径承接能力较强，更容易形成稳定通行流",
+        "moderate": "通达效率中等，更适合片区内日常通行",
+        "weak": "被经过与主路径承接能力有限，难以形成高流动性优势",
+    }.get(access, "")
+    readability_sentence = {
+        "strong": "动线识别清晰，有利于组织消费动线",
+        "moderate": "动线可读性尚可，商业识别成本可控",
+        "weak": "动线可读性有限，不利于快速识别与导流",
+    }.get(readability, "")
+
+    strong_count = sum(1 for item in (connectivity, access, readability) if item == "strong")
+    weak_count = sum(1 for item in (connectivity, access, readability) if item == "weak")
+    if strong_count >= 2:
+        closing = f"整体上对{business_label}的空间承接较强。"
+    elif weak_count >= 2:
+        closing = f"整体更适合片区内日常服务，对{business_label}的扩张承接偏谨慎。"
+    else:
+        closing = f"整体能承接{business_label}，但更偏向中等强度的片区服务。"
+    return "。".join(part for part in [connectivity_sentence, access_sentence, readability_sentence] if part) + f"。{closing}"
+
+
+def _normalize_secondary_reasoning_with_judgment(pack: Dict[str, Any], source_payload: Dict[str, Any]) -> Dict[str, Any]:
+    normalized = dict(pack or {})
+    rows = normalized.get("secondary_conclusions")
+    if not isinstance(rows, list):
+        return normalized
+    rewritten: List[Dict[str, Any]] = []
+    for item in rows:
+        row = dict(item or {})
+        key = _clean_text(row.get("section_key"))
+        reasoning = _clean_text(row.get("reasoning"))
+        if key == "poi_structure" and _should_rewrite_section_reasoning(key, reasoning):
+            row["reasoning"] = _build_poi_structure_judgment(source_payload)
+        elif key == "consumption_vitality" and _should_rewrite_section_reasoning(key, reasoning):
+            row["reasoning"] = _build_consumption_vitality_judgment(source_payload)
+        elif key == "business_support" and _should_rewrite_section_reasoning(key, reasoning):
+            row["reasoning"] = _build_business_support_judgment(source_payload)
+        rewritten.append(row)
+    normalized["secondary_conclusions"] = rewritten
+    return normalized
+
+
+def _build_section_generation_prompt(section_key: str) -> str:
+    title = _section_title_for(section_key)
+    base = (
+        "你是 gaode-map 的商业总结撰写器。"
+        "现在只生成一个二级结论卡片，必须输出 JSON，不要输出 markdown。"
+    )
+    if section_key == "spatial_structure":
+        return (
+            base
+            + "JSON 结构固定为："
+            + "{\"section_key\":\"spatial_structure\",\"title\":\"空间结构\",\"reasoning\":\"...\",\"dimensions\":["
+            + "{\"key\":\"aggregation\",\"label\":\"集聚性\",\"conclusion\":\"...\"},"
+            + "{\"key\":\"mixing\",\"label\":\"混合性\",\"conclusion\":\"...\"},"
+            + "{\"key\":\"morphology\",\"label\":\"形态性\",\"conclusion\":\"...\"}"
+            + "]}"
+            + "规则："
+            + "1. 只回答这个圈的空间组织，不要写人口、夜光、客户画像。"
+            + "2. reasoning 必须是商业判断句，不要写成指标描述。"
+            + "3. dimensions 固定输出 aggregation、mixing、morphology 三条。"
+        )
+    focus_rules = {
+        "poi_structure": "只写主导业态、占比结构和功能特征，要写成判断句，不要写成“反映了/体现了”。",
+        "consumption_vitality": "只写活跃时段、夜间强弱和消费强度，要写成判断句，不要写成说明句。",
+        "business_support": "只写路网与空间条件对现有业态的承接。必须先写连通性，再写通达效率，再写认知可读性，最后落到承接判断。",
+    }
+    return (
+        base
+        + "JSON 结构固定为："
+        + f'{{"section_key":"{section_key}","title":"{title}","reasoning":"..."}}'
+        + "规则："
+        + focus_rules.get(section_key, "只写当前段落对应的商业判断。")
+        + " reasoning 必须直接下判断，推荐使用“以…为主”“偏…”“较强/较弱”“明显/有限”“更适合…”等表达。"
+    )
+
+
+def _build_section_generation_payload(section_key: str, source_payload: Dict[str, Any]) -> Dict[str, Any]:
+    common = {
+        "section_key": section_key,
+        "section_title": _section_title_for(section_key),
+        "guardrails": {
+            "write_judgment_not_description": True,
+            "no_raw_metric_recital": True,
+        },
+    }
+    if section_key == "spatial_structure":
+        return {
+            **common,
+            "spatial_structure": dict(source_payload.get("spatial_structure") or {}),
+            "area_labels": list(source_payload.get("area_labels") or []),
+        }
+    if section_key == "poi_structure":
+        return {
+            **common,
+            "poi_structure": dict(source_payload.get("poi_structure") or {}),
+            "business_profile": dict(source_payload.get("business_profile") or {}),
+        }
+    if section_key == "consumption_vitality":
+        return {
+            **common,
+            "nightlight_pattern": dict(source_payload.get("nightlight_pattern") or {}),
+            "business_profile": dict(source_payload.get("business_profile") or {}),
+        }
+    if section_key == "business_support":
+        return {
+            **common,
+            "poi_structure": dict(source_payload.get("poi_structure") or {}),
+            "business_profile": dict(source_payload.get("business_profile") or {}),
+            "road_pattern": dict(source_payload.get("road_pattern") or {}),
+        }
+    return common
+
+
+def _validate_secondary_section_payload(section_key: str, raw: Dict[str, Any]) -> Dict[str, Any]:
+    if not isinstance(raw, dict):
+        return {}
+    key = _normalize_summary_section_key(raw.get("section_key") or raw.get("title"))
+    if key != section_key:
+        return {}
+    reasoning = _clean_text(raw.get("reasoning"))
+    if not reasoning:
+        return {}
+    payload: Dict[str, Any] = {
+        "section_key": section_key,
+        "title": _section_title_for(section_key),
+        "reasoning": reasoning,
+    }
+    if section_key == "spatial_structure":
+        dimensions = _normalize_spatial_dimensions(raw.get("dimensions"))
+        if not dimensions:
+            return {}
+        payload["dimensions"] = dimensions
+    return payload
+
+
+async def _generate_secondary_sections_with_llm(source_payload: Dict[str, Any]) -> List[Dict[str, Any]]:
+    sections: List[Dict[str, Any]] = []
+    for section_key, section_title in _SUMMARY_SECTION_SPECS:
+        raw = await _invoke_json_role(
+            system_prompt=_build_section_generation_prompt(section_key),
+            user_payload=_build_section_generation_payload(section_key, source_payload),
+            emit=None,
+            phase=f"summary_section_{section_key}",
+            title=f"生成{section_title}结论",
+            reasoning_id=f"summary-section-{section_key}",
+        )
+        validated = _validate_secondary_section_payload(section_key, raw)
+        if not validated:
+            return []
+        sections.append(validated)
+    return sections
+
+
 def _top_poi_mix(snapshot: Any) -> List[Dict[str, Any]]:
     frontend = snapshot.frontend_analysis if isinstance(snapshot.frontend_analysis, dict) else {}
     poi_panel = frontend.get("poi") if isinstance(frontend.get("poi"), dict) else {}
@@ -237,7 +563,7 @@ def _derive_icsc_tags(snapshot: Any, artifacts: Dict[str, Any]) -> List[str]:
     return tags[:6]
 
 
-def _summary_pack_system_prompt() -> str:
+def _legacy_summary_pack_system_prompt() -> str:
     return (
         "你是 gaode-map 的商业总结撰写器。"
         "你只负责把已给定的结构化证据整理成商业判断，不得创造新的事实。"
@@ -258,7 +584,7 @@ def _summary_pack_system_prompt() -> str:
     )
 
 
-def _build_summary_llm_payload(snapshot: Any, artifacts: Dict[str, Any]) -> Dict[str, Any]:
+def _legacy_build_summary_llm_payload(snapshot: Any, artifacts: Dict[str, Any]) -> Dict[str, Any]:
     poi_structure = artifacts.get("current_poi_structure_analysis") if isinstance(artifacts.get("current_poi_structure_analysis"), dict) else {}
     h3_structure = artifacts.get("current_h3_structure_analysis") if isinstance(artifacts.get("current_h3_structure_analysis"), dict) else {}
     population_profile = artifacts.get("current_population_profile_analysis") if isinstance(artifacts.get("current_population_profile_analysis"), dict) else {}
@@ -326,7 +652,7 @@ def _normalize_trait_list(items: Any, *, min_items: int = 2, max_items: int = 4)
     return traits[:max_items]
 
 
-def _validate_summary_pack_payload(raw: Dict[str, Any], *, icsc_tags: List[str], evidence_refs: List[str]) -> Dict[str, Any]:
+def _legacy_validate_summary_pack_payload(raw: Dict[str, Any], *, icsc_tags: List[str], evidence_refs: List[str]) -> Dict[str, Any]:
     if not isinstance(raw, dict):
         return {}
     headline = raw.get("headline_judgment") if isinstance(raw.get("headline_judgment"), dict) else {}
@@ -350,6 +676,224 @@ def _validate_summary_pack_payload(raw: Dict[str, Any], *, icsc_tags: List[str],
         },
         "icsc_tags": list(icsc_tags),
         "secondary_conclusions": secondary[:4],
+        "user_profile": {
+            "headline": _clean_text(user_profile.get("headline")),
+            "traits": _normalize_trait_list(user_profile.get("traits")),
+        },
+        "behavior_inference": {
+            "headline": _clean_text(behavior.get("headline")),
+            "traits": _normalize_trait_list(behavior.get("traits")),
+        },
+        "evidence_refs": list(evidence_refs),
+        "confidence": "moderate" if len(evidence_refs) >= 2 else "weak",
+    }
+    if not normalized["headline_judgment"]["summary"]:
+        return {}
+    if not normalized["user_profile"]["headline"] or not normalized["user_profile"]["traits"]:
+        return {}
+    if not normalized["behavior_inference"]["headline"] or not normalized["behavior_inference"]["traits"]:
+        return {}
+    return normalized
+
+
+def _summary_pack_system_prompt() -> str:
+    return (
+        "你是 gaode-map 的商业总结撰写器。"
+        "你只负责把已给定的结构化证据整理成商业判断，不得创造新的事实。"
+        "必须只输出 JSON，不要输出 markdown。"
+        "JSON 结构固定为："
+        "{\"headline_judgment\":{\"summary\":\"...\",\"supporting_clause\":\"...\"},"
+        "\"secondary_conclusions\":["
+        "{\"section_key\":\"spatial_structure\",\"title\":\"空间结构\",\"reasoning\":\"...\",\"dimensions\":["
+        "{\"key\":\"aggregation\",\"label\":\"集聚性\",\"conclusion\":\"...\"},"
+        "{\"key\":\"mixing\",\"label\":\"混合性\",\"conclusion\":\"...\"},"
+        "{\"key\":\"morphology\",\"label\":\"形态性\",\"conclusion\":\"...\"}"
+        "]},"
+        "{\"section_key\":\"poi_structure\",\"title\":\"POI结构\",\"reasoning\":\"...\"},"
+        "{\"section_key\":\"consumption_vitality\",\"title\":\"消费活力\",\"reasoning\":\"...\"},"
+        "{\"section_key\":\"business_support\",\"title\":\"业态承接\",\"reasoning\":\"...\"}"
+        "],"
+        "\"user_profile\":{\"headline\":\"...\",\"traits\":[\"...\"]},"
+        "\"behavior_inference\":{\"headline\":\"...\",\"traits\":[\"...\"]}}"
+        "规则："
+        "1. secondary_conclusions 必须固定输出 4 段，section_key 只能是 spatial_structure、poi_structure、consumption_vitality、business_support。"
+        "2. spatial_structure 只写空间组织，不要写人口、夜光或消费人群判断。"
+        "3. spatial_structure.dimensions 固定输出 3 条：aggregation、mixing、morphology；每条都写一句结构判断。"
+        "4. poi_structure 只写 POI 占比、主导业态和结构特征，主证据是 poi_structure 与 business_profile。"
+        "5. consumption_vitality 只写活跃时段、夜间强弱、全天候特征，主证据是夜光。"
+        "6. business_support 只写当前业态供给是否被路网和空间条件承接，主证据是 POI 结构、business profile、road。"
+        "7. business_support 必须优先按三层顺序组织：先写连通性，再写通达效率，再写认知可读性，最后落到业态承接判断。"
+        "8. 连通性只回答内部是否顺、节点是否容易互达；通达效率只回答是否容易被经过、是否形成主路径；认知可读性只回答动线是否清晰、是否利于识别与组织商业活动。"
+        "9. business_support 至少覆盖三层中的两层，不要只写成一句笼统的'路网连接充分但效率一般'。"
+        "10. poi_structure、consumption_vitality、business_support 的 reasoning 必须是'判断句'，不要写成'反映了/揭示了/提供了'这类说明句。"
+        "11. 这些段落推荐直接使用'以…为主''偏…''较强/较弱''明显/有限''更适合…'这类判定表达开头。"
+        "12. 不要把原始指标、百分比、样本量直接写成主句；不要做数据播报。"
+        "13. 允许引用强/中/弱、清晰/一般/有限这类业务化判断，但不要罗列原始数值。"
+        "14. user_profile 必须写消费者是谁，不能写成区域类型或商业区描述。"
+        "15. behavior_inference 必须写消费行为、频次、时段或跨区吸引力，不能重复 user_profile 或 headline_judgment。"
+        "16. 如果证据不足，也只能基于已给证据做保守判断，不能虚构。"
+        "17. 不要输出 ICSC 标签，这部分会由系统注入。"
+    )
+
+
+def _build_summary_llm_payload(snapshot: Any, artifacts: Dict[str, Any]) -> Dict[str, Any]:
+    poi_structure = artifacts.get("current_poi_structure_analysis") if isinstance(artifacts.get("current_poi_structure_analysis"), dict) else {}
+    h3_structure = artifacts.get("current_h3_structure_analysis") if isinstance(artifacts.get("current_h3_structure_analysis"), dict) else {}
+    population_profile = artifacts.get("current_population_profile_analysis") if isinstance(artifacts.get("current_population_profile_analysis"), dict) else {}
+    nightlight_pattern = artifacts.get("current_nightlight_pattern_analysis") if isinstance(artifacts.get("current_nightlight_pattern_analysis"), dict) else {}
+    road_pattern = artifacts.get("current_road_pattern_analysis") if isinstance(artifacts.get("current_road_pattern_analysis"), dict) else {}
+    business_profile = artifacts.get("current_business_profile") if isinstance(artifacts.get("current_business_profile"), dict) else {}
+    area_labels = artifacts.get("current_area_character_labels") if isinstance(artifacts.get("current_area_character_labels"), dict) else {}
+    commercial_hotspots = _current_commercial_hotspots(snapshot, artifacts, h3_structure)
+    h3_summary = _current_summary(snapshot, artifacts, "h3")
+    return {
+        "task": "summary_pack_generation",
+        "required_sections": [{"section_key": key, "title": title} for key, title in _SUMMARY_SECTION_SPECS],
+        "business_profile": {
+            "label": _clean_text(business_profile.get("business_profile")),
+            "portrait": _clean_text(business_profile.get("portrait")),
+            "summary_text": _clean_text(business_profile.get("summary_text")),
+            "functional_mix_score": business_profile.get("functional_mix_score"),
+        },
+        "poi_structure": {
+            "summary_text": _clean_text(poi_structure.get("summary_text")),
+            "dominant_categories": list(poi_structure.get("dominant_categories") or []),
+            "structure_tags": list(poi_structure.get("structure_tags") or []),
+            "top_category_mix": _top_poi_mix(snapshot),
+        },
+        "spatial_structure": {
+            "distribution_pattern": _clean_text(h3_structure.get("distribution_pattern")),
+            "summary_text": _clean_text(h3_structure.get("summary_text")),
+            "hotspot_mode": _clean_text(commercial_hotspots.get("hotspot_mode")),
+            "hotspot_summary": _clean_text(commercial_hotspots.get("summary_text")),
+            "core_zone_count": commercial_hotspots.get("core_zone_count"),
+            "opportunity_zone_count": commercial_hotspots.get("opportunity_zone_count"),
+            "dimensions": {
+                "aggregation": {
+                    "focus": "判断圈内空间信号是强集聚、弱集聚还是分散。",
+                    "evidence": {
+                        "avg_density_poi_per_km2": h3_summary.get("avg_density_poi_per_km2"),
+                        "global_moran_i_density": h3_summary.get("global_moran_i_density"),
+                        "global_moran_z_score": h3_summary.get("global_moran_z_score"),
+                        "gi_stats": dict(h3_structure.get("gi_stats") or {}),
+                        "lisa_stats": dict(h3_structure.get("lisa_stats") or {}),
+                        "core_zone_count": commercial_hotspots.get("core_zone_count"),
+                        "opportunity_zone_count": commercial_hotspots.get("opportunity_zone_count"),
+                    },
+                },
+                "mixing": {
+                    "focus": "判断圈内功能是单一、复合还是混合。",
+                    "evidence": {
+                        "avg_local_entropy": h3_summary.get("avg_local_entropy"),
+                        "functional_mix_score": business_profile.get("functional_mix_score"),
+                        "poi_structure_tags": list(poi_structure.get("structure_tags") or []),
+                        "business_profile_label": _clean_text(business_profile.get("business_profile")),
+                    },
+                },
+                "morphology": {
+                    "focus": "判断圈内结构形态是单核、多核、廊道还是离散。",
+                    "evidence": {
+                        "distribution_pattern": _clean_text(h3_structure.get("distribution_pattern")),
+                        "hotspot_mode": _clean_text(commercial_hotspots.get("hotspot_mode")),
+                        "structure_signal_count": h3_structure.get("structure_signal_count"),
+                        "hotspot_count": h3_structure.get("hotspot_count"),
+                        "opportunity_count": h3_structure.get("opportunity_count"),
+                    },
+                },
+            },
+        },
+        "population_profile": {
+            "summary_text": _clean_text(population_profile.get("summary_text")),
+            "total_population": population_profile.get("total_population"),
+            "top_age_band": _clean_text(population_profile.get("top_age_band")),
+        },
+        "nightlight_pattern": {
+            "summary_text": _clean_text(nightlight_pattern.get("summary_text")),
+            "total_radiance": nightlight_pattern.get("total_radiance"),
+            "core_hotspot_count": nightlight_pattern.get("core_hotspot_count"),
+            "pattern_tags": list(nightlight_pattern.get("pattern_tags") or []),
+        },
+        "road_pattern": {
+            "summary_text": _clean_text(road_pattern.get("summary_text")),
+            "node_count": road_pattern.get("node_count"),
+            "edge_count": road_pattern.get("edge_count"),
+            "regression_r2": road_pattern.get("regression_r2"),
+            "default_radius_label": _clean_text(road_pattern.get("default_radius_label")),
+            "radius_labels": list(road_pattern.get("radius_labels") or []),
+            "connectivity": {
+                "focus": "判断圈内路网是否顺畅、节点之间是否容易互达。",
+                "signal": _clean_text(road_pattern.get("connectivity_signal")),
+                "avg_connectivity": road_pattern.get("avg_connectivity"),
+                "avg_control": road_pattern.get("avg_control"),
+            },
+            "access": {
+                "focus": "判断该范围是否容易被经过、是否具备主路径承接效率。",
+                "signal": _clean_text(road_pattern.get("access_signal")),
+                "avg_depth": road_pattern.get("avg_depth"),
+                "avg_choice_global": road_pattern.get("avg_choice_global"),
+                "avg_choice_local": road_pattern.get("avg_choice_local"),
+                "avg_integration_global": road_pattern.get("avg_integration_global"),
+                "avg_integration_local": road_pattern.get("avg_integration_local"),
+            },
+            "readability": {
+                "focus": "判断路网动线是否清晰、是否利于识别与组织商业活动。",
+                "signal": _clean_text(road_pattern.get("readability_signal")),
+                "avg_intelligibility": road_pattern.get("avg_intelligibility"),
+                "avg_intelligibility_r2": road_pattern.get("avg_intelligibility_r2"),
+            },
+            "pattern_tags": list(road_pattern.get("pattern_tags") or []),
+        },
+        "area_labels": list(area_labels.get("character_tags") or []),
+        "guardrails": {
+            "write_business_judgment_not_data_description": True,
+            "no_raw_metric_recital_as_headline": True,
+            "user_profile_must_describe_people": True,
+            "behavior_inference_must_describe_usage": True,
+            "secondary_conclusions_are_fixed_sections": True,
+            "customer_profile_is_not_a_secondary_conclusion": True,
+            "business_support_should_cover_road_layers": True,
+        },
+    }
+
+
+def _validate_summary_pack_payload(raw: Dict[str, Any], *, icsc_tags: List[str], evidence_refs: List[str]) -> Dict[str, Any]:
+    if not isinstance(raw, dict):
+        return {}
+    headline = raw.get("headline_judgment") if isinstance(raw.get("headline_judgment"), dict) else {}
+    secondary_raw = raw.get("secondary_conclusions") if isinstance(raw.get("secondary_conclusions"), list) else []
+    user_profile = raw.get("user_profile") if isinstance(raw.get("user_profile"), dict) else {}
+    behavior = raw.get("behavior_inference") if isinstance(raw.get("behavior_inference"), dict) else {}
+    secondary_by_key: Dict[str, Dict[str, Any]] = {}
+    for item in secondary_raw:
+        if not isinstance(item, dict):
+            continue
+        key = _normalize_summary_section_key(item.get("section_key") or item.get("title"))
+        reasoning = _clean_text(item.get("reasoning"))
+        if not key or not reasoning:
+            continue
+        payload: Dict[str, Any] = {
+            "section_key": key,
+            "title": _section_title_for(key),
+            "reasoning": reasoning,
+        }
+        if key == "spatial_structure":
+            payload["dimensions"] = _normalize_spatial_dimensions(item.get("dimensions"))
+        secondary_by_key[key] = payload
+    secondary: List[Dict[str, Any]] = []
+    for key, _ in _SUMMARY_SECTION_SPECS:
+        item = secondary_by_key.get(key)
+        if not item:
+            return {}
+        if key == "spatial_structure" and not item.get("dimensions"):
+            return {}
+        secondary.append(item)
+    normalized = {
+        "headline_judgment": {
+            "summary": _clean_text(headline.get("summary")),
+            "supporting_clause": _clean_text(headline.get("supporting_clause")),
+        },
+        "icsc_tags": list(icsc_tags),
+        "secondary_conclusions": secondary,
         "user_profile": {
             "headline": _clean_text(user_profile.get("headline")),
             "traits": _normalize_trait_list(user_profile.get("traits")),
@@ -398,9 +942,10 @@ def _build_summary_status(
 async def _generate_summary_pack_with_llm(snapshot: Any, artifacts: Dict[str, Any]) -> Dict[str, Any]:
     if not is_llm_enabled():
         return {}
+    source_payload = _build_summary_llm_payload(snapshot, artifacts)
     payload = await _invoke_json_role(
         system_prompt=_summary_pack_system_prompt(),
-        user_payload=_build_summary_llm_payload(snapshot, artifacts),
+        user_payload=source_payload,
         emit=None,
         phase="summary_pack",
         title="生成商业判断型总结",
@@ -408,7 +953,18 @@ async def _generate_summary_pack_with_llm(snapshot: Any, artifacts: Dict[str, An
     )
     icsc_tags = _derive_icsc_tags(snapshot, artifacts)
     evidence_refs = build_citations(snapshot, artifacts)
-    return _validate_summary_pack_payload(payload, icsc_tags=icsc_tags, evidence_refs=evidence_refs)
+    validated = _validate_summary_pack_payload(payload, icsc_tags=icsc_tags, evidence_refs=evidence_refs)
+    normalized = _normalize_secondary_reasoning_with_judgment(validated, source_payload)
+    if not normalized:
+        return {}
+    try:
+        secondary_sections = await _generate_secondary_sections_with_llm(source_payload)
+    except Exception:
+        secondary_sections = []
+    if len(secondary_sections) == len(_SUMMARY_SECTION_SPECS):
+        normalized["secondary_conclusions"] = secondary_sections
+        normalized = _normalize_secondary_reasoning_with_judgment(normalized, source_payload)
+    return normalized
 
 
 async def evaluate_summary_readiness(payload: AgentSummaryRequest) -> AgentSummaryReadinessResponse:

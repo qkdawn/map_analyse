@@ -2,7 +2,7 @@
         return {
             historyDetailAbortController: null,
             historyDetailLoadToken: 0,
-            currentHistoryRecordId: 0,
+            currentHistoryRecordId: '',
         };
     }
 
@@ -320,8 +320,8 @@
                 setTimeout(() => this.resizePoiChart(), 0);
             },
             async loadHistoryDetail(id) {
-                const historyId = Number(id || 0);
-                if (!Number.isFinite(historyId) || historyId <= 0) return;
+                const historyId = String(id || '').trim();
+                if (!historyId) return;
                 let controller = null;
                 let baseRestored = false;
                 try {

@@ -214,12 +214,20 @@
                                 </section>
                                 <section class="agent-summary-card">
                                     <div class="agent-summary-card-title">二级结论</div>
-                                    <div class="agent-summary-kv">
-                                        <div
-                                            v-for="(item, idx) in (getAgentSummaryPack().secondary_conclusions || [])"
-                                            :key="`summary-secondary-${idx}`">
-                                            <strong>{{ item.title || '-' }}：</strong>{{ item.reasoning || '-' }}
-                                        </div>
+                                    <div class="agent-summary-secondary-grid">
+                                        <section
+                                            v-for="(item, idx) in getAgentSummarySecondaryConclusions()"
+                                            :key="`summary-secondary-${idx}`"
+                                            class="agent-summary-secondary-panel">
+                                            <div class="agent-summary-secondary-panel-title">{{ item.title || '-' }}</div>
+                                            <div class="agent-summary-secondary-panel-body">{{ item.reasoning || '-' }}</div>
+                                            <div
+                                                v-for="(dimension, dimIdx) in (item.dimensions || [])"
+                                                :key="`summary-secondary-${idx}-dim-${dimIdx}`"
+                                                class="agent-summary-secondary-dimension">
+                                                <strong>{{ dimension.label || '-' }}:</strong>{{ dimension.conclusion || '-' }}
+                                            </div>
+                                        </section>
                                     </div>
                                 </section>
                                 <section class="agent-summary-card">
@@ -272,15 +280,9 @@
                                     <div class="agent-summary-gate-icon">!</div>
                                     <div>
                                         <div class="agent-summary-gate-title">{{ getAgentSummaryGateTitle() }}</div>
-                                        <div class="agent-summary-gate-desc">{{ getAgentSummaryGateDescription() }}</div>
+                                        <div v-if="getAgentSummaryGateDescription()" class="agent-summary-gate-desc">{{ getAgentSummaryGateDescription() }}</div>
                                     </div>
                                 </div>
-
-                                <div v-if="getAgentSummaryMissingTaskLabels().length" class="agent-summary-gate-missing">
-                                    <div class="agent-summary-gate-subtitle">当前缺失</div>
-                                    <span v-for="(item, idx) in getAgentSummaryMissingTaskLabels()" :key="`summary-missing-${idx}`">{{ item }}</span>
-                                </div>
-
                                 <div class="agent-summary-gate-meta">
                                     <div
                                         class="agent-summary-gate-progress"
@@ -303,7 +305,16 @@
                                             }">
                                             <div class="agent-summary-task-head">
                                                 <div class="agent-summary-task-title">{{ task.label }}</div>
-                                                <div class="agent-summary-task-status">{{ getSummaryTaskStatusLabel(task.status) }}</div>
+                                                <div class="agent-summary-task-head-actions">
+                                                    <button
+                                                        v-if="canRerunSummaryTask(task)"
+                                                        type="button"
+                                                        class="agent-summary-task-rerun-btn"
+                                                        @click="rerunSummaryTask(task.key)">
+                                                        重跑
+                                                    </button>
+                                                    <div class="agent-summary-task-status">{{ getSummaryTaskStatusLabel(task) }}</div>
+                                                </div>
                                             </div>
 
                                             <div v-if="task.key === 'poi_grid'" class="agent-summary-task-params">
@@ -318,7 +329,7 @@
                                             </div>
 
                                             <div class="agent-summary-task-logs">
-                                                <div v-if="!(task.logs || []).length" class="agent-summary-task-log-empty">暂无日志</div>
+                                                <div v-if="!(task.logs || []).length" class="agent-summary-task-log-empty">{{ getSummaryTaskEmptyLogText(task) }}</div>
                                                 <div
                                                     v-for="(log, logIndex) in (task.logs || [])"
                                                     :key="`summary-task-log-${task.key}-${logIndex}`"
@@ -362,9 +373,6 @@
                                         @click="startSummaryFullRecompute()">
                                         从抓取重新开始
                                     </button>
-                                </div>
-                                <div class="agent-summary-gate-hint">
-                                    先补齐五项分析，再生成当前范围的总结版本。
                                 </div>
                             </div>
                         </div>

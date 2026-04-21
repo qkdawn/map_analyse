@@ -11,7 +11,7 @@
             historyFetchAbortController: null,
             isSelectionMode: false,
             selectedHistoryIds: [],
-            currentHistoryRecordId: 0,
+            currentHistoryRecordId: '',
         };
     }
 

@@ -1,13 +1,19 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import desc
+from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
 from .database import SessionLocal
-from .models import AgentSession
+from .history_keys import (
+    build_scope_fingerprint_from_polygon,
+    coerce_json_value,
+    extract_history_key_from_fingerprint,
+)
+from .models import AgentSession, AnalysisHistory
 
 
 def _clone_json_payload(payload: Any) -> Any:
@@ -39,6 +45,34 @@ def _normalize_session_kind(value: Any) -> str:
     return ""
 
 
+def _coerce_json_text(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return ""
+        try:
+            decoded = json.loads(text)
+        except (TypeError, ValueError):
+            return text
+        return str(decoded or "").strip() if not isinstance(decoded, (dict, list)) else text
+    return str(value).strip()
+
+
+def _coerce_bool(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    text = _coerce_json_text(value).lower()
+    if text in {"1", "true", "yes", "on"}:
+        return True
+    if text in {"0", "false", "no", "off", "null", ""}:
+        return False
+    return bool(text)
+
+
 def _extract_snapshot_session_flags(snapshot: Any) -> tuple[str, bool, bool]:
     if not isinstance(snapshot, dict):
         return "", False, False
@@ -66,19 +100,61 @@ def _extract_snapshot_session_flags(snapshot: Any) -> tuple[str, bool, bool]:
             session_kind = "followup"
     return session_kind, has_summary_pack, has_followup_messages
 
-
 class AgentSessionRepo:
     @staticmethod
-    def _build_summary_payload(record: AgentSession) -> Dict[str, Any]:
+    def _resolve_analysis_fingerprint(
+        raw_fingerprint: Any,
+        snapshot: Any,
+        history_id_by_scope: Optional[Dict[str, str]] = None,
+    ) -> str:
+        raw_text = _coerce_json_text(raw_fingerprint)
+        history_key = extract_history_key_from_fingerprint(raw_text)
+        if history_key:
+            return f"history:{history_key}"
+        direct_scope = build_scope_fingerprint_from_polygon(((snapshot or {}).get("scope") or {}).get("polygon"))
+        if direct_scope and isinstance(history_id_by_scope, dict) and direct_scope in history_id_by_scope:
+            return f"history:{history_id_by_scope[direct_scope]}"
+        direct_drawn = build_scope_fingerprint_from_polygon(((snapshot or {}).get("scope") or {}).get("drawn_polygon"))
+        if direct_drawn and isinstance(history_id_by_scope, dict) and direct_drawn in history_id_by_scope:
+            return f"history:{history_id_by_scope[direct_drawn]}"
+        if raw_text.startswith("scope:") and isinstance(history_id_by_scope, dict) and raw_text in history_id_by_scope:
+            return f"history:{history_id_by_scope[raw_text]}"
+        return raw_text or direct_scope or direct_drawn
+
+    @staticmethod
+    def _resolve_summary_flags(payload: Dict[str, Any]) -> Dict[str, Any]:
+        session_kind = _normalize_session_kind(payload.get("session_kind"))
+        has_summary_pack = _coerce_bool(payload.get("has_summary_pack"))
+        has_followup_messages = _coerce_bool(payload.get("has_followup_messages"))
+        if not session_kind:
+            if has_summary_pack and not has_followup_messages:
+                session_kind = "summary"
+            elif has_followup_messages:
+                session_kind = "followup"
+        return {
+            **payload,
+            "title_source": _normalize_title_source(payload.get("title_source")),
+            "analysis_fingerprint": _coerce_json_text(payload.get("analysis_fingerprint")),
+            "session_kind": session_kind,
+            "has_summary_pack": has_summary_pack,
+            "has_followup_messages": has_followup_messages,
+        }
+
+    @staticmethod
+    def _build_summary_payload(record: AgentSession, history_id_by_scope: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
         snapshot = record.snapshot if isinstance(record.snapshot, dict) else {}
         meta = _extract_snapshot_meta(snapshot)
         session_kind, has_summary_pack, has_followup_messages = _extract_snapshot_session_flags(snapshot)
-        return {
+        return AgentSessionRepo._resolve_summary_flags({
             "id": str(record.id or ""),
             "title": str(record.title or ""),
             "preview": str(record.preview or ""),
             "status": str(record.status or "idle"),
-            "analysis_fingerprint": str(meta.get("analysis_fingerprint") or ""),
+            "analysis_fingerprint": AgentSessionRepo._resolve_analysis_fingerprint(
+                meta.get("analysis_fingerprint"),
+                snapshot,
+                history_id_by_scope,
+            ),
             "is_pinned": bool(record.is_pinned),
             "title_source": _normalize_title_source(meta.get("title_source")),
             "session_kind": session_kind,
@@ -87,27 +163,79 @@ class AgentSessionRepo:
             "created_at": record.created_at,
             "updated_at": record.updated_at,
             "pinned_at": record.pinned_at,
-        }
+        })
 
-    def _build_detail_payload(self, record: AgentSession) -> Dict[str, Any]:
-        payload = self._build_summary_payload(record)
+    def _build_detail_payload(self, record: AgentSession, history_id_by_scope: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
+        payload = self._build_summary_payload(record, history_id_by_scope=history_id_by_scope)
         payload["snapshot"] = _clone_json_payload(record.snapshot if isinstance(record.snapshot, dict) else {})
         return payload
 
     def list_records(self) -> List[Dict[str, Any]]:
         session: Session = SessionLocal()
         try:
-            rows = (
-                session.query(AgentSession)
+            rows = session.execute(
+                select(
+                    AgentSession.id.label("id"),
+                    AgentSession.title.label("title"),
+                    AgentSession.preview.label("preview"),
+                    AgentSession.status.label("status"),
+                    AgentSession.is_pinned.label("is_pinned"),
+                    AgentSession.created_at.label("created_at"),
+                    AgentSession.updated_at.label("updated_at"),
+                    AgentSession.pinned_at.label("pinned_at"),
+                )
+                .select_from(AgentSession)
                 .order_by(
                     desc(AgentSession.is_pinned),
                     desc(AgentSession.pinned_at),
                     desc(AgentSession.updated_at),
                     desc(AgentSession.created_at),
                 )
-                .all()
-            )
-            return [self._build_summary_payload(row) for row in rows]
+            ).mappings().all()
+            session_ids = [str(row["id"] or "") for row in rows if row.get("id")]
+            snapshot_rows = session.execute(
+                select(
+                    AgentSession.id.label("id"),
+                    AgentSession.snapshot.label("snapshot"),
+                )
+                .select_from(AgentSession)
+                .where(AgentSession.id.in_(session_ids))
+            ).mappings().all() if session_ids else []
+            snapshot_by_id = {
+                str(row["id"] or ""): row.get("snapshot") if isinstance(row.get("snapshot"), dict) else {}
+                for row in snapshot_rows
+            }
+            history_rows = session.execute(
+                select(
+                    AnalysisHistory.id.label("id"),
+                    AnalysisHistory.result_polygon.label("result_polygon"),
+                ).select_from(AnalysisHistory)
+            ).mappings().all()
+            history_id_by_scope: Dict[str, str] = {}
+            for row in history_rows:
+                history_id = str(row.get("id") or "").strip()
+                scope_fingerprint = build_scope_fingerprint_from_polygon(row.get("result_polygon"))
+                if history_id and scope_fingerprint:
+                    history_id_by_scope[scope_fingerprint] = history_id
+            payloads: List[Dict[str, Any]] = []
+            for row in rows:
+                payload = dict(row)
+                snapshot = snapshot_by_id.get(str(payload.get("id") or ""), {})
+                meta = _extract_snapshot_meta(snapshot)
+                session_kind, has_summary_pack, has_followup_messages = _extract_snapshot_session_flags(snapshot)
+                payloads.append(self._resolve_summary_flags({
+                    **payload,
+                    "analysis_fingerprint": self._resolve_analysis_fingerprint(
+                        meta.get("analysis_fingerprint"),
+                        snapshot,
+                        history_id_by_scope,
+                    ),
+                    "title_source": meta.get("title_source"),
+                    "session_kind": session_kind,
+                    "has_summary_pack": has_summary_pack,
+                    "has_followup_messages": has_followup_messages,
+                }))
+            return payloads
         finally:
             session.close()
 
@@ -117,7 +245,19 @@ class AgentSessionRepo:
             record = session.get(AgentSession, session_id)
             if record is None:
                 return None
-            return self._build_detail_payload(record)
+            history_rows = session.execute(
+                select(
+                    AnalysisHistory.id.label("id"),
+                    AnalysisHistory.result_polygon.label("result_polygon"),
+                ).select_from(AnalysisHistory)
+            ).mappings().all()
+            history_id_by_scope: Dict[str, str] = {}
+            for row in history_rows:
+                history_id = str(row.get("id") or "").strip()
+                scope_fingerprint = build_scope_fingerprint_from_polygon(row.get("result_polygon"))
+                if history_id and scope_fingerprint:
+                    history_id_by_scope[scope_fingerprint] = history_id
+            return self._build_detail_payload(record, history_id_by_scope=history_id_by_scope)
         finally:
             session.close()
 

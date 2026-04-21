@@ -94,7 +94,7 @@ def build_detail_payload(
     poi_count: Optional[int] = None,
 ) -> Dict[str, Any]:
     payload = {
-        "id": history.id,
+        "id": str(history.id or ""),
         "description": history.description,
         "created_at": serialize_created_at(history.created_at),
         "params": history.params,
@@ -213,21 +213,21 @@ def convert_history_pois_to_gcj02(res: Dict[str, Any]) -> Dict[str, Any]:
     return payload
 
 
-def get_history_detail_payload(history_id: int, include_pois: bool, repo) -> Dict[str, Any]:
+def get_history_detail_payload(history_id: str, include_pois: bool, repo) -> Dict[str, Any]:
     res = repo.get_detail(history_id, include_pois=include_pois)
     if not res:
         raise HTTPException(404, "Record not found")
     return convert_history_detail_to_gcj02(res, include_pois=include_pois)
 
 
-def get_history_pois_payload(history_id: int, repo) -> Dict[str, Any]:
+def get_history_pois_payload(history_id: str, repo) -> Dict[str, Any]:
     res = repo.get_pois(history_id)
     if not res:
         raise HTTPException(404, "Record not found")
     return convert_history_pois_to_gcj02(res)
 
 
-def delete_history_record(history_id: int, repo) -> Dict[str, Any]:
+def delete_history_record(history_id: str, repo) -> Dict[str, Any]:
     if not repo.delete_record(history_id):
         raise HTTPException(404, "Delete failed")
     return {"status": "success", "id": history_id}

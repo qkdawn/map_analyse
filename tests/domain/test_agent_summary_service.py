@@ -2,7 +2,7 @@ import asyncio
 from types import SimpleNamespace
 
 from modules.agent.schemas import AgentSummaryRequest, AnalysisSnapshot
-from modules.agent.summary_service import generate_summary_pack
+from modules.agent.summary_service import evaluate_summary_readiness, generate_summary_pack
 
 
 def _ready_payload():
@@ -107,6 +107,37 @@ def test_generate_summary_pack_marks_llm_unavailable(monkeypatch):
     assert result.panel_payloads["summary_status"]["error_code"] == "llm_unavailable"
     assert result.panel_payloads["summary_status"]["retryable"] is False
     assert "one_line_conclusion" not in result.panel_payloads.get("summary_pack", {})
+
+
+def test_evaluate_summary_readiness_uses_readonly_precheck(monkeypatch):
+    seen = {}
+
+    async def fake_ensure(**kwargs):
+        seen["arguments"] = kwargs.get("arguments")
+        return {
+            "data_readiness": {
+                "checked": True,
+                "ready": False,
+                "reused": ["poi", "nightlight"],
+                "fetched": [],
+            },
+            "artifacts": {},
+            "warnings": [],
+            "error": "",
+        }
+
+    monkeypatch.setattr("modules.agent.summary_service.ensure_area_data_readiness", fake_ensure)
+    monkeypatch.setattr(
+        "modules.agent.summary_service._derive_structured_status",
+        lambda snapshot, artifacts: {"missing_tasks": [], "artifacts": {}},
+    )
+
+    result = asyncio.run(evaluate_summary_readiness(_request()))
+
+    assert seen["arguments"] == {"auto_fetch": False}
+    assert result.data_readiness.ready is False
+    assert result.data_readiness.fetched == []
+    assert result.error == ""
 
 
 def test_generate_summary_pack_rejects_invalid_llm_payload(monkeypatch):

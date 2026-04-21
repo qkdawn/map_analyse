@@ -99,6 +99,7 @@ async def ensure_area_data_readiness(
     artifacts: Dict[str, Any],
     question: str,
 ) -> Dict[str, Any]:
+    auto_fetch = bool(arguments.get("auto_fetch", True))
     policy = resolve_policy(arguments.get("policy_key"), fallback="district_summary")
     local_artifacts = dict(artifacts or {})
     evidence: List[Dict[str, Any]] = []
@@ -172,6 +173,51 @@ async def ensure_area_data_readiness(
     reused_dimensions = [key for key in _DIMENSION_KEYS if key not in missing_dimensions]
     fetched_dimensions: List[str] = []
     failed_dimensions: List[str] = []
+    dimension_tool_names = {
+        "poi": "fetch_pois_in_scope",
+        "h3": "compute_h3_metrics_from_scope_and_pois",
+        "population": "compute_population_overview_from_scope",
+        "nightlight": "compute_nightlight_overview_from_scope",
+        "road": "compute_road_syntax_from_scope",
+    }
+    if not auto_fetch:
+        for dimension_key in _DIMENSION_KEYS:
+            tool_statuses.append(
+                {
+                    "tool_name": dimension_tool_names[dimension_key],
+                    "status": "skipped" if dimension_key in missing_dimensions else "reused",
+                }
+            )
+        bundle_result = {
+            "policy_key": policy["policy_key"],
+            "policy_params": policy,
+            "available_dimensions": _available_dimensions(snapshot, local_artifacts),
+            "tool_statuses": tool_statuses,
+        }
+        data_readiness = {
+            "checked": True,
+            "reused": reused_dimensions,
+            "fetched": [],
+            "ready": not bool(missing_dimensions),
+        }
+        status = "success"
+        error = ""
+        artifacts_payload = {
+            **local_artifacts,
+            "current_area_data_bundle": {**bundle_result, "data_readiness": data_readiness},
+            "current_data_readiness": data_readiness,
+        }
+        return {
+            "status": status,
+            "error": error,
+            "warnings": warnings,
+            "evidence": evidence,
+            "tool_statuses": tool_statuses,
+            "data_readiness": data_readiness,
+            "bundle_result": {**bundle_result, "data_readiness": data_readiness},
+            "artifacts": artifacts_payload,
+        }
+
     dimension_tool_map: List[tuple[str, str, ToolAdapter, Dict[str, Any]]] = [
         ("poi", "fetch_pois_in_scope", fetch_pois_in_scope, {"source": str(arguments.get("source") or "local")}),
         (

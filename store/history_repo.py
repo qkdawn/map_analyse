@@ -3,13 +3,12 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import desc, func
+from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
 from modules.history.service import (
     build_detail_payload,
     build_history_list_dedupe_key,
-    build_lightweight_list_params,
     build_list_params_from_params,
     serialize_created_at,
 )
@@ -51,12 +50,6 @@ class HistoryRepo:
             counter[history_id] = int(counter.get(history_id, 0)) + 1
         return counter
 
-    @staticmethod
-    def _json_extract_expr(dialect_name: str, path: str):
-        extracted = func.json_extract(AnalysisHistory.params, path)
-        if dialect_name == "mysql":
-            return func.json_unquote(extracted)
-        return extracted
     def create_record(self, params: Dict, polygon: List, pois: List[Dict], description: str = "") -> str:
         session: Session = SessionLocal()
         try:
@@ -105,42 +98,29 @@ class HistoryRepo:
         session: Session = SessionLocal()
         try:
             ai_count_map = self._build_history_agent_count_map(session)
-            bind = session.get_bind()
-            dialect_name = bind.dialect.name if bind is not None else ""
-            if dialect_name in {"mysql", "sqlite"}:
-                query = (
-                    session.query(
-                        AnalysisHistory.id,
-                        AnalysisHistory.description,
-                        AnalysisHistory.created_at,
-                        self._json_extract_expr(dialect_name, "$.center").label("center"),
-                        self._json_extract_expr(dialect_name, "$.time_min").label("time_min"),
-                        self._json_extract_expr(dialect_name, "$.keywords").label("keywords"),
-                        self._json_extract_expr(dialect_name, "$.mode").label("mode"),
-                        self._json_extract_expr(dialect_name, "$.source").label("source"),
-                    )
-                    .order_by(desc(AnalysisHistory.created_at))
+            query = (
+                session.query(
+                    AnalysisHistory.id,
+                    AnalysisHistory.description,
+                    AnalysisHistory.created_at,
                 )
-                build_list_params = build_lightweight_list_params
-            else:
-                query = (
-                    session.query(
-                        AnalysisHistory.id,
-                        AnalysisHistory.description,
-                        AnalysisHistory.created_at,
-                        AnalysisHistory.params,
-                    )
-                    .order_by(desc(AnalysisHistory.created_at))
-                )
-                build_list_params = lambda row: build_list_params_from_params(row.params)
+                .order_by(desc(AnalysisHistory.created_at))
+            )
             if isinstance(limit, int) and limit > 0:
                 query = query.limit(limit)
             records = query.all()
+            history_ids = [str(row.id) for row in records]
+            params_by_id = {
+                str(row.id): row.params
+                for row in session.query(AnalysisHistory.id, AnalysisHistory.params)
+                .filter(AnalysisHistory.id.in_(history_ids))
+                .all()
+            } if history_ids else {}
 
             result = []
             seen_keys = set()
             for row in records:
-                list_params = build_list_params(row)
+                list_params = build_list_params_from_params(params_by_id.get(str(row.id)))
                 dedupe_key = build_history_list_dedupe_key(row.description, list_params)
                 if dedupe_key in seen_keys:
                     continue

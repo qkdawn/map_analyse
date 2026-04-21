@@ -435,13 +435,17 @@ function createAgentUiMethods() {
     getSummaryTaskKeysToFill() {
       const missing = this.getSummaryTaskKeysFromReadiness()
       if (missing.length) return missing
-      return this.getSummaryTaskKeys().filter((key) => this.getSummaryTaskByKey(key)?.status !== 'completed')
+      return this.getSummaryTaskKeys().filter((key) => !this.isSummaryTaskTerminalStatus(this.getSummaryTaskByKey(key)?.status))
     },
     filterSummaryTaskKeysForReuse(taskKeys = [], options = {}) {
       const forcePoiFetch = !!options.forcePoiFetch
+      const forceKeys = new Set(cloneArray(options.forceKeys).map((item) => asText(item)).filter(Boolean))
       return cloneArray(taskKeys).filter((key) => {
-        if (asText(key) !== 'poi_fetch' || forcePoiFetch) return true
-        const def = getAnalysisTaskDefinition(key)
+        const normalized = asText(key)
+        if (!normalized) return false
+        if (forceKeys.has(normalized)) return true
+        if (normalized === 'poi_fetch' && forcePoiFetch) return true
+        const def = getAnalysisTaskDefinition(normalized)
         return !(def && typeof def.hasResult === 'function' && def.hasResult(this))
       })
     },
@@ -491,6 +495,53 @@ function createAgentUiMethods() {
       const board = this.normalizeSummaryTaskBoard(payloads.summary_task_board || payloads.summaryTaskBoard || this.summaryTaskBoard)
       this.summaryTaskBoard = board
       return board
+    },
+    syncSummaryTaskBoardFromLocalResults(options = {}) {
+      const board = this.ensureSummaryTaskBoard(false)
+      const now = new Date().toISOString()
+      const tasks = cloneArray(board.tasks).map((task) => {
+        const key = asText(task && task.key)
+        const def = getAnalysisTaskDefinition(key)
+        const isRunning = !!(def && def.runningFlag && this[def.runningFlag])
+        const hasResult = !!(def && typeof def.hasResult === 'function' && def.hasResult(this))
+        const status = isRunning ? 'running' : (hasResult ? 'reused' : 'pending')
+        return {
+          ...task,
+          status,
+          startedAt: status === 'running' ? asText(task.startedAt || now) : asText(task.startedAt),
+          endedAt: status === 'running' ? '' : asText(task.endedAt),
+          durationMs: status === 'pending' ? 0 : Number(task.durationMs || 0) || 0,
+          error: status === 'pending' || status === 'running' || status === 'reused' ? '' : asText(task.error),
+        }
+      })
+      const hasRunning = tasks.some((item) => asText(item.status) === 'running')
+      const pendingKeys = tasks
+        .filter((item) => !this.isSummaryTaskTerminalStatus(item.status))
+        .map((item) => asText(item.key))
+        .filter(Boolean)
+      const runState = hasRunning ? 'running' : (pendingKeys.length ? 'idle' : 'completed')
+      const nextBoard = this.updateSummaryTaskBoard({ ...board, tasks, runState }, { sync: false })
+      const readiness = this.normalizeAgentSummaryReadiness({
+        checked: true,
+        ready: !pendingKeys.length,
+        missingTasks: pendingKeys,
+        reused: tasks.filter((item) => this.isSummaryTaskTerminalStatus(item.status)).map((item) => asText(item.key)),
+        fetched: [],
+      })
+      this.agentSummaryReadiness = readiness
+      this.agentPanelPayloads = {
+        ...cloneObject(this.agentPanelPayloads),
+        data_readiness: {
+          checked: readiness.checked,
+          ready: readiness.ready,
+          missing_tasks: cloneArray(readiness.missingTasks),
+          reused: cloneArray(readiness.reused),
+          fetched: cloneArray(readiness.fetched),
+        },
+        summary_task_board: this.buildSummaryTaskBoardUiState(),
+      }
+      if (options.sync !== false) this.syncCurrentAgentSession()
+      return nextBoard
     },
     buildSummaryTaskBoardUiState() {
       const board = this.ensureSummaryTaskBoard(true)
@@ -807,8 +858,7 @@ function createAgentUiMethods() {
       return !!(task && task.status === 'running')
     },
     canRunSummaryParallelFill() {
-      const board = this.ensureSummaryTaskBoard(false)
-      return board.runState !== 'running'
+      return !this.isAgentSummaryTaskBoardRunning()
     },
     canRerunSummaryTask(task = null) {
       const current = task && typeof task === 'object' ? task : {}
@@ -927,7 +977,8 @@ function createAgentUiMethods() {
     },
     async startSummaryParallelFill() {
       if (!this.canRunSummaryParallelFill()) return
-      await this.refreshAgentSummaryReadiness(true)
+      this.syncSummaryTaskBoardFromLocalResults()
+      if (!this.canRunSummaryParallelFill()) return
       const requestedKeys = this.getSummaryTaskKeysToFill()
       const keysToRun = this.filterSummaryTaskKeysForReuse(requestedKeys, { forcePoiFetch: false })
       const reusedKeys = requestedKeys.filter((key) => !keysToRun.includes(key))
@@ -939,6 +990,7 @@ function createAgentUiMethods() {
           lastRunAt: new Date().toISOString(),
         })
         this.agentSummaryError = ''
+        await this.refreshAgentSummaryReadiness(true)
         return
       }
       const board = this.ensureSummaryTaskBoard(false)
@@ -1163,6 +1215,14 @@ function createAgentUiMethods() {
     },
     isAgentSummaryBusy() {
       return Boolean(this.agentSummaryGenerating || this.agentSummaryLoading)
+    },
+    isAgentSummaryTaskBoardRunning() {
+      const board = this.ensureSummaryTaskBoard(false)
+      return asText(board.runState) === 'running'
+        || cloneArray(board.tasks).some((item) => asText(item && item.status) === 'running')
+    },
+    isAgentSummaryPrimaryActionDisabled() {
+      return Boolean(this.agentSummaryGenerating || this.isAgentSummaryTaskBoardRunning())
     },
     createSummaryHistorySessionId() {
       return `summary-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
@@ -1561,6 +1621,7 @@ function createAgentUiMethods() {
       }
       this.syncCurrentAgentSession()
       if (targetSummary && asText(targetSummary.source) === 'current') {
+        this.syncSummaryTaskBoardFromLocalResults()
         this.refreshAgentSummaryReadiness(false)
       }
     },
@@ -1609,6 +1670,7 @@ function createAgentUiMethods() {
       this.agentTabs = { ...tabs, summaryTabs: cloneArray(tabs.summaryTabs), followupTabs: cloneArray(tabs.followupTabs) }
       this.closeAgentCreateTabMenu()
       this.syncActiveAgentRuntimeView(this.activeAgentSessionId)
+      this.syncSummaryTaskBoardFromLocalResults()
       this.syncCurrentAgentSession()
       this.refreshAgentSummaryReadiness(false)
       return summaryTab.id
@@ -2304,7 +2366,7 @@ function createAgentUiMethods() {
         .map((item) => ({
           id: asText(item && item.id) || 'agent-reasoning',
           phase: asText(item && item.phase),
-          title: asText(item && item.title) || '妯″瀷鎬濊€?',
+          title: asText(item && item.title) || '推理过程',
           content: String((item && item.content) || ''),
           state: asText(item && item.state) || 'active',
         }))
@@ -2450,7 +2512,7 @@ function createAgentUiMethods() {
         this.setAgentTaskConfirmation({
           ...checked,
           status: 'failed',
-          statusLabel: '澶辫触',
+          statusLabel: '执行失败',
           error: err && err.message ? err.message : String(err),
           updatedAt: new Date().toISOString(),
         })
@@ -2516,10 +2578,10 @@ function createAgentUiMethods() {
     getAgentDecisionModeLabel(mode = '') {
       const key = asText(mode || (this.agentDecision && this.agentDecision.mode) || 'judgment')
       return {
-        cognition: '璁ょ煡杈撳嚭',
-        judgment: '鍒ゆ柇杈撳嚭',
-        action: '琛屽姩杈撳嚭',
-      }[key] || '鍒ゆ柇杈撳嚭'
+        cognition: '认知输出',
+        judgment: '判断输出',
+        action: '行动输出',
+      }[key] || '判断输出'
     },
     getAgentStructuredItemKey(item = null, fallbackIndex = 0) {
       if (item && typeof item === 'object') {
@@ -2739,7 +2801,7 @@ function createAgentUiMethods() {
             method: 'DELETE',
           })
           if (!res.ok) {
-            throw new Error(`/api/v1/analysis/agent/sessions/${session.id} DELETE 澶辫触(${res.status})`)
+            throw new Error(`/api/v1/analysis/agent/sessions/${session.id} DELETE 失败(${res.status})`)
           }
         } catch (err) {
           this.updateAgentSessions(previousSessions, { loaded: this.agentSessionsLoaded })
@@ -2755,7 +2817,7 @@ function createAgentUiMethods() {
           } else {
             this.activeAgentSessionId = previousActiveSessionId
           }
-          window.alert(`鍒犻櫎瀵硅瘽澶辫触: ${err && err.message ? err.message : String(err)}`)
+          window.alert(`删除对话失败: ${err && err.message ? err.message : String(err)}`)
           return
         }
       }

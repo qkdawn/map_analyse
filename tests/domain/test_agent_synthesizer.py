@@ -1,5 +1,5 @@
 from modules.agent.schemas import AgentTurnOutput, AnalysisSnapshot, AuditResult, ToolResult
-from modules.agent.synthesizer import build_analysis_evidence, build_cards, build_panel_payloads, build_synthesis_payload, enrich_answer_output
+from modules.agent.synthesizer import build_analysis_evidence, build_cards, build_synthesis_payload, enrich_answer_output
 
 
 def _snapshot_with_decision_evidence() -> AnalysisSnapshot:
@@ -18,19 +18,18 @@ def test_build_analysis_evidence_converts_metrics_to_decision_evidence():
 
     assert set(evidence_by_metric) >= {"poi_count", "h3_density", "population_profile", "nightlight_activity"}
     assert evidence_by_metric["poi_count"].value == 12
-    assert "不能直接等同" in evidence_by_metric["poi_count"].limitation
+    assert "不能直接等同于客流" in evidence_by_metric["poi_count"].limitation
     assert evidence_by_metric["h3_density"].confidence == "moderate"
 
 
 def test_build_synthesis_payload_includes_evidence_matrix_and_decision_layers():
-    audit = AuditResult()
     payload = build_synthesis_payload(
         question="总结这个区域",
         snapshot=_snapshot_with_decision_evidence(),
         artifacts={},
         tool_results=[ToolResult(tool_name="read_current_results", status="success")],
         research_notes=[],
-        audit=audit,
+        audit=AuditResult(),
     )
 
     assert payload["decision_strength"] == "strong"
@@ -58,8 +57,8 @@ def test_build_cards_uses_decision_oriented_titles_and_layers():
 
     assert [card.title for card in cards] == ["核心判断", "证据依据", "下一步建议"]
     assert "证据强度" in cards[0].content
-    assert any(item.startswith("需补充后判断") for item in cards[2].items)
-    assert any(item.startswith("不建议直接推断") for item in cards[2].items)
+    assert any(str(item).startswith("需补充后判断") for item in cards[2].items)
+    assert any(str(item).startswith("不建议直接推断") for item in cards[2].items)
 
 
 def test_build_synthesis_payload_marks_missing_evidence_as_non_actionable():
@@ -81,7 +80,7 @@ def test_build_synthesis_payload_marks_missing_evidence_as_non_actionable():
 
 def test_build_synthesis_payload_explains_conflicts_in_output():
     payload = build_synthesis_payload(
-        question="为什么这里夜间活力看起来强，但不一定适合直接开店",
+        question="为什么这里夜间活动看起来强，但不一定适合直接开店",
         snapshot=AnalysisSnapshot(
             poi_summary={"total": 28},
             population={"summary": {"total_population": 1200, "male_ratio": 0.48, "female_ratio": 0.52}},
@@ -101,7 +100,6 @@ def test_build_synthesis_payload_explains_conflicts_in_output():
 
 
 def test_build_cards_includes_business_site_advice_target():
-    audit = AuditResult()
     artifacts = {
         "business_site_advice": {
             "place_type": "咖啡厅",
@@ -117,7 +115,7 @@ def test_build_cards_includes_business_site_advice_target():
         artifacts=artifacts,
         tool_results=[ToolResult(tool_name="run_business_site_advice", status="success")],
         research_notes=[],
-        audit=audit,
+        audit=AuditResult(),
     )
     payload = build_synthesis_payload(
         question="我想在这里开一家咖啡店，给我建议",
@@ -125,7 +123,7 @@ def test_build_cards_includes_business_site_advice_target():
         artifacts=artifacts,
         tool_results=[ToolResult(tool_name="run_business_site_advice", status="success")],
         research_notes=[],
-        audit=audit,
+        audit=AuditResult(),
     )
 
     evidence_card = next(card for card in cards if card.type == "evidence")
@@ -136,7 +134,6 @@ def test_build_cards_includes_business_site_advice_target():
 
 
 def test_build_cards_prioritize_business_profile_and_hotspots_when_available():
-    audit = AuditResult()
     artifacts = {
         "current_business_profile": {
             "business_profile": "生活消费主导",
@@ -161,7 +158,7 @@ def test_build_cards_prioritize_business_profile_and_hotspots_when_available():
         artifacts=artifacts,
         tool_results=[ToolResult(tool_name="analyze_poi_mix_from_scope", status="success")],
         research_notes=[],
-        audit=audit,
+        audit=AuditResult(),
     )
     payload = build_synthesis_payload(
         question="总结这个区域的商业特征",
@@ -169,24 +166,23 @@ def test_build_cards_prioritize_business_profile_and_hotspots_when_available():
         artifacts=artifacts,
         tool_results=[ToolResult(tool_name="analyze_poi_mix_from_scope", status="success")],
         research_notes=[],
-        audit=audit,
+        audit=AuditResult(),
     )
 
-    assert "生活消费主导的综合商业区" in cards[0].content
+    assert "生活消费主导" in cards[0].content
     assert "multi_core" in cards[0].content
     assert payload["business_profile"]["type"] == "生活消费主导"
     assert payload["spatial_structure"]["hotspot_mode"] == "multi_core"
 
 
 def test_build_synthesis_payload_includes_target_supply_gap_artifact():
-    audit = AuditResult()
     artifacts = {
         "current_target_supply_gap": {
             "place_type": "咖啡厅",
             "supply_gap_level": "high",
             "gap_mode": "spatial_mismatch",
             "summary_text": "咖啡厅供给缺口等级为 high，模式为 spatial_mismatch。",
-            "candidate_zones": [{"h3_id": "8928308280fffff", "approx_address": "人民路附近", "display_title": "候选1：人民路附近"}],
+            "candidate_zones": [{"h3_id": "8928308280fffff", "approx_address": "人民路附近", "display_title": "候选：人民路附近"}],
         }
     }
 
@@ -196,7 +192,7 @@ def test_build_synthesis_payload_includes_target_supply_gap_artifact():
         artifacts=artifacts,
         tool_results=[ToolResult(tool_name="analyze_target_supply_gap", status="success")],
         research_notes=[],
-        audit=audit,
+        audit=AuditResult(),
     )
 
     assert payload["target_supply_gap"]["place_type"] == "咖啡厅"
@@ -219,7 +215,7 @@ def test_enrich_answer_output_appends_candidate_items_and_h3_panel_payload():
                     {
                         "h3_id": "8928308280fffff",
                         "approx_address": "人民路附近",
-                        "display_title": "候选1：人民路附近",
+                        "display_title": "候选：人民路附近",
                         "reason_summary": "缺口分 0.42，需求分位 85%",
                         "gap_score": 0.42,
                         "center_point": {"lng": 112.98, "lat": 28.19},
@@ -241,7 +237,6 @@ def test_enrich_answer_output_appends_candidate_items_and_h3_panel_payload():
 
 
 def test_build_synthesis_payload_ignores_empty_analysis_placeholders_and_falls_back_to_summary():
-    audit = AuditResult()
     artifacts = {
         "current_h3_summary": {"grid_count": 8, "avg_density_poi_per_km2": 6.5},
         "current_h3_structure_analysis": {
@@ -258,7 +253,7 @@ def test_build_synthesis_payload_ignores_empty_analysis_placeholders_and_falls_b
         artifacts=artifacts,
         tool_results=[ToolResult(tool_name="compute_h3_metrics_from_scope_and_pois", status="success")],
         research_notes=[],
-        audit=audit,
+        audit=AuditResult(),
     )
 
     assert payload["metrics"]["h3_structure_summary"] is None

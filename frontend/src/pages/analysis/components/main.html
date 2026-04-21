@@ -262,7 +262,7 @@
                                         <button
                                             type="button"
                                             class="agent-shortcut-chip"
-                                            :disabled="agentSummaryGenerating || agentSummaryLoading"
+                                            :disabled="isAgentSummaryPrimaryActionDisabled()"
                                             @click="resetAgentSummaryRecompute">
                                             {{ agentSummaryGenerating ? '处理中...' : '并行重新获取' }}
                                         </button>
@@ -353,7 +353,7 @@
                                     <button
                                         type="button"
                                         class="agent-summary-gate-btn agent-summary-gate-cta-btn"
-                                        :disabled="agentSummaryLoading || agentSummaryGenerating"
+                                        :disabled="isAgentSummaryPrimaryActionDisabled()"
                                         @click="canGenerateSummaryAfterTasks()
                                             ? generateAgentSummaryPanel()
                                             : (shouldUseSummaryFullRecompute() ? startSummaryFullRecompute() : startSummaryParallelFill())">
@@ -369,7 +369,7 @@
                                         v-if="!canGenerateSummaryAfterTasks() && !shouldUseSummaryFullRecompute()"
                                         type="button"
                                         class="agent-summary-gate-btn is-secondary"
-                                        :disabled="agentSummaryLoading || agentSummaryGenerating"
+                                        :disabled="isAgentSummaryPrimaryActionDisabled()"
                                         @click="startSummaryFullRecompute()">
                                         从抓取重新开始
                                     </button>

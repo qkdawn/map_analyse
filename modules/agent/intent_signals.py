@@ -6,7 +6,7 @@ def mentions_summary(text: str) -> bool:
 
 
 def mentions_road(text: str) -> bool:
-    return any(token in text for token in ("路网", "可达性", "通达"))
+    return any(token in text for token in ("路网", "可达性", "通达", "交通"))
 
 
 def mentions_supply(text: str) -> bool:
@@ -14,7 +14,7 @@ def mentions_supply(text: str) -> bool:
 
 
 def mentions_population(text: str) -> bool:
-    return any(token in text for token in ("人口", "人群", "居民", "常住", "性别"))
+    return any(token in text for token in ("人口", "人群", "居民", "常住", "性别", "年龄"))
 
 
 def mentions_nightlight(text: str) -> bool:

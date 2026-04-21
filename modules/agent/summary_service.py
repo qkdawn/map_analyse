@@ -971,7 +971,7 @@ async def evaluate_summary_readiness(payload: AgentSummaryRequest) -> AgentSumma
     try:
         phases = ["precheck"]
         readiness_payload = await ensure_area_data_readiness(
-            arguments={},
+            arguments={"auto_fetch": False},
             snapshot=payload.analysis_snapshot,
             artifacts={},
             question="summary_readiness_precheck",

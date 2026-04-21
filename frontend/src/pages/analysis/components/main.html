@@ -8,20 +8,21 @@
                             <div>
                                 <div class="agent-tools-eyebrow">Agent Tool Registry</div>
                                 <h2 class="agent-tools-title">工具</h2>
-                                <p class="agent-tools-subtitle">这里展示当前后端 Agent tool registry 中可用的只读元数据，不在工具库内直接执行工具�?/p>
+                                <p class="agent-tools-subtitle">这里展示当前后端 Agent tool registry 中可用的只读元数据，不在工具库内直接执行工具。</p>
                             </div>
                             <button type="button" class="agent-tools-back-btn" @click="backToAgentChat">返回聊天</button>
                         </div>
 
                         <div v-if="agentToolsLoading && !agentTools.length" class="agent-tools-state">
-                            正在加载工具�?..
+                            正在加载工具库...
                         </div>
                         <div v-else-if="agentToolsError" class="agent-tools-state is-error">
                             <div>{{ agentToolsError }}</div>
                             <button type="button" class="agent-tools-retry-btn" @click="loadAgentTools(true)">重试</button>
                         </div>
                         <div v-else-if="!agentTools.length" class="agent-tools-state">
-                            暂无可展示工�?                        </div>
+                            暂无可展示工具
+                        </div>
                         <div v-else class="agent-tools-groups">
                             <section v-for="group in getGroupedAgentTools()" :key="group.key" class="agent-tools-group">
                                 <div class="agent-tools-group-head">
@@ -42,7 +43,7 @@
                                                             <span v-if="tool.uiTier === 'scenario'" class="agent-tool-badge is-primary">Planner 优先</span>
                                                             <span class="agent-tool-badge">{{ getAgentToolLabel(tool.capabilityType) }}</span>
                                                             <span class="agent-tool-readonly" :class="{ 'is-write': !tool.readonly }">
-                                                                {{ tool.readonly ? '只读' : '会写�? }}
+                                                                {{ tool.readonly ? '只读' : '会写入' }}
                                                             </span>
                                                         </div>
                                                     </div>
@@ -84,7 +85,7 @@
                                     <span v-if="getAgentToolDetail().uiTier === 'scenario'" class="agent-tool-badge is-primary">Planner 优先</span>
                                     <span v-if="getAgentToolDetail().defaultPolicyKey" class="agent-tool-badge">{{ getAgentToolDetail().defaultPolicyKey }}</span>
                                     <span class="agent-tool-readonly" :class="{ 'is-write': !getAgentToolDetail().readonly }">
-                                        {{ getAgentToolDetail().readonly ? '只读' : '会写�? }}
+                                        {{ getAgentToolDetail().readonly ? '只读' : '会写入' }}
                                     </span>
                                 </div>
                                 <div class="agent-tool-meta">
@@ -100,35 +101,35 @@
                                         <div v-if="getAgentToolDetail().applicableScenarios.length" class="agent-tool-tags">
                                             <span v-for="item in getAgentToolDetail().applicableScenarios" :key="`${getAgentToolDetail().name}-scene-${item}`">{{ item }}</span>
                                         </div>
-                                        <div v-else class="agent-tool-empty">�?/div>
+                                        <div v-else class="agent-tool-empty">无</div>
                                     </div>
                                     <div class="agent-tool-doc-row">
                                         <div class="agent-tool-artifact-title">输入参数</div>
                                         <div v-if="getAgentToolSchemaFields(getAgentToolDetail().inputSchema).length" class="agent-tool-tags">
                                             <span v-for="item in getAgentToolSchemaFields(getAgentToolDetail().inputSchema)" :key="`${getAgentToolDetail().name}-input-${item}`">{{ item }}</span>
                                         </div>
-                                        <div v-else class="agent-tool-empty">无参�?/div>
+                                        <div v-else class="agent-tool-empty">无参数</div>
                                     </div>
                                     <div class="agent-tool-doc-row">
                                         <div class="agent-tool-artifact-title">输出结果</div>
                                         <div v-if="getAgentToolDetail().produces.length" class="agent-tool-tags">
                                             <span v-for="item in getAgentToolDetail().produces" :key="`${getAgentToolDetail().name}-produces-${item}`">{{ item }}</span>
                                         </div>
-                                        <div v-else class="agent-tool-empty">�?/div>
+                                        <div v-else class="agent-tool-empty">无</div>
                                     </div>
                                     <div class="agent-tool-doc-row">
-                                        <div class="agent-tool-artifact-title">证据链字�?/div>
+                                        <div class="agent-tool-artifact-title">证据链字段</div>
                                         <div v-if="getAgentToolDetail().evidenceContract.length" class="agent-tool-tags">
                                             <span v-for="item in getAgentToolDetail().evidenceContract" :key="`${getAgentToolDetail().name}-evidence-${item}`">{{ item }}</span>
                                         </div>
-                                        <div v-else class="agent-tool-empty">�?/div>
+                                        <div v-else class="agent-tool-empty">无</div>
                                     </div>
                                     <div class="agent-tool-doc-row">
                                         <div class="agent-tool-artifact-title">注意事项</div>
                                         <div v-if="getAgentToolDetail().cautions.length" class="agent-tool-cautions">
-                                            {{ getAgentToolDetail().cautions.join('�?) }}
+                                            {{ getAgentToolDetail().cautions.join('；') }}
                                         </div>
-                                        <div v-else class="agent-tool-empty">�?/div>
+                                        <div v-else class="agent-tool-empty">无</div>
                                     </div>
                                 </div>
                             </section>
@@ -194,7 +195,7 @@
                                 <div class="agent-summary-loading-spinner" aria-hidden="true"></div>
                                 <div class="agent-summary-loading-title">正在生成商业判断型总结</div>
                                 <div class="agent-summary-loading-desc">
-                                    {{ getAgentSummaryPhaseLabel() || '请稍候，正在整合结构化证据并输出总结�? }}
+                                    {{ getAgentSummaryPhaseLabel() || '请稍候，正在整合结构化证据并输出总结' }}
                                 </div>
                             </div>
                             <div v-else-if="shouldShowAgentSummaryGeneratedState()" class="agent-summary-grid">
@@ -206,7 +207,7 @@
                                     </div>
                                 </section>
                                 <section class="agent-summary-card">
-                                    <div class="agent-summary-card-title">商业类型标签（ICSC�?/div>
+                                    <div class="agent-summary-card-title">商业类型标签（ICSC）</div>
                                     <div class="agent-summary-tags">
                                         <span v-for="(tag, idx) in (getAgentSummaryPack().icsc_tags || [])" :key="`summary-icsc-${idx}`">{{ tag }}</span>
                                     </div>
@@ -217,7 +218,7 @@
                                         <div
                                             v-for="(item, idx) in (getAgentSummaryPack().secondary_conclusions || [])"
                                             :key="`summary-secondary-${idx}`">
-                                            <strong>{{ item.title || '-' }}�?/strong>{{ item.reasoning || '-' }}
+                                            <strong>{{ item.title || '-' }}：</strong>{{ item.reasoning || '-' }}
                                         </div>
                                     </div>
                                 </section>
@@ -242,9 +243,9 @@
                                 <section class="agent-summary-card">
                                     <div class="agent-summary-card-title">快捷追问</div>
                                     <div class="agent-summary-actions">
-                                        <button type="button" class="agent-shortcut-chip" @click="openAgentFollowupFromSummary('请解释这份总结背后的证据链与判断依�?)">解释结论依据</button>
-                                        <button type="button" class="agent-shortcut-chip" @click="openAgentFollowupFromSummary('请展开这一范围的业态建议与主要风险')">展开业态建�?/button>
-                                        <button type="button" class="agent-shortcut-chip" @click="openAgentFollowupFromSummary('请把这份总结转成可执行清�?)">转为执行清单</button>
+                                        <button type="button" class="agent-shortcut-chip" @click="openAgentFollowupFromSummary('请解释这份总结背后的证据链与判断依据')">解释结论依据</button>
+                                        <button type="button" class="agent-shortcut-chip" @click="openAgentFollowupFromSummary('请展开这一范围的业态建议与主要风险')">展开业态建议</button>
+                                        <button type="button" class="agent-shortcut-chip" @click="openAgentFollowupFromSummary('请把这份总结转成可执行清单')">转为执行清单</button>
                                     </div>
                                 </section>
                                 <section class="agent-summary-card">
@@ -255,12 +256,12 @@
                                             class="agent-shortcut-chip"
                                             :disabled="agentSummaryGenerating || agentSummaryLoading"
                                             @click="resetAgentSummaryRecompute">
-                                            {{ agentSummaryGenerating ? '处理中�? : '并行重新获取' }}
+                                            {{ agentSummaryGenerating ? '处理中...' : '并行重新获取' }}
                                         </button>
                                     </div>
                                 </section>
                                 <section v-if="agentSummaryError" class="agent-summary-card">
-                                    <div class="agent-summary-card-title">生成状�?/div>
+                                    <div class="agent-summary-card-title">生成状态</div>
                                     <div class="agent-summary-kv">
                                         <div>{{ agentSummaryError }}</div>
                                     </div>
@@ -268,7 +269,7 @@
                             </div>
                             <div v-else class="agent-summary-gate">
                                 <div class="agent-summary-gate-head">
-                                    <div class="agent-summary-gate-icon">�?/div>
+                                    <div class="agent-summary-gate-icon">!</div>
                                     <div>
                                         <div class="agent-summary-gate-title">{{ getAgentSummaryGateTitle() }}</div>
                                         <div class="agent-summary-gate-desc">{{ getAgentSummaryGateDescription() }}</div>
@@ -276,7 +277,7 @@
                                 </div>
 
                                 <div v-if="getAgentSummaryMissingTaskLabels().length" class="agent-summary-gate-missing">
-                                    <div class="agent-summary-gate-subtitle">当前缺失�?/div>
+                                    <div class="agent-summary-gate-subtitle">当前缺失</div>
                                     <span v-for="(item, idx) in getAgentSummaryMissingTaskLabels()" :key="`summary-missing-${idx}`">{{ item }}</span>
                                 </div>
 
@@ -347,10 +348,10 @@
                                             : (shouldUseSummaryFullRecompute() ? startSummaryFullRecompute() : startSummaryParallelFill())">
                                         {{
                                             agentSummaryGenerating
-                                                ? '生成中�?
+                                                ? '生成中...'
                                                 : (canGenerateSummaryAfterTasks()
                                                     ? '生成总结'
-                                                    : (shouldUseSummaryFullRecompute() ? '并行重新获取' : '补齐缺失�?))
+                                                    : (shouldUseSummaryFullRecompute() ? '并行重新获取' : '补齐缺失'))
                                         }}
                                     </button>
                                     <button
@@ -359,16 +360,18 @@
                                         class="agent-summary-gate-btn is-secondary"
                                         :disabled="agentSummaryLoading || agentSummaryGenerating"
                                         @click="startSummaryFullRecompute()">
-                                        从抓取重新开�?                                    </button>
+                                        从抓取重新开始
+                                    </button>
                                 </div>
                                 <div class="agent-summary-gate-hint">
-                                    先补齐五项分析，再生成当前范围的总结版本�?                                </div>
+                                    先补齐五项分析，再生成当前范围的总结版本。
+                                </div>
                             </div>
                         </div>
 
                         <div v-if="!isAgentSummaryTabActive() && !agentHasConversationContent() && !agentLoading && !agentSessionHydrating" class="agent-hero">
-                            <div class="agent-hero-title">我们先从哪里开始呢�?/div>
-                            <div class="agent-hero-subtitle">先说问题，Agent 会调用已有工具和分析能力直接处理�?/div>
+                            <div class="agent-hero-title">我们先从哪里开始呢？</div>
+                            <div class="agent-hero-subtitle">先说问题，Agent 会调用已有工具和分析能力直接处理。</div>
                         </div>
 
                         <div v-if="!isAgentSummaryTabActive() && (agentHasConversationContent() || agentLoading || agentSessionHydrating)" class="agent-thread-shell">
@@ -459,7 +462,7 @@
                                                                     <div class="agent-plan-item-main">
                                                                         <div class="agent-plan-item-title-row">
                                                                             <div class="agent-plan-item-title">{{ item.title }}</div>
-                                                                            <div v-if="item.optional" class="agent-plan-item-optional">可�?/div>
+                                                                            <div v-if="item.optional" class="agent-plan-item-optional">可选</div>
                                                                         </div>
                                                                         <div v-if="item.detail" class="agent-plan-item-detail">{{ item.detail }}</div>
                                                                     </div>
@@ -478,8 +481,8 @@
                                                                 <div class="agent-trace-meta">
                                                                     <span v-if="item.argumentsSummary">参数：{{ item.argumentsSummary }}</span>
                                                                     <span v-if="item.resultSummary">结果：{{ item.resultSummary }}</span>
-                                                                    <span v-if="item.evidenceCount !== undefined && item.evidenceCount !== null && String(item.evidenceCount) !== ''">证据：{{ item.evidenceCount }} �?/span>
-                                                                    <span v-if="item.warningCount !== undefined && item.warningCount !== null && Number(item.warningCount) > 0">警告：{{ item.warningCount }} �?/span>
+                                                                    <span v-if="item.evidenceCount !== undefined && item.evidenceCount !== null && String(item.evidenceCount) !== ''">证据：{{ item.evidenceCount }} 条</span>
+                                                                    <span v-if="item.warningCount !== undefined && item.warningCount !== null && Number(item.warningCount) > 0">警告：{{ item.warningCount }} 条</span>
                                                                 </div>
                                                                 <div v-if="item.producedArtifacts.length" class="agent-process-chip-row">
                                                                     <span v-for="artifact in item.producedArtifacts" :key="`${item.id}-${artifact}`" class="agent-process-chip">{{ artifact }}</span>
@@ -524,7 +527,7 @@
                                                                     class="agent-task-confirmation-btn is-primary"
                                                                     :disabled="agentLoading || agentSessionHydrating || !roleGroup.taskConfirmation.canStart || ['blocked','running','executing','completed','cancelled'].includes(roleGroup.taskConfirmation.status)"
                                                                     @click="onAgentTaskStartClick(roleGroup.taskConfirmation)">
-                                                                    {{ roleGroup.taskConfirmation.status === 'reuse_available' ? '重新计算' : '开始计�? }}
+                                                                    {{ roleGroup.taskConfirmation.status === 'reuse_available' ? '重新计算' : '开始计算' }}
                                                                 </button>
                                                                 <button
                                                                     type="button"
@@ -578,25 +581,25 @@
                                                 <div class="agent-decision-badges">
                                                     <span class="agent-decision-badge">{{ getAgentDecisionStrengthLabel(agentDecision.strength) }}</span>
                                                     <span class="agent-decision-badge is-muted">{{ getAgentDecisionModeLabel(agentDecision.mode) }}</span>
-                                                    <span v-if="agentDecision.canAct" class="agent-decision-badge is-positive">可直接推�?/span>
+                                                    <span v-if="agentDecision.canAct" class="agent-decision-badge is-positive">可直接推进</span>
                                                 </div>
                                             </div>
 
                                             <div v-if="agentSupport.length" class="agent-card">
                                                 <div class="agent-card-type">support</div>
-                                                <div class="agent-card-title">为什么这么判�?/div>
+                                                <div class="agent-card-title">为什么这么判断</div>
                                                 <ul class="agent-card-items">
                                                     <li v-for="(item, index) in agentSupport" :key="getAgentStructuredItemKey(item, index)">
                                                         <span class="agent-structured-headline">{{ item.headline || item.metric }}</span>
                                                         <span class="agent-structured-detail">{{ item.interpretation }}</span>
-                                                        <span class="agent-structured-meta">来源：{{ item.source || '未标�? }}｜置信度：{{ item.confidence || 'weak' }}</span>
+                                                        <span class="agent-structured-meta">来源：{{ item.source || '未标注' }}｜置信度：{{ item.confidence || 'weak' }}</span>
                                                     </li>
                                                 </ul>
                                             </div>
 
                                             <div v-if="agentCounterpoints.length || agentBoundary.length" class="agent-card">
                                                 <div class="agent-card-type">counterpoints</div>
-                                                <div class="agent-card-title">还不能判断什�?/div>
+                                                <div class="agent-card-title">还不能判断什么</div>
                                                 <ul class="agent-card-items">
                                                     <li v-for="(item, index) in agentCounterpoints" :key="`agent-counterpoint-${getAgentStructuredItemKey(item, index)}`">
                                                         <span class="agent-structured-headline">{{ item.title || '约束' }}</span>
@@ -611,7 +614,7 @@
 
                                             <div v-if="agentActions.length" class="agent-card">
                                                 <div class="agent-card-type">actions</div>
-                                                <div class="agent-card-title">下一步怎么�?/div>
+                                                <div class="agent-card-title">下一步怎么做</div>
                                                 <ul class="agent-card-items">
                                                     <li v-for="(item, index) in agentActions" :key="`agent-action-${getAgentStructuredItemKey(item, index)}`">
                                                         <button
@@ -664,7 +667,7 @@
                                         </ul>
                                     </div>
                                     <div v-if="agentNextSuggestions.length" class="agent-meta-group">
-                                        <div class="agent-meta-title">下一步建�?/div>
+                                        <div class="agent-meta-title">下一步建议</div>
                                         <ul class="agent-meta-list">
                                             <li v-for="(item, index) in agentNextSuggestions" :key="`agent-main-next-${index}`">{{ item }}</li>
                                         </ul>
@@ -682,18 +685,18 @@
 
                         <div v-if="shouldShowAgentComposer()" class="agent-app-composer-wrap">
                             <div class="agent-chat-shortcuts">
-                                <button type="button" class="agent-shortcut-chip" @click="queueAgentPrompt('总结这个区域的商业特�?)">总结区域</button>
+                                <button type="button" class="agent-shortcut-chip" @click="queueAgentPrompt('总结这个区域的商业特征')">总结区域</button>
                                 <button type="button" class="agent-shortcut-chip" @click="queueAgentPrompt('哪里适合补充餐饮')">补充餐饮</button>
                                 <button type="button" class="agent-shortcut-chip" @click="queueAgentPrompt('为什么这里路网差')">路网原因</button>
-                                <button type="button" class="agent-shortcut-chip" @click="queueAgentPrompt('下一步做什么分�?)">下一步建�?/button>
+                                <button type="button" class="agent-shortcut-chip" @click="queueAgentPrompt('下一步做什么分析')">下一步建议</button>
                             </div>
 
                             <div class="agent-composer-card">
-                                <button type="button" class="agent-composer-plus" @click="startNewAgentChat" title="新聊�?>+</button>
+                                <button type="button" class="agent-composer-plus" @click="startNewAgentChat" title="新聊天">+</button>
                                 <textarea
                                     v-model="agentInput"
                                     class="agent-composer-input"
-                                    placeholder="有问题，尽管�?
+                                    placeholder="有问题，尽管问"
                                     @keydown.enter.exact.prevent="submitAgentTurn()"
                                 ></textarea>
                                 <div class="agent-composer-actions">
@@ -702,9 +705,9 @@
                                         class="agent-composer-send"
                                         :class="{ 'is-loading': agentLoading }"
                                         :disabled="agentSessionHydrating || (!agentLoading && !agentCanSubmit())"
-                                        :title="agentLoading ? '暂停执行' : '发�?"
+                                        :title="agentLoading ? '暂停执行' : '发送'"
                                         @click="agentLoading ? cancelAgentTurn() : submitAgentTurn()">
-                                        <span v-if="!agentLoading">发�?/span>
+                                        <span v-if="!agentLoading">发送</span>
                                         <span v-else class="agent-composer-send-loading" aria-hidden="true">
                                             <span class="agent-composer-send-stop"></span>
                                         </span>
@@ -724,7 +727,7 @@
                         <path d="M8 4.5v5h7v-5"></path>
                         <path d="M8 20v-5h8v5"></path>
                     </svg>
-                    <span class="h3-map-tool-text">保存并新�?/span>
+                    <span class="h3-map-tool-text">保存并新建</span>
                 </button>
 
                 <div class="h3-simplify-wrap">
@@ -776,7 +779,7 @@
                                 class="h3-export-icon-btn"
                                 :class="{ 'is-active': isAllAvailableExportPartsSelected() }"
                                 :disabled="isExportingBundle || !getSelectableExportParts().length"
-                                :title="isAllAvailableExportPartsSelected() ? '取消全选可导出�? : '一键全选可导出�?"
+                                :title="isAllAvailableExportPartsSelected() ? '取消全选可导出项' : '一键全选可导出项'"
                                 @click="toggleSelectAllExportParts">
                                 <svg viewBox="0 0 24 24" aria-hidden="true">
                                     <rect x="4" y="5" width="4" height="4" rx="1.2"></rect>
@@ -825,7 +828,7 @@
                         <button type="button" class="h3-export-item"
                             :disabled="isExportingBundle || !exportBundleParts.length"
                             @click="exportAnalysisBundle()">
-                            {{ isExportingBundle ? '导出�?..' : '导出 ZIP' }}
+                            {{ isExportingBundle ? '导出中...' : '导出 ZIP' }}
                         </button>
                     </div>
                 </div>
@@ -860,7 +863,7 @@
                         <circle cx="12" cy="12" r="5.2"></circle>
                         <circle cx="12" cy="12" r="1.4"></circle>
                     </svg>
-                    <span class="h3-map-tool-text">{{ isLoadingIsochroneDebug ? '调试�?..' : '调试' }}</span>
+                    <span class="h3-map-tool-text">{{ isLoadingIsochroneDebug ? '调试中...' : '调试' }}</span>
                 </button>
 
             </div>
@@ -899,7 +902,7 @@
                         <div v-if="task.error" class="h3-export-task-error">{{ task.error }}</div>
                     </div>
                     <div class="h3-export-task-actions">
-                        <button type="button" class="h3-export-task-clear" @click="clearH3CompletedTasks">清理已完�?/button>
+                        <button type="button" class="h3-export-task-clear" @click="clearH3CompletedTasks">清理已完成</button>
                     </div>
                 </template>
             </div>
@@ -937,6 +940,7 @@
                 © OpenStreetMap contributors
             </div>
             <div v-else-if="basemapSource === 'tianditu'" style="position:absolute; right:8px; bottom:6px; z-index:2; background:rgba(255,255,255,0.9); border:1px solid #e5e7eb; border-radius:6px; padding:2px 6px; font-size:10px; color:#4b5563;">
-                © 天地�?            </div>
+                © 天地图
+            </div>
             </div>
         </main>

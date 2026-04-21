@@ -1912,7 +1912,7 @@ function createAgentUiMethods() {
           cache: force ? 'no-store' : 'default',
         })
         if (!res.ok) {
-          throw new Error(`/api/v1/analysis/agent/tools 璇锋眰澶辫触(${res.status})`)
+          throw new Error(`/api/v1/analysis/agent/tools 请求失败(${res.status})`)
         }
         const data = await res.json()
         this.agentTools = Array.isArray(data)
@@ -2551,7 +2551,7 @@ function createAgentUiMethods() {
       const sessionId = asText(this.agentRenameSessionId)
       const title = clampText(this.agentRenameInput, 60)
       if (!sessionId || !title) {
-        window.alert('鍚嶇О涓嶈兘涓虹┖')
+        window.alert('名称不能为空')
         return
       }
       const session = this.findAgentSession(sessionId)

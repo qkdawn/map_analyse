@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from .arcgis_bridge import run_arcgis_h3_analysis
 
@@ -9,7 +9,6 @@ def run_h3_arcgis_analysis(
     *,
     features: List[Dict[str, Any]],
     stats_by_cell: Dict[str, Dict[str, Any]],
-    arcgis_python_path: Optional[str],
     knn_neighbors: int,
     timeout_sec: int,
     export_image: bool,
@@ -18,7 +17,6 @@ def run_h3_arcgis_analysis(
         return run_arcgis_h3_analysis(
             features=features,
             stats_by_cell=stats_by_cell,
-            arcgis_python_path=arcgis_python_path,
             knn_neighbors=knn_neighbors,
             timeout_sec=timeout_sec,
             export_image=export_image,

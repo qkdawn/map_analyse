@@ -1,4 +1,4 @@
-import { asText, cloneArray, cloneObject } from './normalizers.js'
+﻿import { asText, cloneArray, cloneObject } from './normalizers.js'
 
 const ANALYSIS_TASKS = Object.freeze({
   poi_fetch: {

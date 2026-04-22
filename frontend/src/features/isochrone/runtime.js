@@ -644,6 +644,7 @@ import { markRaw } from 'vue'
                     if (!this.hasDrawnScopePolygon()) return;
                     this.scopeSource = '';
                     this.currentHistoryRecordId = '';
+                    this.currentHistoryPolygonWgs84 = [];
                     this.drawnScopePolygon = [];
                     this.lastIsochroneGeoJSON = null;
                     this.clearH3Grid();
@@ -662,6 +663,7 @@ import { markRaw } from 'vue'
                         if (this.scopeSource === 'drawn_polygon') {
                             this.scopeSource = '';
                             this.currentHistoryRecordId = '';
+                            this.currentHistoryPolygonWgs84 = [];
                             this.drawnScopePolygon = [];
                             this.lastIsochroneGeoJSON = null;
                             this.clearScopeOutlineDisplay();
@@ -787,6 +789,7 @@ import { markRaw } from 'vue'
                     this.clearH3Grid();
                     this.scopeSource = String((options && options.scopeSource) || '').trim();
                     this.currentHistoryRecordId = '';
+                    this.currentHistoryPolygonWgs84 = [];
                     this.renderResult(geojson);
                     this.step = 2;
                     this.activeStep3Panel = 'poi';

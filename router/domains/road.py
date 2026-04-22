@@ -55,7 +55,6 @@ async def analyze_road_syntax_api(payload: RoadSyntaxRequest):
             depthmap_cli_path=payload.depthmap_cli_path,
             tulip_bins=payload.tulip_bins,
             use_arcgis_webgl=payload.use_arcgis_webgl,
-            arcgis_python_path=payload.arcgis_python_path,
             arcgis_timeout_sec=payload.arcgis_timeout_sec,
             arcgis_metric_field=payload.arcgis_metric_field,
             progress_callback=_progress_callback,

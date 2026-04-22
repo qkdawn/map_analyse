@@ -14,8 +14,6 @@ from modules.history.service import (
 )
 from .history_keys import (
     build_history_record_id,
-    build_scope_fingerprint_from_polygon,
-    extract_history_key_from_fingerprint,
 )
 from .database import SessionLocal
 from .models import AgentSession, AnalysisHistory, PoiResult
@@ -23,38 +21,41 @@ from .models import AgentSession, AnalysisHistory, PoiResult
 
 class HistoryRepo:
     @staticmethod
-    def _extract_analysis_fingerprint(snapshot: Any) -> str:
+    def _extract_history_id(snapshot: Any) -> str:
         if not isinstance(snapshot, dict):
             return ""
         meta = snapshot.get("_meta")
         if not isinstance(meta, dict):
             return ""
-        return str(meta.get("analysis_fingerprint") or "").strip()
+        return str(meta.get("history_id") or "").strip()
 
     @staticmethod
     def _build_history_agent_count_map(session: Session) -> Dict[str, int]:
-        history_scope_map = {
-            str(row.id): build_scope_fingerprint_from_polygon(row.result_polygon)
-            for row in session.query(AnalysisHistory.id, AnalysisHistory.result_polygon).all()
-        }
-        scope_to_history = {scope: history_id for history_id, scope in history_scope_map.items() if scope}
         rows = session.query(AgentSession.id, AgentSession.snapshot).all()
         counter: Dict[str, int] = {}
         for _, snapshot in rows:
-            fingerprint = HistoryRepo._extract_analysis_fingerprint(snapshot)
-            history_id = extract_history_key_from_fingerprint(fingerprint)
-            if not history_id and fingerprint.startswith("scope:"):
-                history_id = scope_to_history.get(fingerprint, "")
+            history_id = HistoryRepo._extract_history_id(snapshot)
             if not history_id:
                 continue
             counter[history_id] = int(counter.get(history_id, 0)) + 1
         return counter
 
-    def create_record(self, params: Dict, polygon: List, pois: List[Dict], description: str = "") -> str:
+    def create_record(
+        self,
+        params: Dict,
+        polygon: List,
+        pois: List[Dict],
+        description: str = "",
+        *,
+        preferred_history_id: str = "",
+    ) -> str:
         session: Session = SessionLocal()
         try:
-            history_id = build_history_record_id(params, polygon)
-            history = session.get(AnalysisHistory, history_id)
+            history_id = str(preferred_history_id or "").strip()
+            history = session.get(AnalysisHistory, history_id) if history_id else None
+            if history is None:
+                history_id = build_history_record_id(params, polygon)
+                history = session.get(AnalysisHistory, history_id)
             if history is None:
                 history = AnalysisHistory(
                     id=history_id,
@@ -182,11 +183,10 @@ class HistoryRepo:
     def delete_record(self, history_id: str) -> bool:
         session: Session = SessionLocal()
         try:
-            target_fingerprint = f"history:{str(history_id).strip()}"
+            target_history_id = str(history_id).strip()
             linked_agent_ids: List[str] = []
             for row in session.query(AgentSession.id, AgentSession.snapshot).all():
-                fingerprint = self._extract_analysis_fingerprint(row.snapshot)
-                if fingerprint == target_fingerprint:
+                if self._extract_history_id(row.snapshot) == target_history_id:
                     linked_agent_ids.append(str(row.id))
             if linked_agent_ids:
                 session.query(AgentSession).filter(AgentSession.id.in_(linked_agent_ids)).delete(synchronize_session=False)

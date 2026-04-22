@@ -34,7 +34,6 @@ def analyze_h3_grid(
     poi_coord_type: Literal["gcj02", "wgs84"] = "gcj02",
     neighbor_ring: int = 1,
     use_arcgis: bool = False,
-    arcgis_python_path: Optional[str] = None,
     arcgis_neighbor_ring: int = 1,
     arcgis_knn_neighbors: Optional[int] = None,
     arcgis_export_image: bool = True,
@@ -111,14 +110,11 @@ def analyze_h3_grid(
             arcgis_result = run_h3_arcgis_analysis(
                 features=features,
                 stats_by_cell=stats_by_cell,
-                arcgis_python_path=arcgis_python_path,
                 knn_neighbors=arcgis_knn,
                 timeout_sec=arcgis_timeout_sec,
                 export_image=arcgis_export_image,
             )
         except RuntimeError:
-            if arcgis_python_path:
-                raise
             for stat in local_spatial_stats.values():
                 stat.update(
                     {

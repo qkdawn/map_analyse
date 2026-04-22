@@ -1,4 +1,4 @@
-import {
+﻿import {
   asText,
   cloneArray,
   cloneObject,

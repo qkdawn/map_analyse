@@ -11,6 +11,7 @@ from router.domains import (
     agent_router,
     charting_router,
     export_router,
+    gwr_router,
     h3_router,
     history_router,
     isochrone_router,
@@ -33,6 +34,7 @@ router.include_router(population_router)
 router.include_router(nightlight_router)
 router.include_router(timeseries_router)
 router.include_router(export_router)
+router.include_router(gwr_router)
 router.include_router(history_router)
 router.include_router(h3_router)
 router.include_router(road_router)

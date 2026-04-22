@@ -44,7 +44,6 @@ def run_arcgis_road_syntax_webgl(
     road_features: List[Dict[str, Any]],
     metric_field: Optional[str] = None,
     target_coord_type: Optional[str] = "gcj02",
-    arcgis_python_path: Optional[str] = None,
     timeout_sec: int = 300,
 ) -> Dict[str, Any]:
     if not settings.arcgis_bridge_enabled:
@@ -70,8 +69,9 @@ def run_arcgis_road_syntax_webgl(
         "timeout_sec": int(max(5, int(timeout_sec or 300))),
         "run_id": run_id,
     }
-    if arcgis_python_path:
-        payload["arcgis_python_path"] = str(arcgis_python_path)
+    configured_python_path = str(settings.arcgis_python_path or "").strip()
+    if configured_python_path:
+        payload["arcgis_python_path"] = configured_python_path
 
     endpoint = str(settings.arcgis_bridge_base_url or "").rstrip("/") + "/v1/arcgis/road-syntax/webgl"
     headers = {
@@ -119,4 +119,3 @@ def run_arcgis_road_syntax_webgl(
         "elapsed_ms": float(body.get("elapsed_ms") or 0.0),
         "roads": roads_fc,
     }
-

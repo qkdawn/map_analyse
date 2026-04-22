@@ -1,4 +1,4 @@
-<div v-if="(agentThinkingExpanded || agentLoading) && getAgentVisibleReasoningBlocks().length" class="agent-reasoning-panel">
+﻿<div v-if="(agentThinkingExpanded || agentLoading) && getAgentVisibleReasoningBlocks().length" class="agent-reasoning-panel">
     <div
         v-for="block in getAgentVisibleReasoningBlocks()"
         :key="`agent-reasoning-${block.id}`"

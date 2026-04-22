@@ -15,6 +15,7 @@ export const ANALYSIS_HISTORY_STATE_KEYS = Object.freeze([
   'historyDetailAbortController',
   'historyDetailLoadToken',
   'currentHistoryRecordId',
+  'currentHistoryPolygonWgs84',
 ])
 
 export function createAnalysisHistoryInitialState() {
@@ -33,6 +34,7 @@ export function createAnalysisHistoryInitialState() {
     historyDetailAbortController: null,
     historyDetailLoadToken: 0,
     currentHistoryRecordId: '',
+    currentHistoryPolygonWgs84: [],
   }
 }
 

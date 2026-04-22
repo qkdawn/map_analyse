@@ -99,6 +99,7 @@ def build_detail_payload(
         "created_at": serialize_created_at(history.created_at),
         "params": history.params,
         "polygon": history.result_polygon,
+        "polygon_wgs84": history.result_polygon,
         "poi_summary": poi_summary or {},
     }
     if poi_count is not None:
@@ -142,7 +143,12 @@ def _build_history_description(payload: HistorySaveRequest, params_payload: Dict
 
 def save_history_request(payload: HistorySaveRequest, repo) -> Dict[str, Any]:
     params_payload = _build_history_params_payload(payload)
-    polygon_wgs84 = transform_polygon_payload_coords(payload.polygon, gcj02_to_wgs84) if payload.polygon else []
+    preferred_history_id = str(payload.history_id or "").strip()
+    polygon_wgs84 = (
+        payload.polygon_wgs84
+        if preferred_history_id and isinstance(payload.polygon_wgs84, list) and payload.polygon_wgs84
+        else (transform_polygon_payload_coords(payload.polygon, gcj02_to_wgs84) if payload.polygon else [])
+    )
 
     pois: List[Dict[str, Any]] = []
     for poi in payload.pois:
@@ -155,7 +161,13 @@ def save_history_request(payload: HistorySaveRequest, repo) -> Dict[str, Any]:
 
     desc = _build_history_description(payload, params_payload, len(pois))
     try:
-        history_id = repo.create_record(params_payload, polygon_wgs84, pois, desc)
+        history_id = repo.create_record(
+            params_payload,
+            polygon_wgs84,
+            pois,
+            desc,
+            preferred_history_id=preferred_history_id,
+        )
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"保存历史失败: {exc}") from exc
     return {"status": "ok", "history_id": history_id, "count": len(pois)}

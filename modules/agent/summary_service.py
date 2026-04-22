@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import math
 from numbers import Real
-from typing import Any, Dict, List
+from typing import Any, AsyncIterator, Dict, List
 
 from .analysis_extractors import (
     analyze_poi_mix,
@@ -24,6 +24,7 @@ from .schemas import (
     AgentSummaryProgressStep,
     AgentSummaryReadinessResponse,
     AgentSummaryRequest,
+    AgentSummaryStreamEvent,
 )
 from .providers.llm_provider import _invoke_json_role, is_llm_enabled
 from .synthesizer import build_citations, build_summary_panel_payloads
@@ -965,6 +966,441 @@ async def _generate_summary_pack_with_llm(snapshot: Any, artifacts: Dict[str, An
         normalized["secondary_conclusions"] = secondary_sections
         normalized = _normalize_secondary_reasoning_with_judgment(normalized, source_payload)
     return normalized
+
+
+def _build_stream_event(event_type: str, payload: Dict[str, Any]) -> AgentSummaryStreamEvent:
+    return AgentSummaryStreamEvent(type=event_type, payload=_json_safe(payload))
+
+
+def _chunk_text_for_stream(text: str, *, chunk_size: int = 24) -> List[str]:
+    content = _clean_text(text)
+    if not content:
+        return []
+    chunks: List[str] = []
+    start = 0
+    while start < len(content):
+        chunks.append(content[start:start + chunk_size])
+        start += chunk_size
+    return chunks
+
+
+def _build_headline_section_prompt() -> str:
+    return (
+        "你是 gaode-map 的商业总结撰写器。"
+        "请基于给定结构化证据，输出 JSON："
+        "{\"summary\":\"...\",\"supporting_clause\":\"...\"}"
+        "要求："
+        "1. summary 必须是一句话商业判断；"
+        "2. supporting_clause 必须补一句解释，不要复述 summary；"
+        "3. 不能编造新事实，不能罗列原始数值。"
+    )
+
+
+def _build_profile_section_prompt(section_key: str) -> str:
+    if section_key == "user_profile":
+        task_line = "headline 必须写消费者是谁，traits 写 2 到 4 条稳定画像特征。"
+    else:
+        task_line = "headline 必须写消费行为或使用方式，traits 写 2 到 4 条行为特征。"
+    return (
+        "你是 gaode-map 的商业总结撰写器。"
+        "请基于给定结构化证据，输出 JSON："
+        "{\"headline\":\"...\",\"traits\":[\"...\",\"...\"]}"
+        f"{task_line}"
+        "不能编造新事实，不能输出 markdown。"
+    )
+
+
+def _build_followup_questions_prompt() -> str:
+    return (
+        "你是 gaode-map 的商业分析助手。"
+        "请基于当前总结证据，输出 JSON："
+        "{\"questions\":[\"...\",\"...\",\"...\"]}"
+        "要求："
+        "1. questions 固定输出 3 条；"
+        "2. 每条都要是下一步值得继续追问的问题；"
+        "3. 不要输出解释和 markdown。"
+    )
+
+
+def _build_headline_section_payload(source_payload: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "task": "summary_headline_generation",
+        "business_profile": dict(source_payload.get("business_profile") or {}),
+        "poi_structure": dict(source_payload.get("poi_structure") or {}),
+        "spatial_structure": dict(source_payload.get("spatial_structure") or {}),
+        "population_profile": dict(source_payload.get("population_profile") or {}),
+        "nightlight_pattern": dict(source_payload.get("nightlight_pattern") or {}),
+        "road_pattern": dict(source_payload.get("road_pattern") or {}),
+        "area_labels": list(source_payload.get("area_labels") or []),
+    }
+
+
+def _build_profile_section_payload(section_key: str, source_payload: Dict[str, Any]) -> Dict[str, Any]:
+    payload = {
+        "task": f"summary_{section_key}_generation",
+        "business_profile": dict(source_payload.get("business_profile") or {}),
+        "poi_structure": dict(source_payload.get("poi_structure") or {}),
+        "population_profile": dict(source_payload.get("population_profile") or {}),
+        "nightlight_pattern": dict(source_payload.get("nightlight_pattern") or {}),
+        "road_pattern": dict(source_payload.get("road_pattern") or {}),
+        "area_labels": list(source_payload.get("area_labels") or []),
+    }
+    if section_key == "behavior_inference":
+        payload["spatial_structure"] = dict(source_payload.get("spatial_structure") or {})
+    return payload
+
+
+def _build_followup_questions_payload(source_payload: Dict[str, Any], summary_pack: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "task": "summary_followup_generation",
+        "headline_judgment": dict(summary_pack.get("headline_judgment") or {}),
+        "secondary_conclusions": list(summary_pack.get("secondary_conclusions") or []),
+        "user_profile": dict(summary_pack.get("user_profile") or {}),
+        "behavior_inference": dict(summary_pack.get("behavior_inference") or {}),
+        "icsc_tags": list(summary_pack.get("icsc_tags") or []),
+        "business_profile": dict(source_payload.get("business_profile") or {}),
+        "area_labels": list(source_payload.get("area_labels") or []),
+    }
+
+
+def _validate_headline_section_payload(raw: Dict[str, Any]) -> Dict[str, str]:
+    if not isinstance(raw, dict):
+        return {}
+    summary = _clean_text(raw.get("summary"))
+    supporting_clause = _clean_text(raw.get("supporting_clause"))
+    if not summary:
+        return {}
+    return {
+        "summary": summary,
+        "supporting_clause": supporting_clause,
+    }
+
+
+def _validate_profile_section_payload(raw: Dict[str, Any]) -> Dict[str, Any]:
+    if not isinstance(raw, dict):
+        return {}
+    headline = _clean_text(raw.get("headline"))
+    traits = _normalize_trait_list(raw.get("traits"))
+    if not headline or not traits:
+        return {}
+    return {
+        "headline": headline,
+        "traits": traits,
+    }
+
+
+def _validate_followup_questions_payload(raw: Dict[str, Any]) -> List[str]:
+    if not isinstance(raw, dict):
+        return []
+    questions: List[str] = []
+    for item in raw.get("questions") or []:
+        text = _clean_text(item)
+        if text and text not in questions:
+            questions.append(text)
+    return questions[:3]
+
+
+async def _generate_headline_section_with_llm(source_payload: Dict[str, Any]) -> Dict[str, str]:
+    payload = await _invoke_json_role(
+        system_prompt=_build_headline_section_prompt(),
+        user_payload=_build_headline_section_payload(source_payload),
+        emit=None,
+        phase="summary_headline",
+        title="生成一句话结论",
+        reasoning_id="summary-headline-reasoning",
+    )
+    return _validate_headline_section_payload(payload)
+
+
+async def _generate_profile_section_with_llm(section_key: str, source_payload: Dict[str, Any]) -> Dict[str, Any]:
+    payload = await _invoke_json_role(
+        system_prompt=_build_profile_section_prompt(section_key),
+        user_payload=_build_profile_section_payload(section_key, source_payload),
+        emit=None,
+        phase=f"summary_{section_key}",
+        title="生成用户画像" if section_key == "user_profile" else "生成商业行为推断",
+        reasoning_id=f"summary-{section_key}-reasoning",
+    )
+    return _validate_profile_section_payload(payload)
+
+
+async def _generate_followup_questions_with_llm(source_payload: Dict[str, Any], summary_pack: Dict[str, Any]) -> List[str]:
+    payload = await _invoke_json_role(
+        system_prompt=_build_followup_questions_prompt(),
+        user_payload=_build_followup_questions_payload(source_payload, summary_pack),
+        emit=None,
+        phase="summary_followups",
+        title="生成快捷追问",
+        reasoning_id="summary-followups-reasoning",
+    )
+    return _validate_followup_questions_payload(payload)
+
+
+async def stream_generate_summary_pack(payload: AgentSummaryRequest) -> AsyncIterator[AgentSummaryStreamEvent]:
+    try:
+        phases = ["precheck"]
+        warnings: List[str] = []
+        error = ""
+        yield _build_stream_event("status", {"phase": "precheck", "phases": list(phases)})
+        readiness_payload = await ensure_area_data_readiness(
+            arguments={},
+            snapshot=payload.analysis_snapshot,
+            artifacts={},
+            question="summary_generate_preflight",
+        )
+        warnings.extend([str(item) for item in (readiness_payload.get("warnings") or []) if str(item).strip()])
+        error = str(readiness_payload.get("error") or "")
+        artifacts = dict(readiness_payload.get("artifacts") or {})
+        normalized = _normalize_data_readiness(readiness_payload)
+        summary_pack: Dict[str, Any] = {}
+        summary_status = _build_summary_status(
+            status="data_incomplete",
+            llm_available=is_llm_enabled(),
+            generated=False,
+            title="总结待生成",
+            description="当前区域还缺少基础分析结果，请先补齐 POI、H3、人口、夜光和路网分析。",
+            message=error,
+            error_code="readiness_failed" if error else "",
+            error_stage="precheck" if error else "",
+            retryable=bool(error),
+        )
+        if normalized["ready"]:
+            phases.append("fetch_missing")
+            yield _build_stream_event("status", {"phase": "fetch_missing", "phases": list(phases)})
+            phases.append("derive_analysis")
+            yield _build_stream_event("status", {"phase": "derive_analysis", "phases": list(phases)})
+            pack_result = await run_area_character_pack(
+                arguments={},
+                snapshot=payload.analysis_snapshot,
+                artifacts=artifacts,
+                question="summary_generate_derive_analysis",
+            )
+            warnings.extend([str(item) for item in (pack_result.warnings or []) if str(item).strip()])
+            if pack_result.status == "success":
+                artifacts.update(dict(pack_result.artifacts or {}))
+            else:
+                error = str(pack_result.error or error or "derive_analysis_failed")
+                summary_status = _build_summary_status(
+                    status="generation_failed",
+                    llm_available=is_llm_enabled(),
+                    generated=False,
+                    title="总结待生成",
+                    description="结构化分析阶段失败，本次未生成正式总结。",
+                    message=error,
+                    error_code="derive_failed",
+                    error_stage="derive_analysis",
+                    retryable=True,
+                )
+            structured = _derive_structured_status(payload.analysis_snapshot, artifacts)
+            normalized = _normalize_data_readiness(
+                readiness_payload,
+                structured_missing_tasks=structured["missing_tasks"],
+                extra_fetched=_STRUCTURED_TASK_ORDER if pack_result.status == "success" else [],
+            )
+            if pack_result.status == "success":
+                artifacts.update(dict(structured.get("artifacts") or {}))
+            if normalized["ready"] and is_llm_enabled():
+                phases.append("analysis_started")
+                yield _build_stream_event("status", {"phase": "analysis_started", "phases": list(phases)})
+                source_payload = _build_summary_llm_payload(payload.analysis_snapshot, artifacts)
+                evidence_refs = build_citations(payload.analysis_snapshot, artifacts)
+                summary_pack = {
+                    "icsc_tags": _derive_icsc_tags(payload.analysis_snapshot, artifacts),
+                    "secondary_conclusions": [],
+                    "evidence_refs": list(evidence_refs),
+                    "confidence": "moderate" if len(evidence_refs) >= 2 else "weak",
+                }
+
+                try:
+                    headline_payload = await _generate_headline_section_with_llm(source_payload)
+                    yield _build_stream_event("section_start", {"key": "headline", "title": "一句话结论"})
+                    headline_text = " ".join([headline_payload.get("summary", ""), headline_payload.get("supporting_clause", "")]).strip()
+                    for chunk in _chunk_text_for_stream(headline_text):
+                        yield _build_stream_event("section_delta", {"key": "headline", "delta": chunk})
+                    summary_pack["headline_judgment"] = headline_payload
+                    yield _build_stream_event(
+                        "section_complete",
+                        {"key": "headline", "status": "ready", "payload": dict(headline_payload)},
+                    )
+                except Exception as exc:
+                    warnings.append(f"headline_generation_failed:{exc}")
+                    yield _build_stream_event("error", {"key": "headline", "message": str(exc)})
+                    yield _build_stream_event("section_complete", {"key": "headline", "status": "failed"})
+
+                yield _build_stream_event("section_start", {"key": "tags", "title": "商业类型标签（ICSC）"})
+                yield _build_stream_event(
+                    "panel_payload",
+                    {"key": "icsc_tags", "payload": {"icsc_tags": list(summary_pack.get("icsc_tags") or [])}},
+                )
+                yield _build_stream_event(
+                    "section_complete",
+                    {"key": "tags", "status": "ready", "payload": {"icsc_tags": list(summary_pack.get("icsc_tags") or [])}},
+                )
+
+                secondary_sections: List[Dict[str, Any]] = []
+                yield _build_stream_event("section_start", {"key": "secondary", "title": "二级结论"})
+                for section_key, _section_title in _SUMMARY_SECTION_SPECS:
+                    try:
+                        generated = await _generate_secondary_sections_with_llm(source_payload)
+                        secondary_sections = generated
+                        break
+                    except Exception as exc:
+                        warnings.append(f"secondary_generation_failed:{exc}")
+                        secondary_sections = []
+                        break
+                for item in secondary_sections:
+                    for chunk in _chunk_text_for_stream(_clean_text(item.get("reasoning"))):
+                        yield _build_stream_event(
+                            "section_delta",
+                            {
+                                "key": "secondary",
+                                "delta": chunk,
+                                "section_key": item.get("section_key"),
+                                "title": item.get("title"),
+                            },
+                        )
+                if secondary_sections:
+                    summary_pack["secondary_conclusions"] = secondary_sections
+                    yield _build_stream_event(
+                        "section_complete",
+                        {"key": "secondary", "status": "ready", "payload": {"secondary_conclusions": secondary_sections}},
+                    )
+                else:
+                    yield _build_stream_event("error", {"key": "secondary", "message": "二级结论生成失败"})
+                    yield _build_stream_event("section_complete", {"key": "secondary", "status": "failed"})
+
+                for section_key, stream_key, title in [
+                    ("user_profile", "user_profile", "用户画像"),
+                    ("behavior_inference", "behavior", "商业行为推断"),
+                ]:
+                    try:
+                        section_payload = await _generate_profile_section_with_llm(section_key, source_payload)
+                        yield _build_stream_event("section_start", {"key": stream_key, "title": title})
+                        section_text = "\n".join([section_payload.get("headline", ""), *(section_payload.get("traits") or [])]).strip()
+                        for chunk in _chunk_text_for_stream(section_text):
+                            yield _build_stream_event("section_delta", {"key": stream_key, "delta": chunk})
+                        summary_pack[section_key] = section_payload
+                        yield _build_stream_event(
+                            "section_complete",
+                            {"key": stream_key, "status": "ready", "payload": dict(section_payload)},
+                        )
+                    except Exception as exc:
+                        warnings.append(f"{section_key}_generation_failed:{exc}")
+                        yield _build_stream_event("error", {"key": stream_key, "message": str(exc)})
+                        yield _build_stream_event("section_complete", {"key": stream_key, "status": "failed"})
+
+                try:
+                    followup_questions = await _generate_followup_questions_with_llm(source_payload, summary_pack)
+                except Exception as exc:
+                    warnings.append(f"followup_generation_failed:{exc}")
+                    followup_questions = []
+                yield _build_stream_event("section_start", {"key": "followups", "title": "快捷追问"})
+                if followup_questions:
+                    summary_pack["followup_questions"] = followup_questions
+                    yield _build_stream_event(
+                        "panel_payload",
+                        {"key": "followup_questions", "payload": {"followup_questions": followup_questions}},
+                    )
+                    yield _build_stream_event(
+                        "section_complete",
+                        {"key": "followups", "status": "ready", "payload": {"followup_questions": followup_questions}},
+                    )
+                else:
+                    yield _build_stream_event("error", {"key": "followups", "message": "快捷追问生成失败"})
+                    yield _build_stream_event("section_complete", {"key": "followups", "status": "failed"})
+
+                validated = _validate_summary_pack_payload(
+                    summary_pack,
+                    icsc_tags=list(summary_pack.get("icsc_tags") or []),
+                    evidence_refs=list(summary_pack.get("evidence_refs") or []),
+                )
+                normalized_pack = _normalize_secondary_reasoning_with_judgment(validated, source_payload) if validated else {}
+                if normalized_pack:
+                    if summary_pack.get("followup_questions"):
+                        normalized_pack["followup_questions"] = list(summary_pack.get("followup_questions") or [])
+                    summary_pack = normalized_pack
+                    summary_status = _build_summary_status(
+                        status="ready",
+                        llm_available=True,
+                        generated=True,
+                        title="总结已生成",
+                        description="已基于结构化证据生成商业判断型总结。",
+                    )
+                else:
+                    error = error or "summary_pack_invalid"
+                    summary_pack = {}
+                    summary_status = _build_summary_status(
+                        status="generation_failed",
+                        llm_available=True,
+                        generated=False,
+                        title="总结待生成",
+                        description="本次模型输出未通过结构校验，暂未生成正式总结。",
+                        message=error,
+                        error_code="schema_invalid",
+                        error_stage="summary_pack",
+                        retryable=True,
+                    )
+            elif normalized["ready"] and not is_llm_enabled():
+                summary_status = _build_summary_status(
+                    status="llm_unavailable",
+                    llm_available=False,
+                    generated=False,
+                    title="总结待生成",
+                    description="基础分析结果已就绪，但当前环境未启用可用模型。",
+                    error_code="llm_unavailable",
+                    error_stage="summary_pack",
+                    retryable=False,
+                )
+
+        panel_payloads = build_summary_panel_payloads(
+            "summary_generate",
+            payload.analysis_snapshot,
+            artifacts,
+            summary_pack=summary_pack,
+            summary_status=summary_status,
+        )
+        if summary_pack.get("followup_questions"):
+            panel_payloads["summary_followup_questions"] = list(summary_pack.get("followup_questions") or [])
+        panel_payloads["data_readiness"] = dict(normalized)
+        phases.append("completed")
+        yield _build_stream_event(
+            "final",
+            {
+                "data_readiness": dict(normalized),
+                "panel_payloads": panel_payloads,
+                "summary_pack": summary_pack,
+                "error": error,
+                "warnings": warnings,
+                "phases": phases,
+                "progress_steps": [step.model_dump(mode="json") for step in _build_progress_steps(
+                    phases,
+                    failed=(not normalized["ready"]) or (normalized["ready"] and not bool(summary_pack) and summary_status.get("status") == "generation_failed"),
+                )],
+            },
+        )
+    except Exception as exc:
+        yield _build_stream_event(
+            "error",
+            {"key": "global", "message": f"summary_generate_internal_error: {exc.__class__.__name__}"},
+        )
+        yield _build_stream_event(
+            "final",
+            {
+                "data_readiness": {
+                    "checked": True,
+                    "ready": False,
+                    "missing_tasks": ["poi_grid", "population", "nightlight", "road_syntax", "poi_structure", "spatial_structure", "area_labels"],
+                    "reused": [],
+                    "fetched": [],
+                },
+                "panel_payloads": {},
+                "summary_pack": {},
+                "error": f"summary_generate_internal_error: {exc.__class__.__name__}",
+                "warnings": [str(exc)],
+                "phases": ["precheck", "fetch_missing"],
+                "progress_steps": [step.model_dump(mode="json") for step in _build_progress_steps(["precheck", "fetch_missing"], failed=True)],
+            },
+        )
 
 
 async def evaluate_summary_readiness(payload: AgentSummaryRequest) -> AgentSummaryReadinessResponse:

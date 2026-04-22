@@ -43,10 +43,6 @@ class H3MetricsRequest(BaseModel):
         True,
         description="Deprecated. ArcGIS engine is always used and this field is ignored.",
     )
-    arcgis_python_path: Optional[str] = Field(
-        None,
-        description=r"Optional ArcPy python path, e.g. C:\Python27\ArcGIS10.7\python.exe",
-    )
     arcgis_neighbor_ring: int = Field(
         1,
         ge=1,
@@ -136,10 +132,6 @@ class H3ExportRequest(BaseModel):
     style_meta: Dict[str, Any] = Field(
         default_factory=dict,
         description="Optional render metadata from frontend (breaks/colors)",
-    )
-    arcgis_python_path: Optional[str] = Field(
-        None,
-        description=r"Optional ArcPy python path, e.g. C:\Python27\ArcGIS10.7\python.exe",
     )
     arcgis_timeout_sec: int = Field(
         300,

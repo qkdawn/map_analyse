@@ -172,26 +172,6 @@ def test_h3_metrics_legacy_significance_payload_is_ignored():
     assert all("spatial_structure_type" not in p for p in props_list)
 
 
-def test_h3_metrics_arcgis_failure_returns_502():
-    client = TestClient(app)
-    payload = {
-        "polygon": _sample_gcj02_polygon(),
-        "resolution": 10,
-        "coord_type": "gcj02",
-        "include_mode": "intersects",
-        "min_overlap_ratio": 0.0,
-        "pois": _sample_pois_gcj02(),
-        "poi_coord_type": "gcj02",
-        "neighbor_ring": 1,
-        "use_arcgis": True,
-        "arcgis_python_path": r"C:\\not_exists\\ArcGIS\\python.exe",
-    }
-    resp = client.post("/api/v1/analysis/h3-metrics", json=payload)
-    assert resp.status_code == 502
-    body = resp.json()
-    assert "ArcGIS桥接失败" in str(body.get("detail") or "")
-
-
 def test_h3_export_api_stream(monkeypatch):
     client = TestClient(app)
 
@@ -203,7 +183,7 @@ def test_h3_export_api_stream(monkeypatch):
             "content": b"gpkg-binary",
         }
 
-    monkeypatch.setattr("router.app.run_arcgis_h3_export", _fake_export)
+    monkeypatch.setattr("router.domains.export.run_arcgis_h3_export", _fake_export)
 
     payload = {
         "format": "gpkg",
@@ -240,5 +220,4 @@ if __name__ == "__main__":
     test_h3_metrics_grid_count_changes_with_threshold()
     test_h3_metrics_spatial_structure_fields()
     test_h3_metrics_legacy_significance_payload_is_ignored()
-    test_h3_metrics_arcgis_failure_returns_502()
     print("H3 analysis API tests passed.")

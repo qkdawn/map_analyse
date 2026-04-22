@@ -107,6 +107,7 @@ function createAnalysisAgentInitialState() {
     agentSummaryLoading: false,
     agentSummaryGenerating: false,
     agentSummaryProgressPhase: '',
+    agentSummaryStreamSections: {},
     agentSummaryError: '',
     agentSummaryWarnings: [],
     summaryTaskBoard: {

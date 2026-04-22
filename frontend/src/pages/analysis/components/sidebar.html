@@ -1126,6 +1126,64 @@
                                     </div>
                                 </div>
 
+                                <div class="panel poi-panel" v-show="activeStep3Panel === 'gwr'">
+                                    <h4>夜光 GWR</h4>
+                                    <div class="poi-subpanel">
+                                        <div class="population-analysis-grid" style="margin-top:10px;">
+                                            <div v-for="row in getGwrReadinessRows()" :key="`gwr-ready-${row.key}`" class="population-analysis-card">
+                                                <div class="population-analysis-card-label">{{ row.label }}</div>
+                                                <div class="population-analysis-card-value" :style="{ color: row.ready ? '#0f766e' : '#b45309' }">{{ row.text }}</div>
+                                            </div>
+                                        </div>
+
+                                        <div class="h3-params-card" style="margin-top:10px;">
+                                            <div class="h3-params-grid">
+                                                <label class="h3-params-field">
+                                                    <span class="h3-params-label">地图指标</span>
+                                                    <select v-model="gwrMetric" class="h3-params-select" @change="onGwrMetricChange">
+                                                        <option v-for="item in getGwrMetricOptions()" :key="`gwr-metric-${item.value}`" :value="item.value">
+                                                            {{ item.label }}
+                                                        </option>
+                                                    </select>
+                                                </label>
+                                            </div>
+                                            <div class="h3-params-actions">
+                                                <button class="h3-btn h3-btn-primary h3-params-compute-btn"
+                                                    :disabled="isComputingGwr || !canComputeGwr()"
+                                                    :title="getGwrBlockingText()"
+                                                    @click="computeGwrAnalysis">
+                                                    {{ isComputingGwr ? '计算中...' : '计算 GWR' }}
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        <div v-if="gwrResult && gwrResult.summary" class="population-analysis-grid" style="margin-top:10px;">
+                                            <div v-for="row in getGwrSummaryRows()" :key="`gwr-card-${row.key}`" class="population-analysis-card">
+                                                <div class="population-analysis-card-label">{{ row.label }}</div>
+                                                <div class="population-analysis-card-value">{{ row.value }}</div>
+                                            </div>
+                                        </div>
+
+                                        <div v-if="getGwrTopVariables().length" style="margin-top:10px; border:1px solid #eef1f4; border-radius:8px; padding:8px 10px; background:#fafbfc;">
+                                            <div style="font-size:12px; color:#374151; font-weight:600; margin-bottom:6px;">主要影响变量</div>
+                                            <div v-for="item in getGwrTopVariables()" :key="`gwr-top-${item.key}`"
+                                                style="display:flex; justify-content:space-between; gap:10px; font-size:12px; color:#4b5563; padding:3px 0;">
+                                                <span>{{ item.label || item.key }}</span>
+                                                <span>{{ formatGwrNumber(item.mean_abs_coefficient, 4) }}</span>
+                                            </div>
+                                        </div>
+
+                                        <div v-if="gwrResult && gwrResult.summary && gwrResult.summary.ok" style="margin-top:10px;">
+                                            <div id="gwrScatterChart" style="height:210px;"></div>
+                                            <div id="gwrCoeffChart" style="height:190px; margin-top:8px;"></div>
+                                        </div>
+
+                                        <div v-if="gwrStatus" class="panel-placeholder" style="margin-top:10px;">
+                                            {{ gwrStatus }}
+                                        </div>
+                                    </div>
+                                </div>
+
                                 <div class="panel poi-panel" v-show="activeStep3Panel === 'timeseries'">
                                     <div class="poi-subpanel">
                                         <div class="h3-subtabs population-view-tabs">
@@ -1519,4 +1577,3 @@
             </div>
 
         </aside>
-

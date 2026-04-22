@@ -4,6 +4,7 @@
   cloneArray,
   cloneAgentSessionRecord,
   cloneObject,
+  consumeSseStream,
   createAgentSessionRecord,
   normalizeAgentPanelPreloadNotes,
   normalizeAgentToolSummary,
@@ -223,14 +224,14 @@ function createAgentUiMethods() {
     },
     isAgentHistorySessionInCurrentRange(session = null) {
       if (!session || typeof session !== 'object') return false
-      const fingerprints = new Set(this.getCurrentAgentRangeFingerprints())
-      const fingerprint = asText(session.analysisFingerprint)
-      return Boolean(fingerprint && fingerprints.has(fingerprint))
+      const currentHistoryId = asText(this.getCurrentAgentHistoryId && this.getCurrentAgentHistoryId())
+      const historyId = asText(session.historyId)
+      return Boolean(historyId && currentHistoryId && historyId === currentHistoryId)
     },
     getAgentActiveSummaryPanelPayloads() {
       const tabs = this.ensureAgentTabs(false)
       const activeTab = this.getAgentActiveTopTab()
-      if (asText(activeTab.kind) === 'summary' && asText(activeTab.source) === 'history') {
+      if (asText(activeTab.kind) === 'summary' && activeTab.panelPayloads && typeof activeTab.panelPayloads === 'object') {
         return cloneObject(activeTab.panelPayloads)
       }
       const payloads = cloneObject(this.agentPanelPayloads)
@@ -432,10 +433,25 @@ function createAgentUiMethods() {
       const deduped = Array.from(new Set(mapped))
       return deduped.filter((item) => this.getSummaryTaskKeys().includes(item))
     },
+    getSummaryReusableTaskKeysFromReadiness() {
+      const readiness = this.normalizeAgentSummaryReadiness(this.agentSummaryReadiness)
+      const mapped = cloneArray(readiness.reused)
+        .flatMap((item) => this.mapReadinessTaskToBoardTaskKeys(item))
+        .filter(Boolean)
+      const deduped = Array.from(new Set(mapped))
+      return deduped.filter((item) => this.getSummaryTaskKeys().includes(item))
+    },
     getSummaryTaskKeysToFill() {
+      const reusableKeys = new Set(this.getSummaryReusableTaskKeysFromReadiness())
       const missing = this.getSummaryTaskKeysFromReadiness()
-      if (missing.length) return missing
-      return this.getSummaryTaskKeys().filter((key) => !this.isSummaryTaskTerminalStatus(this.getSummaryTaskByKey(key)?.status))
+      if (missing.length) {
+        return missing.filter((key) => !reusableKeys.has(key) && !this.summaryTaskHasReusableResult(key))
+      }
+      return this.getSummaryTaskKeys().filter((key) => {
+        if (reusableKeys.has(key)) return false
+        if (this.summaryTaskHasReusableResult(key)) return false
+        return !this.isSummaryTaskTerminalStatus(this.getSummaryTaskByKey(key)?.status)
+      })
     },
     filterSummaryTaskKeysForReuse(taskKeys = [], options = {}) {
       const forcePoiFetch = !!options.forcePoiFetch
@@ -445,6 +461,7 @@ function createAgentUiMethods() {
         if (!normalized) return false
         if (forceKeys.has(normalized)) return true
         if (normalized === 'poi_fetch' && forcePoiFetch) return true
+        if (this.hasSummaryTaskParamChanged(normalized)) return true
         const def = getAnalysisTaskDefinition(normalized)
         return !(def && typeof def.hasResult === 'function' && def.hasResult(this))
       })
@@ -633,6 +650,7 @@ function createAgentUiMethods() {
           endedAt: now,
           durationMs: Number.isFinite(started) && Number.isFinite(ended) ? Math.max(0, ended - started) : 0,
           error: '',
+          paramsSnapshot: this.captureSummaryTaskParams(key),
           logs: [],
         }
       })
@@ -853,6 +871,73 @@ function createAgentUiMethods() {
       }
       return {}
     },
+    stringifySummaryTaskParams(params = {}) {
+      const normalize = (value) => {
+        if (Array.isArray(value)) return value.map((item) => normalize(item))
+        if (!value || typeof value !== 'object') return value
+        return Object.keys(value)
+          .sort()
+          .reduce((acc, key) => {
+            acc[key] = normalize(value[key])
+            return acc
+          }, {})
+      }
+      return JSON.stringify(normalize(params || {}))
+    },
+    hasSummaryTaskParamChanged(taskKey = '', task = null) {
+      const key = asText(taskKey)
+      if (!key) return false
+      const currentTask = task && typeof task === 'object' ? task : this.getSummaryTaskByKey(key)
+      const snapshot = currentTask && typeof currentTask === 'object' ? currentTask.paramsSnapshot : {}
+      if (!Object.keys(snapshot || {}).length) return asText(currentTask && currentTask.status) === 'pending'
+      return this.stringifySummaryTaskParams(this.captureSummaryTaskParams(key)) !== this.stringifySummaryTaskParams(snapshot || {})
+    },
+    getSummaryTaskParameterDependents(taskKey = '') {
+      const key = asText(taskKey)
+      if (key === 'poi_fetch') return ['poi_fetch', 'poi_grid']
+      if (key === 'poi_grid') return ['poi_grid']
+      if (key === 'population') return ['population']
+      if (key === 'nightlight') return ['nightlight']
+      return key ? [key] : []
+    },
+    onSummaryTaskParameterChange(taskKey = '') {
+      const affected = this.getSummaryTaskParameterDependents(taskKey)
+      if (!affected.length) return
+      const affectedSet = new Set(affected)
+      const board = this.ensureSummaryTaskBoard(false)
+      const tasks = cloneArray(board.tasks).map((task) => {
+        const key = asText(task && task.key)
+        if (!affectedSet.has(key) || asText(task && task.status) === 'running') return task
+        return {
+          ...task,
+          status: 'pending',
+          paramsSnapshot: {},
+          endedAt: '',
+          durationMs: 0,
+          error: '',
+        }
+      })
+      this.updateSummaryTaskBoard({ ...board, tasks, runState: 'idle' })
+      const readiness = this.normalizeAgentSummaryReadiness(this.agentSummaryReadiness)
+      const missing = Array.from(new Set([...cloneArray(readiness.missingTasks), ...affected]))
+      this.agentSummaryReadiness = this.normalizeAgentSummaryReadiness({
+        ...readiness,
+        checked: true,
+        ready: false,
+        missingTasks: missing,
+      })
+      this.agentPanelPayloads = {
+        ...cloneObject(this.agentPanelPayloads),
+        data_readiness: {
+          checked: this.agentSummaryReadiness.checked,
+          ready: this.agentSummaryReadiness.ready,
+          missing_tasks: cloneArray(this.agentSummaryReadiness.missingTasks),
+          reused: cloneArray(this.agentSummaryReadiness.reused).filter((key) => !affectedSet.has(asText(key))),
+          fetched: cloneArray(this.agentSummaryReadiness.fetched),
+        },
+      }
+      this.syncCurrentAgentSession()
+    },
     isSummaryTaskRunning(taskKey = '') {
       const task = this.getSummaryTaskByKey(taskKey)
       return !!(task && task.status === 'running')
@@ -882,7 +967,9 @@ function createAgentUiMethods() {
       const def = getAnalysisTaskDefinition(key)
       if (!key || !def) throw new Error('未知任务')
       this.stopSummaryTaskLogTracking(key)
-      if (!options.force && typeof def.hasResult === 'function' && def.hasResult(this)) {
+      const currentTask = this.getSummaryTaskByKey(key)
+      const paramsChanged = this.hasSummaryTaskParamChanged(key, currentTask)
+      if (!options.force && !paramsChanged && typeof def.hasResult === 'function' && def.hasResult(this)) {
         this.finalizeSummaryTaskAsReused(key)
         return
       }
@@ -1070,9 +1157,9 @@ function createAgentUiMethods() {
         },
       }
       const draft = createAgentSessionRecord({
-        title: '总结重算',
-        preview: '从 POI 抓取重新开始补齐分析',
-        analysisFingerprint: this.getCurrentAgentAnalysisFingerprint(),
+        title: '总结补齐',
+        preview: '复用已有结果并补齐缺失分析',
+        historyId: this.getCurrentAgentHistoryId(),
         sessionKind: 'summary',
         status: 'idle',
         stage: 'gating',
@@ -1119,6 +1206,7 @@ function createAgentUiMethods() {
       this.agentSummaryLoading = false
       this.agentSummaryGenerating = false
       this.agentSummaryProgressPhase = ''
+      this.resetAgentSummaryStreamSections()
       this.summaryTaskBoard = board
       this.agentTabs = this.createDefaultAgentTabs()
       this.createAgentSummaryTab({ title: '总结', reuseExisting: true })
@@ -1130,36 +1218,33 @@ function createAgentUiMethods() {
       const board = this.ensureSummaryTaskBoard(false)
       const startedAt = new Date().toISOString()
       const keys = this.getSummaryTaskKeys()
-      const preparedTasks = cloneArray(board.tasks).map((task) => {
-        if (!keys.includes(asText(task.key))) return task
-        return {
-          ...task,
-          status: 'running',
-          startedAt,
-          endedAt: '',
-          durationMs: 0,
-          error: '',
-          paramsSnapshot: this.captureSummaryTaskParams(task.key),
-          logs: [],
-        }
-      })
+      const keysToRun = this.filterSummaryTaskKeysForReuse(keys, { forcePoiFetch: false })
+      const reusedKeys = keys.filter((key) => !keysToRun.includes(key))
       this.updateSummaryTaskBoard({
         ...board,
-        tasks: preparedTasks,
-        runState: 'running',
+        runState: keysToRun.length ? 'running' : 'completed',
         lastRunAt: startedAt,
       })
-      this.appendSummaryTaskLog('poi_grid', '等待 POI 抓取完成后启动网格计算')
+      reusedKeys.forEach((key) => this.finalizeSummaryTaskAsReused(key))
+      if (!keysToRun.length) {
+        this.agentSummaryError = ''
+        await this.refreshAgentSummaryReadiness(true)
+        return
+      }
       const taskOptions = {
         ...options,
-        force: true,
+        force: false,
         source: asText(options.source || 'full_recompute'),
       }
       try {
-        const poiFetchPromise = this.runSummaryTask('poi_fetch', taskOptions)
-        const independentKeys = keys.filter((key) => key !== 'poi_fetch' && key !== 'poi_grid')
+        const shouldRunPoiFetch = keysToRun.includes('poi_fetch')
+        const shouldRunPoiGrid = keysToRun.includes('poi_grid')
+        const poiFetchPromise = shouldRunPoiFetch
+          ? this.runSummaryTask('poi_fetch', taskOptions)
+          : Promise.resolve()
+        const independentKeys = keysToRun.filter((key) => key !== 'poi_fetch' && key !== 'poi_grid')
         const independentPromises = independentKeys.map((key) => this.runSummaryTask(key, taskOptions))
-        const poiGridPromise = (async () => {
+        const poiGridPromise = shouldRunPoiGrid ? (async () => {
           try {
             await poiFetchPromise
           } catch (err) {
@@ -1182,9 +1267,17 @@ function createAgentUiMethods() {
             this.appendSummaryTaskLog('poi_grid', message, 'error')
             throw new Error(message)
           }
+          if (shouldRunPoiFetch) {
+            this.appendSummaryTaskLog('poi_grid', 'POI 抓取完成，启动网格计算')
+          }
           return this.runSummaryTask('poi_grid', taskOptions)
-        })()
-        const settled = await Promise.allSettled([poiFetchPromise, ...independentPromises, poiGridPromise])
+        })() : null
+        const promises = [
+          ...(shouldRunPoiFetch ? [poiFetchPromise] : []),
+          ...independentPromises,
+          ...(poiGridPromise ? [poiGridPromise] : []),
+        ]
+        const settled = await Promise.allSettled(promises)
         const hasFailed = settled.some((item) => item.status === 'rejected')
         if (hasFailed) {
           const messages = settled
@@ -1234,8 +1327,130 @@ function createAgentUiMethods() {
         fetch_missing: '正在补齐缺失分析',
         derive_analysis: '正在补齐结构化分析',
         analysis_started: '正在生成结构化总结',
+        completed: '总结生成完成',
       }
       return mapping[phase] || ''
+    },
+    createEmptyAgentSummaryStreamSections() {
+      return {
+        headline: { key: 'headline', content: '', status: 'pending', error: '', payload: {} },
+        tags: { key: 'tags', content: '', status: 'pending', error: '', payload: {} },
+        spatial_structure: { key: 'spatial_structure', content: '', status: 'pending', error: '', payload: {} },
+        poi_structure: { key: 'poi_structure', content: '', status: 'pending', error: '', payload: {} },
+        consumption_vitality: { key: 'consumption_vitality', content: '', status: 'pending', error: '', payload: {} },
+        business_support: { key: 'business_support', content: '', status: 'pending', error: '', payload: {} },
+        user_profile: { key: 'user_profile', content: '', status: 'pending', error: '', payload: {} },
+        behavior: { key: 'behavior', content: '', status: 'pending', error: '', payload: {} },
+        followups: { key: 'followups', content: '', status: 'pending', error: '', payload: {} },
+      }
+    },
+    resetAgentSummaryStreamSections() {
+      this.agentSummaryStreamSections = this.createEmptyAgentSummaryStreamSections()
+      return this.agentSummaryStreamSections
+    },
+    ensureAgentSummaryStreamSections() {
+      const current = cloneObject(this.agentSummaryStreamSections)
+      if (Object.keys(current).length) return current
+      return this.resetAgentSummaryStreamSections()
+    },
+    patchAgentSummaryStreamSection(sectionKey = '', patch = {}) {
+      const key = asText(sectionKey)
+      if (!key) return null
+      const current = this.ensureAgentSummaryStreamSections()
+      this.agentSummaryStreamSections = {
+        ...current,
+        [key]: {
+          ...(current[key] || { key, content: '', status: 'pending', error: '', payload: {} }),
+          ...cloneObject(patch),
+        },
+      }
+      return this.agentSummaryStreamSections[key]
+    },
+    getAgentSummaryFollowupQuestions(panelPayloads = null) {
+      const payloads = panelPayloads && typeof panelPayloads === 'object'
+        ? cloneObject(panelPayloads)
+        : this.getAgentActiveSummaryPanelPayloads()
+      const summaryPack = this.getAgentSummaryPack(payloads)
+      const items = cloneArray(
+        summaryPack.followup_questions
+        || payloads.summary_followup_questions
+        || (((this.agentSummaryStreamSections || {}).followups || {}).payload || {}).followup_questions,
+      ).map((item) => asText(item)).filter(Boolean)
+      if (items.length) return items
+      return [
+        '请解释这份总结背后的证据链与判断依据',
+        '请展开这一范围的业态建议与主要风险',
+        '请把这份总结转成可执行清单',
+      ]
+    },
+    getAgentSummaryGeneratingSections() {
+      const phase = asText(this.agentSummaryProgressPhase)
+      const phaseStarted = phase === 'analysis_started'
+      const liveSections = this.ensureAgentSummaryStreamSections()
+      const buildTaskState = (taskKeys = []) => {
+        const keys = cloneArray(taskKeys).map((item) => asText(item)).filter(Boolean)
+        const tasks = keys.map((key) => this.getSummaryTaskByKey(key)).filter(Boolean)
+        const pendingLabels = keys
+          .filter((key) => {
+            const task = this.getSummaryTaskByKey(key)
+            return !(task && this.isSummaryTaskTerminalStatus(task.status))
+          })
+          .map((key) => this.getAgentSummaryTaskLabel(key))
+        const hasRunning = tasks.some((task) => asText(task && task.status) === 'running')
+        const allTerminal = keys.length > 0 && keys.every((key) => {
+          const task = this.getSummaryTaskByKey(key)
+          return !!(task && this.isSummaryTaskTerminalStatus(task.status))
+        })
+        return { hasRunning, allTerminal, pendingLabels }
+      }
+      const buildStatusLabel = (status = '') => {
+        if (status === 'failed') return '失败'
+        if (status === 'ready') return '已就绪'
+        if (status === 'active') return '生成中'
+        return '等待中'
+      }
+      const buildDetail = (state, fallback = '等待生成结构化内容') => {
+        if (phaseStarted && state.allTerminal) return '结构化证据已齐，正在组织成文'
+        if (state.hasRunning) return '相关分析正在生成'
+        if (state.allTerminal) return '结构化证据已齐备'
+        if (state.pendingLabels.length) return `等待${state.pendingLabels.slice(0, 2).join('、')}`
+        return fallback
+      }
+      const sections = [
+        { key: 'headline', title: '一句话结论', layout: 'text', taskKeys: ['poi_grid', 'population', 'nightlight', 'road_syntax'] },
+        { key: 'tags', title: '商业类型标签（ICSC）', layout: 'tags', taskKeys: ['poi_grid'] },
+        { key: 'spatial_structure', title: '空间结构', layout: 'panel', taskKeys: ['poi_grid', 'population', 'nightlight', 'road_syntax'] },
+        { key: 'poi_structure', title: 'POI结构', layout: 'panel', taskKeys: ['poi_grid'] },
+        { key: 'consumption_vitality', title: '消费活力', layout: 'panel', taskKeys: ['nightlight'] },
+        { key: 'business_support', title: '业态承接', layout: 'panel', taskKeys: ['poi_grid', 'road_syntax'] },
+        { key: 'user_profile', title: '用户画像', layout: 'list', taskKeys: ['population'] },
+        { key: 'behavior', title: '商业行为推断', layout: 'list', taskKeys: ['nightlight', 'road_syntax'] },
+        { key: 'followups', title: '快捷追问', layout: 'actions', taskKeys: ['poi_grid', 'population', 'nightlight', 'road_syntax'] },
+      ]
+      return sections.map((section) => {
+        const live = liveSections[section.key] || {}
+        const state = buildTaskState(section.taskKeys)
+        let status = 'pending'
+        if (['ready', 'failed', 'active'].includes(asText(live.status))) {
+          status = asText(live.status)
+        } else if (phaseStarted && (section.key === 'headline' || section.key === 'followups')) {
+          status = 'active'
+        } else if (state.hasRunning) {
+          status = 'active'
+        } else if (state.allTerminal) {
+          status = 'ready'
+        } else if (phase === 'derive_analysis' && ['headline', 'spatial_structure', 'poi_structure', 'consumption_vitality', 'business_support'].includes(section.key)) {
+          status = 'active'
+        }
+        return {
+          ...section,
+          status,
+          statusLabel: buildStatusLabel(status),
+          detail: asText(live.error) || (!asText(live.content) ? buildDetail(state) : ''),
+          content: asText(live.content),
+          payload: cloneObject(live.payload),
+        }
+      })
     },
     getAgentSummaryGateProgressText() {
       const phaseLabel = this.getAgentSummaryPhaseLabel()
@@ -1257,12 +1472,16 @@ function createAgentUiMethods() {
       this.agentSummaryError = ''
       this.agentSummaryWarnings = []
       try {
+        await Promise.allSettled([
+          typeof this.loadPopulationMeta === 'function' ? this.loadPopulationMeta(false) : null,
+          typeof this.loadNightlightMeta === 'function' ? this.loadNightlightMeta(false) : null,
+        ].filter(Boolean))
         const res = await fetch('/api/v1/analysis/agent/summary/readiness', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             conversation_id: asText(this.activeAgentSessionId || this.agentConversationId),
-            analysis_fingerprint: asText(this.getCurrentAgentAnalysisFingerprint()),
+            history_id: asText(this.getCurrentAgentHistoryId()),
             analysis_snapshot: this.buildAgentAnalysisSnapshot(),
           }),
         })
@@ -1304,6 +1523,7 @@ function createAgentUiMethods() {
         this.createAgentSummaryTab({ title: '总结', reuseExisting: true })
       }
       this.agentSummaryGenerating = true
+      this.resetAgentSummaryStreamSections()
       this.agentSummaryProgressPhase = 'precheck'
       this.agentSummaryError = ''
       this.agentSummaryWarnings = []
@@ -1335,23 +1555,13 @@ function createAgentUiMethods() {
         this.agentSummaryGenerating = false
         return
       }
-      const progressPhases = ['precheck', 'fetch_missing', 'derive_analysis']
-      let phaseCursor = 0
-      let progressTimer = null
-      const tickPhase = () => {
-        if (!this.agentSummaryGenerating) return
-        this.agentSummaryProgressPhase = progressPhases[phaseCursor]
-        if (phaseCursor < progressPhases.length - 1) phaseCursor += 1
-      }
-      tickPhase()
-      progressTimer = setInterval(tickPhase, 1100)
       try {
         const res = await fetch('/api/v1/analysis/agent/summary/generate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             conversation_id: asText(this.activeAgentSessionId || this.agentConversationId),
-            analysis_fingerprint: asText(this.getCurrentAgentAnalysisFingerprint()),
+            history_id: asText(this.getCurrentAgentHistoryId()),
             analysis_snapshot: this.buildAgentAnalysisSnapshot(),
           }),
         })
@@ -1362,9 +1572,109 @@ function createAgentUiMethods() {
           } catch (_) {}
           throw new Error(detail || `/api/v1/analysis/agent/summary/generate 请求失败(${res.status})`)
         }
-        const data = await res.json()
-        const phases = cloneArray(data && data.phases).map((item) => asText(item)).filter(Boolean)
-        this.agentSummaryProgressPhase = phases.length ? phases[phases.length - 1] : 'analysis_started'
+        let finalPayload = null
+        await consumeSseStream(res, (event) => {
+          const type = asText(event && event.type)
+          const payload = cloneObject(event && event.payload)
+          const normalizeStreamKey = (key, extra = {}) => {
+            const rawKey = asText(key)
+            if (rawKey === 'secondary') {
+              return asText(extra.section_key || extra.sectionKey)
+            }
+            return rawKey
+          }
+          if (type === 'status') {
+            this.agentSummaryProgressPhase = asText(payload.phase) || this.agentSummaryProgressPhase
+            return
+          }
+          if (type === 'section_start') {
+            const streamKey = normalizeStreamKey(payload.key, payload)
+            if (!streamKey) return
+            this.patchAgentSummaryStreamSection(streamKey, {
+              status: 'active',
+              error: '',
+              content: '',
+              payload: cloneObject(payload.payload),
+            })
+            return
+          }
+          if (type === 'section_delta') {
+            const streamKey = normalizeStreamKey(payload.key, payload)
+            if (!streamKey) return
+            const current = cloneObject((this.ensureAgentSummaryStreamSections() || {})[streamKey] || {})
+            this.patchAgentSummaryStreamSection(streamKey, {
+              status: 'active',
+              content: `${asText(current.content)}${asText(payload.delta)}`,
+            })
+            return
+          }
+          if (type === 'section_complete') {
+            const nextStatus = asText(payload.status || 'ready') || 'ready'
+            const sectionPayload = cloneObject(payload.payload)
+            let nextContent = ''
+            const streamKey = normalizeStreamKey(payload.key, payload)
+            if (payload.key === 'headline') {
+              nextContent = [asText(sectionPayload.summary), asText(sectionPayload.supporting_clause)].filter(Boolean).join('\n')
+            } else if (payload.key === 'user_profile' || payload.key === 'behavior') {
+              nextContent = [asText(sectionPayload.headline), ...cloneArray(sectionPayload.traits).map((item) => asText(item)).filter(Boolean)].join('\n')
+            } else if (payload.key === 'secondary') {
+              cloneArray(sectionPayload.secondary_conclusions).forEach((item) => {
+                const itemKey = asText(item && item.section_key)
+                if (!itemKey) return
+                this.patchAgentSummaryStreamSection(itemKey, {
+                  status: nextStatus === 'failed' ? 'failed' : 'ready',
+                  payload: cloneObject(item),
+                  content: asText(item && item.reasoning),
+                  error: nextStatus === 'failed' ? (asText(payload.message) || '当前面板生成失败') : '',
+                })
+              })
+              return
+            } else if (payload.key === 'followups') {
+              nextContent = cloneArray(sectionPayload.followup_questions).map((item) => asText(item)).filter(Boolean).join('\n')
+            } else if (payload.key === 'tags') {
+              nextContent = cloneArray(sectionPayload.icsc_tags).map((item) => asText(item)).filter(Boolean).join('、')
+            }
+            if (!streamKey) return
+            this.patchAgentSummaryStreamSection(streamKey, {
+              status: nextStatus === 'failed' ? 'failed' : 'ready',
+              payload: sectionPayload,
+              content: nextContent || asText(((this.ensureAgentSummaryStreamSections() || {})[streamKey] || {}).content),
+              error: nextStatus === 'failed' ? (asText(payload.message) || '当前面板生成失败') : '',
+            })
+            return
+          }
+          if (type === 'panel_payload') {
+            const nextPayloads = {
+              ...cloneObject(this.agentPanelPayloads),
+              ...cloneObject(payload.payload),
+            }
+            this.agentPanelPayloads = nextPayloads
+            return
+          }
+          if (type === 'error') {
+            const targetKey = normalizeStreamKey(payload.key, payload)
+            if (targetKey && targetKey !== 'global') {
+              const current = cloneObject((this.ensureAgentSummaryStreamSections() || {})[targetKey] || {})
+              this.patchAgentSummaryStreamSection(targetKey, {
+                status: 'failed',
+                error: asText(payload.message) || '当前面板生成失败',
+                content: asText(current.content),
+              })
+            } else {
+              this.agentSummaryError = asText(payload.message) || this.agentSummaryError
+            }
+            return
+          }
+          if (type === 'final') {
+            finalPayload = payload
+          }
+        })
+        if (!finalPayload) {
+          throw new Error('总结流式生成未返回最终结果')
+        }
+        const data = cloneObject(finalPayload)
+        const phases = cloneArray(data.phases).map((item) => asText(item)).filter(Boolean)
+        this.agentSummaryProgressPhase = phases.length ? phases[phases.length - 1] : 'completed'
         this.agentSummaryReadiness = this.normalizeAgentSummaryReadiness(data && data.data_readiness)
         this.agentSummaryWarnings = cloneArray(data && data.warnings)
         this.agentSummaryError = asText(data && data.error)
@@ -1380,14 +1690,10 @@ function createAgentUiMethods() {
         }
         const payloads = cloneObject(data && data.panel_payloads)
         if (payloads && typeof payloads === 'object') {
-          const nextPayloads = {
+          this.agentPanelPayloads = {
             ...cloneObject(this.agentPanelPayloads),
             ...payloads,
           }
-          if (!(data && data.summary_pack && typeof data.summary_pack === 'object' && Object.keys(data.summary_pack).length)) {
-            nextPayloads.summary_pack = {}
-          }
-          this.agentPanelPayloads = nextPayloads
         }
         if (data && data.summary_pack && typeof data.summary_pack === 'object') {
           this.agentPanelPayloads = {
@@ -1396,13 +1702,17 @@ function createAgentUiMethods() {
           }
         }
         const summaryPack = cloneObject(this.getAgentSummaryPack())
+        const summaryStatus = this.getAgentSummaryStatus(this.agentPanelPayloads)
+        if (!summaryStatus.generated || !this.hasAgentSummaryPack(summaryPack)) {
+          return
+        }
         const headline = asText((summaryPack.headline_judgment || {}).summary)
         const supporting = asText((summaryPack.headline_judgment || {}).supporting_clause)
         const summarySession = createAgentSessionRecord({
           id: this.createSummaryHistorySessionId(),
           title: clampText(headline || '总结', 60) || '总结',
           preview: clampText(supporting || headline || '商业判断型总结', 120) || '商业判断型总结',
-          analysisFingerprint: this.getCurrentAgentAnalysisFingerprint(),
+          historyId: this.getCurrentAgentHistoryId(),
           sessionKind: 'summary',
           status: 'answered',
           stage: 'answered',
@@ -1439,7 +1749,7 @@ function createAgentUiMethods() {
         const synced = this.syncCurrentAgentSession({
           persisted: true,
           status: 'answered',
-          analysisFingerprint: this.getCurrentAgentAnalysisFingerprint(),
+          historyId: this.getCurrentAgentHistoryId(),
           sessionKind: 'summary',
         })
         const sessionId = asText((synced && synced.id) || summarySession.id)
@@ -1447,7 +1757,7 @@ function createAgentUiMethods() {
           await this.putAgentSession(sessionId, {
             status: 'answered',
             persisted: true,
-            analysisFingerprint: this.getCurrentAgentAnalysisFingerprint(),
+            historyId: this.getCurrentAgentHistoryId(),
             sessionKind: 'summary',
           })
         }
@@ -1467,10 +1777,6 @@ function createAgentUiMethods() {
         }
         this.agentSummaryProgressPhase = ''
       } finally {
-        if (progressTimer) {
-          clearInterval(progressTimer)
-          progressTimer = null
-        }
         if (!this.agentSummaryReadiness.ready) {
           this.agentSummaryProgressPhase = ''
         }
@@ -1527,13 +1833,27 @@ function createAgentUiMethods() {
       const currentSummaryTabs = cloneArray(nextTabs.summaryTabs).filter((item) => asText(item.source) === 'current')
       const historySummaryTabs = cloneArray(nextTabs.summaryTabs).filter((item) => asText(item.source) !== 'current')
       const shouldAutoCreateCurrentSummary = true
-      let syncedCurrentSummaryTabs = currentSummaryTabs.map((item) => ({
-        ...item,
-        title: this.getAgentSummaryWindowTitle(this.agentPanelPayloads, item.title || currentSummaryStatus.title),
-        panelPayloads: cloneObject(this.agentPanelPayloads),
-        content: cloneObject(defaultSummaryPack),
-        evidenceRefs: cloneArray(defaultSummaryPack.evidence_refs || []),
-      }))
+      let syncedCurrentSummaryTabs = currentSummaryTabs.map((item) => {
+        const preservedPayloads = cloneObject(item.panelPayloads)
+        const payloadPack = this.getAgentSummaryPack(preservedPayloads)
+        const content = Object.keys(payloadPack).length
+          ? cloneObject(payloadPack)
+          : (Object.keys(cloneObject(item.content)).length ? cloneObject(item.content) : cloneObject(defaultSummaryPack))
+        const panelPayloads = {
+          ...preservedPayloads,
+          ...(Object.keys(content).length ? { summary_pack: cloneObject(content) } : {}),
+        }
+        if (!panelPayloads.summary_task_board && !panelPayloads.summaryTaskBoard) {
+          panelPayloads.summary_task_board = this.normalizeSummaryTaskBoard(this.summaryTaskBoard)
+        }
+        return {
+          ...item,
+          title: this.getAgentSummaryWindowTitle(panelPayloads, item.title || currentSummaryStatus.title),
+          panelPayloads,
+          content: cloneObject(content),
+          evidenceRefs: cloneArray(content.evidence_refs || item.evidenceRefs || []),
+        }
+      })
       if (!syncedCurrentSummaryTabs.length && shouldAutoCreateCurrentSummary) {
         syncedCurrentSummaryTabs = [{
           id: 'summary-current',
@@ -1598,20 +1918,40 @@ function createAgentUiMethods() {
       target.thread = this.buildAgentFollowupThreadFromCurrentState()
       this.agentTabs = { ...tabs, summaryTabs: cloneArray(tabs.summaryTabs), followupTabs: cloneArray(tabs.followupTabs) }
     },
+    captureAgentActiveSummaryTabState() {
+      const tabs = this.ensureAgentTabs(true)
+      const activeTab = this.getAgentActiveTopTab()
+      if (asText(activeTab.kind) !== 'summary' || asText(activeTab.source) !== 'current') return
+      const target = cloneArray(tabs.summaryTabs).find((item) => item.id === activeTab.id)
+      if (!target || target.readonly) return
+      const panelPayloads = {
+        ...cloneObject(this.agentPanelPayloads),
+        summary_task_board: this.buildSummaryTaskBoardUiState(),
+      }
+      const summaryPack = this.getAgentSummaryPack(panelPayloads)
+      target.title = this.getAgentSummaryWindowTitle(panelPayloads, target.title || '总结')
+      target.panelPayloads = panelPayloads
+      target.content = cloneObject(summaryPack)
+      target.evidenceRefs = cloneArray(summaryPack.evidence_refs || [])
+      this.agentTabs = { ...tabs, summaryTabs: cloneArray(tabs.summaryTabs), followupTabs: cloneArray(tabs.followupTabs) }
+    },
     switchAgentTopTab(tabId = '') {
       const nextId = asText(tabId)
-      const tabs = this.ensureAgentTabs(true)
-      if (!nextId || tabs.activeTabId === nextId) return
+      if (!nextId) return
       this.closeAgentCreateTabMenu()
+      this.captureAgentActiveSummaryTabState()
       this.captureAgentActiveFollowupTabState()
+      const tabs = this.ensureAgentTabs(true)
+      if (tabs.activeTabId === nextId) return
       tabs.activeTabId = nextId
       this.agentTabs = { ...tabs, summaryTabs: cloneArray(tabs.summaryTabs), followupTabs: cloneArray(tabs.followupTabs) }
       const targetSummary = cloneArray(tabs.summaryTabs).find((item) => item.id === nextId)
       if (targetSummary) {
         this.syncActiveAgentRuntimeView(this.activeAgentSessionId)
-        this.syncAgentSummaryStateFromPanelPayload(
-          asText(targetSummary.source) === 'current' ? this.agentPanelPayloads : targetSummary.panelPayloads,
-        )
+        if (asText(targetSummary.source) === 'current') {
+          this.agentPanelPayloads = cloneObject(targetSummary.panelPayloads)
+        }
+        this.syncAgentSummaryStateFromPanelPayload(targetSummary.panelPayloads)
       } else {
         const target = tabs.followupTabs.find((item) => item.id === nextId)
         if (target) {
@@ -1641,7 +1981,11 @@ function createAgentUiMethods() {
     },
     createAgentSummaryTab(options = {}) {
       const tabs = this.ensureAgentTabs(true)
-      const summaryPack = this.getAgentSummaryPack(this.agentPanelPayloads)
+      const panelPayloads = {
+        ...cloneObject(this.agentPanelPayloads),
+        summary_task_board: this.buildSummaryTaskBoardUiState(),
+      }
+      const summaryPack = this.getAgentSummaryPack(panelPayloads)
       const reuseExisting = !!options.reuseExisting
       const existing = reuseExisting
         ? cloneArray(tabs.summaryTabs).find((item) => asText(item.source) === 'current')
@@ -1653,12 +1997,12 @@ function createAgentUiMethods() {
         sessionId: '',
         readonly: false,
         createdAt: new Date().toISOString(),
-        panelPayloads: cloneObject(this.agentPanelPayloads),
+        panelPayloads,
         content: cloneObject(summaryPack),
         evidenceRefs: cloneArray(summaryPack.evidence_refs || []),
       }
-      summaryTab.title = this.getAgentSummaryWindowTitle(this.agentPanelPayloads, options.title)
-      summaryTab.panelPayloads = cloneObject(this.agentPanelPayloads)
+      summaryTab.title = this.getAgentSummaryWindowTitle(panelPayloads, options.title)
+      summaryTab.panelPayloads = panelPayloads
       summaryTab.content = cloneObject(summaryPack)
       summaryTab.evidenceRefs = cloneArray(summaryPack.evidence_refs || [])
       if (!existing) {
@@ -1845,6 +2189,7 @@ function createAgentUiMethods() {
       return asText(activeTab.kind) === 'followup'
     },
     buildAgentTabsUiState() {
+      this.captureAgentActiveSummaryTabState()
       this.captureAgentActiveFollowupTabState()
       const tabs = this.ensureAgentTabs(true)
       const currentSummaryTab = cloneArray(tabs.summaryTabs).find((item) => asText(item.source) === 'current') || null
@@ -1957,7 +2302,11 @@ function createAgentUiMethods() {
           this.applyAgentFollowupThreadToCurrentState(activeTab.thread)
         }
       } else if (this.isCurrentAgentSummaryTabActive()) {
-        this.syncAgentSummaryReadinessFromPanelPayload(this.agentPanelPayloads)
+        const activeSummaryTab = cloneArray(this.agentTabs.summaryTabs).find((item) => item.id === this.agentTabs.activeTabId)
+        if (activeSummaryTab && activeSummaryTab.panelPayloads && typeof activeSummaryTab.panelPayloads === 'object') {
+          this.agentPanelPayloads = cloneObject(activeSummaryTab.panelPayloads)
+        }
+        this.syncAgentSummaryStateFromPanelPayload(this.agentPanelPayloads)
       }
     },
     queueAgentPrompt(prompt = '') {
@@ -2464,7 +2813,7 @@ function createAgentUiMethods() {
       this.setAgentTaskConfirmation({
         ...current,
         status: 'cancelled',
-        statusLabel: '宸插彇娑?',
+        statusLabel: '已取消',
         updatedAt: new Date().toISOString(),
       })
     },

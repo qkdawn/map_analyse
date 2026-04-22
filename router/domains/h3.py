@@ -169,7 +169,6 @@ async def analyze_h3_metrics(payload: H3MetricsRequest):
             poi_coord_type=payload.poi_coord_type,
             neighbor_ring=payload.neighbor_ring,
             use_arcgis=True,
-            arcgis_python_path=payload.arcgis_python_path,
             arcgis_neighbor_ring=payload.arcgis_neighbor_ring,
             arcgis_knn_neighbors=None,
             arcgis_export_image=payload.arcgis_export_image,
@@ -178,4 +177,3 @@ async def analyze_h3_metrics(payload: H3MetricsRequest):
     except RuntimeError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     return result
-

@@ -34,7 +34,6 @@ async def export_h3_analysis(payload: H3ExportRequest):
                 for feature in (payload.poi_features or [])
             ],
             style_meta=payload.style_meta,
-            arcgis_python_path=payload.arcgis_python_path,
             timeout_sec=payload.arcgis_timeout_sec,
         )
     except RuntimeError as exc:

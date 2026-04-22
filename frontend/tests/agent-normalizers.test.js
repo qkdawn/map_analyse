@@ -59,7 +59,7 @@ test('normalizeAgentSessionSummary keeps persisted metadata and existing snapsho
       preview: '这里以餐饮和零售为主',
       status: 'answered',
       title_source: 'user',
-      analysis_fingerprint: 'scope:abc123',
+      history_id: 'history-123',
       session_kind: 'summary',
       is_pinned: true,
     },
@@ -72,6 +72,6 @@ test('normalizeAgentSessionSummary keeps persisted metadata and existing snapsho
   assert.equal(summary.persisted, true)
   assert.equal(summary.snapshotLoaded, true)
   assert.equal(summary.isPinned, true)
-  assert.equal(summary.analysisFingerprint, 'scope:abc123')
+  assert.equal(summary.historyId, 'history-123')
   assert.equal(summary.sessionKind, 'summary')
 })

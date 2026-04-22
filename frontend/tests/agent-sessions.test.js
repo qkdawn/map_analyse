@@ -507,7 +507,7 @@ test('loadAgentSessionSummaries preserves local draft while adding persisted sum
           title: '已保存会话',
           preview: '服务器摘要',
           status: 'answered',
-          analysis_fingerprint: 'fp-persisted',
+          history_id: 'history-persisted',
           is_pinned: false,
           created_at: '2026-04-05T00:00:00Z',
           updated_at: '2026-04-05T01:00:00Z',
@@ -522,19 +522,21 @@ test('loadAgentSessionSummaries preserves local draft while adding persisted sum
   assert.equal(ctx.agentSessionsLoaded, true)
   assert.equal(ctx.agentSessions.length, 2)
   assert.equal(ctx.getAgentHistorySessions().length, 1)
-  assert.equal(ctx.findAgentSession('agent-persisted').analysisFingerprint, 'fp-persisted')
+  assert.equal(ctx.findAgentSession('agent-persisted').historyId, 'history-persisted')
   assert.equal(ctx.agentSessions.some((item) => item.id === draft.id && item.persisted === false), true)
   assert.equal(ctx.agentSessions.some((item) => item.id === 'agent-persisted' && item.persisted === true), true)
 })
 
-test('agent history sessions are grouped by current analysis fingerprint', () => {
-  const ctx = createAgentContext()
-  const currentFingerprint = ctx.getCurrentAgentAnalysisFingerprint()
+test('agent history sessions are grouped by current history id', () => {
+  const ctx = createAgentContext({
+    scopeSource: 'history',
+    currentHistoryRecordId: 'history-current',
+  })
   ctx.agentSessions = [
-    { ...ctxSessionBase('agent-current', '当前范围'), analysisFingerprint: currentFingerprint, persisted: true, snapshotLoaded: true },
-    { ...ctxSessionBase('agent-other', '其他范围'), analysisFingerprint: 'fp-other', persisted: true, snapshotLoaded: true },
-    { ...ctxSessionBase('agent-legacy', '旧历史'), analysisFingerprint: '', persisted: true, snapshotLoaded: true },
-    { ...ctxSessionBase('agent-draft', '草稿'), analysisFingerprint: currentFingerprint, persisted: false, snapshotLoaded: true },
+    { ...ctxSessionBase('agent-current', '当前范围'), historyId: 'history-current', persisted: true, snapshotLoaded: true },
+    { ...ctxSessionBase('agent-other', '其他范围'), historyId: 'history-other', persisted: true, snapshotLoaded: true },
+    { ...ctxSessionBase('agent-legacy', '旧历史'), historyId: '', persisted: true, snapshotLoaded: true },
+    { ...ctxSessionBase('agent-draft', '草稿'), historyId: 'history-current', persisted: false, snapshotLoaded: true },
   ]
 
   assert.deepEqual(ctx.getAgentCurrentRangeSessions().map((item) => item.id), ['agent-current'])
@@ -542,7 +544,7 @@ test('agent history sessions are grouped by current analysis fingerprint', () =>
   assert.deepEqual(ctx.getAgentRangeSessionGroups().map((item) => item.title), ['当前范围', '其他范围'])
 })
 
-test('agent history puts all sessions into other range when current fingerprint is missing', () => {
+test('agent history puts all sessions into other range when current history id is missing', () => {
   const ctx = createAgentContext({
     getIsochronePolygonPayload() {
       return []
@@ -552,11 +554,11 @@ test('agent history puts all sessions into other range when current fingerprint 
     },
   })
   ctx.agentSessions = [
-    { ...ctxSessionBase('agent-a', 'A'), analysisFingerprint: 'fp-a', persisted: true, snapshotLoaded: true },
-    { ...ctxSessionBase('agent-b', 'B'), analysisFingerprint: '', persisted: true, snapshotLoaded: true },
+    { ...ctxSessionBase('agent-a', 'A'), historyId: 'history-a', persisted: true, snapshotLoaded: true },
+    { ...ctxSessionBase('agent-b', 'B'), historyId: '', persisted: true, snapshotLoaded: true },
   ]
 
-  assert.equal(ctx.getCurrentAgentAnalysisFingerprint(), '')
+  assert.equal(ctx.getCurrentAgentHistoryId(), '')
   assert.deepEqual(ctx.getAgentCurrentRangeSessions(), [])
   assert.deepEqual(ctx.getAgentOtherRangeSessions().map((item) => item.id), ['agent-a', 'agent-b'])
 })
@@ -1123,7 +1125,21 @@ test('submitAgentTurn shows submit process before first stream event', async () 
   ctx.agentInput = '总结这个区域'
 
   let capturedSignal = null
-  global.fetch = async (_url, options = {}) => {
+  global.fetch = async (url, options = {}) => {
+    if (url === '/api/v1/analysis/agent/summary/readiness') {
+      return {
+        ok: true,
+        async json() {
+          return {
+            checked: false,
+            ready: false,
+            missing_tasks: [],
+            reused: [],
+            fetched: [],
+          }
+        },
+      }
+    }
     capturedSignal = options.signal
     return new Promise((_resolve, reject) => {
       options.signal.addEventListener('abort', () => {
@@ -2667,6 +2683,52 @@ test('getAgentSummaryGateProgressText only shows readiness checking while loadin
 
   ctx.agentSummaryLoading = true
   assert.equal(ctx.getAgentSummaryGateProgressText(), '正在检查数据就绪度…')
+})
+
+test('getSummaryTaskKeysToFill skips tasks that are already reusable', () => {
+  const ctx = createAgentContext({
+    agentSummaryReadiness: {
+      checked: true,
+      ready: false,
+      missingTasks: ['poi_grid', 'nightlight', 'road_syntax'],
+      reused: ['nightlight'],
+      fetched: [],
+    },
+  })
+  ctx.summaryTaskHasReusableResult = (taskKey) => taskKey === 'nightlight'
+
+  assert.deepEqual(ctx.getSummaryTaskKeysToFill(), ['poi_grid', 'road_syntax'])
+})
+
+test('getAgentSummaryGeneratingSections maps task progress into staged skeleton cards', () => {
+  const ctx = createAgentContext({
+    agentSummaryGenerating: true,
+    agentSummaryProgressPhase: 'fetch_missing',
+    summaryTaskBoard: {
+      runState: 'running',
+      tasks: [
+        { key: 'poi_fetch', label: 'POI 抓取', status: 'completed' },
+        { key: 'population', label: '人口结构分析', status: 'completed' },
+        { key: 'nightlight', label: '夜光分析', status: 'running' },
+        { key: 'poi_grid', label: 'POI / 网格分析', status: 'running' },
+        { key: 'road_syntax', label: '路网与可达性分析', status: 'pending' },
+      ],
+    },
+  })
+
+  const sections = ctx.getAgentSummaryGeneratingSections()
+
+  assert.equal(sections.find((item) => item.key === 'tags').status, 'active')
+  assert.equal(sections.find((item) => item.key === 'user_profile').status, 'ready')
+  assert.equal(sections.find((item) => item.key === 'behavior').status, 'active')
+  assert.match(sections.find((item) => item.key === 'spatial_structure').detail, /等待|正在/)
+  assert.equal(sections.find((item) => item.key === 'poi_structure').status, 'active')
+  assert.equal(sections.find((item) => item.key === 'consumption_vitality').status, 'active')
+  assert.match(sections.find((item) => item.key === 'business_support').detail, /等待|正在/)
+
+  ctx.agentSummaryProgressPhase = 'analysis_started'
+  assert.equal(ctx.getAgentSummaryGeneratingSections().find((item) => item.key === 'headline').status, 'active')
+  assert.equal(ctx.getAgentSummaryGeneratingSections().find((item) => item.key === 'spatial_structure').status, 'active')
 })
 
 function ctxSessionBase(id, title) {

@@ -588,7 +588,7 @@ function createAgentSessionRecord(seed = {}) {
     id: asText(seed.id),
     title: clampText(seed.title, 60) || deriveAgentSessionTitle(messages),
     preview: clampText(seed.preview, 120),
-    analysisFingerprint: asText(seed.analysisFingerprint || seed.analysis_fingerprint),
+    historyId: asText(seed.historyId || seed.history_id),
     updatedAt: asText(seed.updatedAt || nowIso),
     createdAt: asText(seed.createdAt || nowIso),
     pinnedAt: asText(seed.pinnedAt),
@@ -713,7 +713,7 @@ function normalizeAgentSessionSummary(item = {}, existing = null) {
     snapshotLoaded: !!base.snapshotLoaded,
     titleSource: item.title_source || base.titleSource || 'fallback',
     sessionKind: item.session_kind || base.sessionKind || '',
-    analysisFingerprint: item.analysis_fingerprint || base.analysisFingerprint || '',
+    historyId: item.history_id || base.historyId || '',
     hasSummaryPack: Object.prototype.hasOwnProperty.call(item, 'has_summary_pack')
       ? !!item.has_summary_pack
       : !!base.hasSummaryPack,

@@ -212,9 +212,9 @@ test('loadHistoryDetail keeps restored history id and history scope source', asy
     global.window = originalWindow
   }
 
-  assert.equal(ctx.currentHistoryRecordId, 123)
+  assert.equal(ctx.currentHistoryRecordId, '123')
   assert.equal(ctx.scopeSource, 'history')
-  assert.equal(ctx.restoredPoiHistoryId, 123)
+  assert.equal(ctx.restoredPoiHistoryId, '123')
   assert.deepEqual(ctx.allPoisDetails, [{ id: 'history-poi' }])
 })
 

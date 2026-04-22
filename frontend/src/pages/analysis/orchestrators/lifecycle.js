@@ -68,8 +68,10 @@ function createAnalysisLifecycleHooks(options = {}) {
       this.disposePoiChart()
       this.disposeH3Charts()
       this.disposePopulationCharts()
+      if (typeof this.disposeGwrCharts === 'function') this.disposeGwrCharts()
       this.clearPopulationRasterDisplayOnLeave()
       this.clearNightlightDisplayOnLeave()
+      if (typeof this.clearGwrDisplayOnLeave === 'function') this.clearGwrDisplayOnLeave()
       if (typeof this.destroyAllAgentRuns === 'function') {
         this.destroyAllAgentRuns()
       }
@@ -120,6 +122,11 @@ function createAnalysisLifecycleHooks(options = {}) {
         if (oldPanel === 'nightlight' && newPanel !== 'nightlight' && !nightlightEnabled) {
           this.clearNightlightDisplayOnLeave()
         }
+        const gwrEnabled = (typeof this.hasSimplifyDisplayTarget === 'function')
+          && this.hasSimplifyDisplayTarget('gwr')
+        if (oldPanel === 'gwr' && newPanel !== 'gwr' && !gwrEnabled) {
+          this.clearGwrDisplayOnLeave()
+        }
         const timeseriesEnabled = (typeof this.hasSimplifyDisplayTarget === 'function')
           && this.hasSimplifyDisplayTarget('timeseries')
         if (oldPanel === 'timeseries' && newPanel !== 'timeseries' && !timeseriesEnabled) {
@@ -130,6 +137,9 @@ function createAnalysisLifecycleHooks(options = {}) {
         }
         if (newPanel === 'nightlight') {
           this.ensureNightlightPanelEntryState()
+        }
+        if (newPanel === 'gwr') {
+          this.ensureGwrPanelEntryState()
         }
         if (newPanel === 'timeseries') {
           if (typeof this.ensureTimeseriesPanelEntryState === 'function') this.ensureTimeseriesPanelEntryState()

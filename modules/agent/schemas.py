@@ -63,6 +63,15 @@ ToolLoopStatus = Literal["completed", "requires_risk_confirmation", "failed"]
 CardType = Literal["summary", "evidence", "recommendation"]
 AgentSessionTitleSource = Literal["user", "ai", "fallback"]
 AgentTurnStreamEventType = Literal["meta", "status", "thinking", "reasoning_delta", "trace", "plan", "final", "error"]
+AgentSummaryStreamEventType = Literal[
+    "status",
+    "section_start",
+    "section_delta",
+    "section_complete",
+    "panel_payload",
+    "final",
+    "error",
+]
 ThinkingState = Literal["pending", "active", "completed", "failed"]
 EvidenceConfidence = Literal["strong", "moderate", "weak"]
 DecisionMode = Literal["cognition", "judgment", "action"]
@@ -96,7 +105,7 @@ class AgentTurnRequest(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     conversation_id: str = ""
-    analysis_fingerprint: str = ""
+    history_id: str = ""
     messages: List[AgentMessage] = Field(default_factory=list)
     analysis_snapshot: AnalysisSnapshot = Field(default_factory=AnalysisSnapshot)
     risk_confirmations: List[str] = Field(default_factory=list)
@@ -107,7 +116,7 @@ class AgentSummaryRequest(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     conversation_id: str = ""
-    analysis_fingerprint: str = ""
+    history_id: str = ""
     analysis_snapshot: AnalysisSnapshot = Field(default_factory=AnalysisSnapshot)
 
 
@@ -475,6 +484,13 @@ class AgentTurnStreamEvent(BaseModel):
     payload: Dict[str, Any] = Field(default_factory=dict)
 
 
+class AgentSummaryStreamEvent(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    type: AgentSummaryStreamEventType
+    payload: Dict[str, Any] = Field(default_factory=dict)
+
+
 class AgentPlanEnvelope(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
@@ -580,7 +596,7 @@ class AgentSessionSummary(BaseModel):
     title: str = ""
     preview: str = ""
     status: PersistedAgentStatus = "idle"
-    analysis_fingerprint: str = ""
+    history_id: str = ""
     is_pinned: bool = False
     title_source: AgentSessionTitleSource = "fallback"
     session_kind: AgentSessionKind = ""
@@ -598,7 +614,7 @@ class AgentSessionSnapshotRequest(BaseModel):
     preview: str = ""
     status: PersistedAgentStatus = "idle"
     stage: AgentStage = "gating"
-    analysis_fingerprint: str = ""
+    history_id: str = ""
     session_kind: AgentSessionKind = ""
     is_pinned: Optional[bool] = None
     input: str = ""

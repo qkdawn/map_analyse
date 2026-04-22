@@ -8,7 +8,6 @@
             h3NeighborRing: 1,
             h3GridMinOverlapRatio: 0.15,
             h3ParamsSubTab: 'grid',
-            h3ArcgisPythonPath: 'C:\\Python27\\ArcGIS10.7\\python.exe',
             h3ArcgisImageVersion: 0,
             h3ArcgisSnapshotLoadError: false,
             isGeneratingH3ArcgisSnapshot: false,
@@ -231,10 +230,10 @@
                 return ['map', 'isochrone', 'drawn_polygon', 'poi'];
             },
             getSimplifyAnalysisTargets() {
-                return ['h3', 'population', 'nightlight', 'timeseries', 'syntax'];
+                return ['h3', 'population', 'nightlight', 'gwr', 'timeseries', 'syntax'];
             },
             getSimplifyGridAnalysisTargets() {
-                return ['h3', 'population', 'nightlight', 'timeseries'];
+                return ['h3', 'population', 'nightlight', 'gwr', 'timeseries'];
             },
             getAllowedSimplifyTargets() {
                 return [
@@ -257,6 +256,7 @@
                     : String(this.poiSubTab || '').trim().toLowerCase();
                 if (panel === 'population') return 'population';
                 if (panel === 'nightlight') return 'nightlight';
+                if (panel === 'gwr') return 'gwr';
                 if (panel === 'timeseries') return 'timeseries';
                 if (panel === 'syntax') return 'syntax';
                 if (panel === 'poi' && poiSubTab === 'grid') return 'h3';
@@ -563,33 +563,45 @@
                 const showH3 = this.step === 2 && normalizedTargets.indexOf('h3') >= 0;
                 const showPopulation = this.step === 2 && normalizedTargets.indexOf('population') >= 0;
                 const showNightlight = this.step === 2 && normalizedTargets.indexOf('nightlight') >= 0;
+                const showGwr = this.step === 2 && normalizedTargets.indexOf('gwr') >= 0;
                 const showTimeseries = this.step === 2 && normalizedTargets.indexOf('timeseries') >= 0;
                 const showSyntax = this.step === 2 && normalizedTargets.indexOf('syntax') >= 0;
 
                 if (showPopulation) {
                     this.clearH3GridDisplayOnLeave();
                     this.clearNightlightDisplayOnLeave();
+                    if (typeof this.clearGwrDisplayOnLeave === 'function') this.clearGwrDisplayOnLeave();
                     if (typeof this.clearTimeseriesDisplayOnLeave === 'function') this.clearTimeseriesDisplayOnLeave();
                     this.restorePopulationRasterDisplayOnEnter();
                 } else if (showNightlight) {
                     this.clearH3GridDisplayOnLeave();
                     this.clearPopulationRasterDisplayOnLeave();
+                    if (typeof this.clearGwrDisplayOnLeave === 'function') this.clearGwrDisplayOnLeave();
                     if (typeof this.clearTimeseriesDisplayOnLeave === 'function') this.clearTimeseriesDisplayOnLeave();
                     this.restoreNightlightDisplayOnEnter();
+                } else if (showGwr) {
+                    this.clearH3GridDisplayOnLeave();
+                    this.clearPopulationRasterDisplayOnLeave();
+                    this.clearNightlightDisplayOnLeave();
+                    if (typeof this.clearTimeseriesDisplayOnLeave === 'function') this.clearTimeseriesDisplayOnLeave();
+                    if (typeof this.restoreGwrDisplayOnEnter === 'function') this.restoreGwrDisplayOnEnter();
                 } else if (showTimeseries) {
                     this.clearH3GridDisplayOnLeave();
                     this.clearPopulationRasterDisplayOnLeave();
                     this.clearNightlightDisplayOnLeave();
+                    if (typeof this.clearGwrDisplayOnLeave === 'function') this.clearGwrDisplayOnLeave();
                     if (typeof this.restoreTimeseriesDisplayOnEnter === 'function') this.restoreTimeseriesDisplayOnEnter();
                 } else if (showH3) {
                     this.clearPopulationRasterDisplayOnLeave();
                     this.clearNightlightDisplayOnLeave();
+                    if (typeof this.clearGwrDisplayOnLeave === 'function') this.clearGwrDisplayOnLeave();
                     if (typeof this.clearTimeseriesDisplayOnLeave === 'function') this.clearTimeseriesDisplayOnLeave();
                     this.restoreH3GridDisplayOnEnter();
                 } else {
                     this.clearH3GridDisplayOnLeave();
                     this.clearPopulationRasterDisplayOnLeave();
                     this.clearNightlightDisplayOnLeave();
+                    if (typeof this.clearGwrDisplayOnLeave === 'function') this.clearGwrDisplayOnLeave();
                     if (typeof this.clearTimeseriesDisplayOnLeave === 'function') this.clearTimeseriesDisplayOnLeave();
                 }
 
@@ -2141,7 +2153,6 @@
                         poi_coord_type: 'gcj02',
                         neighbor_ring: neighborRing,
                         use_arcgis: true,
-                        arcgis_python_path: this.h3ArcgisPythonPath || null,
                         arcgis_neighbor_ring: neighborRing,
                         arcgis_export_image: false,
                         arcgis_timeout_sec: 240
@@ -2249,7 +2260,6 @@
                         poi_coord_type: 'gcj02',
                         neighbor_ring: neighborRing,
                         use_arcgis: true,
-                        arcgis_python_path: this.h3ArcgisPythonPath || null,
                         arcgis_neighbor_ring: neighborRing,
                         arcgis_export_image: true,
                         arcgis_timeout_sec: 240

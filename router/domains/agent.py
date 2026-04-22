@@ -6,8 +6,8 @@ from fastapi.responses import StreamingResponse
 
 from modules.agent.runtime import process_agent_turn, stream_agent_turn
 from modules.agent.schemas import (
+    AgentSummaryStreamEvent,
     AgentToolSummary,
-    AgentSummaryGenerateResponse,
     AgentSummaryReadinessResponse,
     AgentSummaryRequest,
     AgentTurnStreamEvent,
@@ -18,7 +18,7 @@ from modules.agent.schemas import (
     AgentTurnRequest,
     AgentTurnResponse,
 )
-from modules.agent.summary_service import evaluate_summary_readiness, generate_summary_pack
+from modules.agent.summary_service import evaluate_summary_readiness, stream_generate_summary_pack
 from modules.agent.session_service import (
     delete_agent_session,
     get_agent_session_detail,
@@ -34,6 +34,10 @@ router = APIRouter()
 
 
 def _encode_sse(event: AgentTurnStreamEvent) -> str:
+    return f"event: {event.type}\ndata: {json.dumps(event.payload, ensure_ascii=False)}\n\n"
+
+
+def _encode_summary_sse(event: AgentSummaryStreamEvent) -> str:
     return f"event: {event.type}\ndata: {json.dumps(event.payload, ensure_ascii=False)}\n\n"
 
 
@@ -138,9 +142,26 @@ async def get_agent_summary_readiness(payload: AgentSummaryRequest):
     return await evaluate_summary_readiness(payload)
 
 
-@router.post("/api/v1/analysis/agent/summary/generate", response_model=AgentSummaryGenerateResponse)
-async def post_agent_summary_generate(payload: AgentSummaryRequest):
-    return await generate_summary_pack(payload)
+@router.post("/api/v1/analysis/agent/summary/generate")
+async def post_agent_summary_generate(request: Request, payload: AgentSummaryRequest):
+    async def event_stream():
+        generator = stream_generate_summary_pack(payload)
+        try:
+            async for event in generator:
+                if await request.is_disconnected():
+                    break
+                yield _encode_summary_sse(event)
+        finally:
+            await generator.aclose()
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @router.get("/api/v1/analysis/agent/sessions/{session_id}", response_model=AgentSessionDetail)

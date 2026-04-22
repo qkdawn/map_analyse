@@ -72,10 +72,6 @@ class RoadSyntaxRequest(BaseModel):
         False,
         description="Whether to run ArcGIS bridge post-processing and return WebGL-ready road features",
     )
-    arcgis_python_path: str | None = Field(
-        None,
-        description="Optional override ArcGIS python path used by host bridge",
-    )
     arcgis_timeout_sec: int = Field(
         20,
         ge=5,

@@ -31,8 +31,16 @@ class PoiResponse(BaseModel):
 
 
 class HistorySaveRequest(BaseModel):
+    history_id: Optional[str] = Field(
+        default=None,
+        description="Existing history id to reuse when resaving a restored history",
+    )
     center: List[float] = Field(..., description="Center [lng, lat] (GCJ02)")
     polygon: list = Field(..., description="Polygon coordinates (GCJ02)") # Relaxed type to handle MultiPolygon if needed
+    polygon_wgs84: Optional[list] = Field(
+        default=None,
+        description="Original history polygon coordinates (WGS84) preserved across restore/save",
+    )
     drawn_polygon: Optional[List[List[float]]] = Field(
         default=None,
         description="Optional user-drawn polygon ring (GCJ02)"

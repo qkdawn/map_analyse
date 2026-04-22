@@ -78,6 +78,11 @@ function createAnalysisHistoryOrchestratorMethods() {
     },
     saveAnalysisHistoryAsync(polygon, selectedCats, pois) {
       if (!this.selectedPoint) return
+      const currentHistoryId = String(this.currentHistoryRecordId || '').trim()
+      if (String(this.scopeSource || '').trim().toLowerCase() === 'history' && currentHistoryId) {
+        this.poiStatus = '当前历史记录已保存，无需重复保存'
+        return
+      }
       const selectedCatsSafe = Array.isArray(selectedCats)
         ? selectedCats
         : (typeof this.buildSelectedCategoryBuckets === 'function' ? this.buildSelectedCategoryBuckets() : [])
@@ -104,9 +109,18 @@ function createAnalysisHistoryOrchestratorMethods() {
       const resolvedPolygon = Array.isArray(polygon) && polygon.length
         ? polygon
         : this.getIsochronePolygonPayload()
+      const preservedHistoryPolygonWgs84 = (
+        currentHistoryId
+        && Array.isArray(this.currentHistoryPolygonWgs84)
+        && this.currentHistoryPolygonWgs84.length
+      )
+        ? JSON.parse(JSON.stringify(this.currentHistoryPolygonWgs84))
+        : null
       const payload = {
+        history_id: currentHistoryId || null,
         center: [this.selectedPoint.lng, this.selectedPoint.lat],
         polygon: resolvedPolygon,
+        polygon_wgs84: preservedHistoryPolygonWgs84,
         drawn_polygon: Array.isArray(drawnPolygonForSave) && drawnPolygonForSave.length >= 4
           ? drawnPolygonForSave
           : null,
@@ -133,7 +147,17 @@ function createAnalysisHistoryOrchestratorMethods() {
             }
             return res.json().catch(() => ({}))
           })
-          .then(() => {
+          .then((data) => {
+            const historyId = String((data && data.history_id) || '').trim()
+            if (historyId) {
+              this.currentHistoryRecordId = historyId
+              if (Array.isArray(payload.polygon_wgs84) && payload.polygon_wgs84.length) {
+                this.currentHistoryPolygonWgs84 = JSON.parse(JSON.stringify(payload.polygon_wgs84))
+              }
+              if (this.lastIsochroneGeoJSON) {
+                this.scopeSource = 'history'
+              }
+            }
             if (typeof this.loadHistoryList === 'function') {
               this.loadHistoryList({
                 force: true,

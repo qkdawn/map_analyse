@@ -224,9 +224,14 @@ class Settings(BaseSettings):
         description="Whether ArcGIS HTTP bridge is enabled",
     )
     arcgis_bridge_base_url: str = Field(
-        "http://host.docker.internal:18081",
+        "",
         validation_alias="ARCGIS_BRIDGE_BASE_URL",
         description="ArcGIS bridge base URL",
+    )
+    arcgis_bridge_port: int = Field(
+        18081,
+        validation_alias="ARCGIS_BRIDGE_PORT",
+        description="ArcGIS bridge port exposed by the host bridge service",
     )
     arcgis_bridge_token: str = Field(
         "",
@@ -247,6 +252,21 @@ class Settings(BaseSettings):
         512,
         validation_alias="ARCGIS_EXPORT_MAX_MB",
         description="Maximum export file size accepted from bridge (MB)",
+    )
+    arcgis_python_path: str = Field(
+        "",
+        validation_alias="ARCGIS_PYTHON_PATH",
+        description="ArcGIS Python runtime path used by the host bridge",
+    )
+    arcgis_script_path: str = Field(
+        "",
+        validation_alias="ARCGIS_SCRIPT_PATH",
+        description="ArcGIS H3 pipeline script path used by the host bridge",
+    )
+    arcgis_road_syntax_sdna_script_path: str = Field(
+        "",
+        validation_alias="ARCGIS_ROAD_SYNTAX_SDNA_SCRIPT_PATH",
+        description="ArcGIS road syntax SDNA script path used by the host bridge",
     )
 
     # depthmapX CLI config

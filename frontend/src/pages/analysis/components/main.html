@@ -1,4 +1,4 @@
-
+﻿
         <!-- Middle: Main Workspace -->
         <main class="main-content" :class="{ 'main-content-agent-mode': isAgentWorkspaceActive() }">
             <div v-show="isAgentWorkspaceActive()" class="agent-main-stage">
@@ -7,7 +7,7 @@
                         <div class="agent-tools-header">
                             <div>
                                 <div class="agent-tools-eyebrow">Agent Tool Registry</div>
-                                <h2 class="agent-tools-title">工具</h2>
+                                <h2 class="agent-tools-title">宸ュ叿</h2>
                                 <p class="agent-tools-subtitle">这里展示当前后端 Agent tool registry 中可用的只读元数据，不在工具库内直接执行工具。</p>
                             </div>
                             <button type="button" class="agent-tools-back-btn" @click="backToAgentChat">返回聊天</button>
@@ -40,7 +40,7 @@
                                                     <div class="agent-tool-row-head">
                                                         <div class="agent-tool-name">{{ tool.name }}</div>
                                                         <div class="agent-tool-badges">
-                                                            <span v-if="tool.uiTier === 'scenario'" class="agent-tool-badge is-primary">Planner 优先</span>
+                                                            <span v-if="tool.uiTier === 'scenario'" class="agent-tool-badge is-primary">Planner 浼樺厛</span>
                                                             <span class="agent-tool-badge">{{ getAgentToolLabel(tool.capabilityType) }}</span>
                                                             <span class="agent-tool-readonly" :class="{ 'is-write': !tool.readonly }">
                                                                 {{ tool.readonly ? '只读' : '会写入' }}
@@ -51,14 +51,14 @@
                                                     <div class="agent-tool-meta is-compact">
                                                         <span>{{ getAgentToolLabel(tool.uiTier) }}</span>
                                                         <span>{{ getAgentToolLabel(tool.dataDomain || tool.category) }}</span>
-                                                        <span>风险 {{ getAgentToolLabel(tool.riskLevel) }}</span>
+                                                        <span>椋庨櫓 {{ getAgentToolLabel(tool.riskLevel) }}</span>
                                                     </div>
                                                 </div>
                                                 <button
                                                     type="button"
                                                     class="agent-tool-detail-btn"
-                                                    title="查看详情"
-                                                    aria-label="查看工具详情"
+                                                    title="鏌ョ湅璇︽儏"
+                                                    aria-label="鏌ョ湅宸ュ叿璇︽儏"
                                                     @click="openAgentToolDetail(tool, $event)">
                                                     i
                                                 </button>
@@ -82,7 +82,7 @@
                                     <button type="button" class="agent-tool-detail-close" aria-label="关闭工具详情" @click="closeAgentToolDetail">×</button>
                                 </div>
                                 <div class="agent-tool-badges agent-tool-detail-badges">
-                                    <span v-if="getAgentToolDetail().uiTier === 'scenario'" class="agent-tool-badge is-primary">Planner 优先</span>
+                                    <span v-if="getAgentToolDetail().uiTier === 'scenario'" class="agent-tool-badge is-primary">Planner 浼樺厛</span>
                                     <span v-if="getAgentToolDetail().defaultPolicyKey" class="agent-tool-badge">{{ getAgentToolDetail().defaultPolicyKey }}</span>
                                     <span class="agent-tool-readonly" :class="{ 'is-write': !getAgentToolDetail().readonly }">
                                         {{ getAgentToolDetail().readonly ? '只读' : '会写入' }}
@@ -91,9 +91,9 @@
                                 <div class="agent-tool-meta">
                                     <span>{{ getAgentToolLabel(getAgentToolDetail().uiTier) }}</span>
                                     <span>{{ getAgentToolLabel(getAgentToolDetail().capabilityType) }}</span>
-                                    <span>类别 {{ getAgentToolLabel(getAgentToolDetail().category) }}</span>
-                                    <span>成本 {{ getAgentToolLabel(getAgentToolDetail().costLevel) }}</span>
-                                    <span>风险 {{ getAgentToolLabel(getAgentToolDetail().riskLevel) }}</span>
+                                    <span>绫诲埆 {{ getAgentToolLabel(getAgentToolDetail().category) }}</span>
+                                    <span>鎴愭湰 {{ getAgentToolLabel(getAgentToolDetail().costLevel) }}</span>
+                                    <span>椋庨櫓 {{ getAgentToolLabel(getAgentToolDetail().riskLevel) }}</span>
                                 </div>
                                 <div class="agent-tool-docs agent-tool-detail-docs">
                                     <div class="agent-tool-doc-row">
@@ -101,7 +101,7 @@
                                         <div v-if="getAgentToolDetail().applicableScenarios.length" class="agent-tool-tags">
                                             <span v-for="item in getAgentToolDetail().applicableScenarios" :key="`${getAgentToolDetail().name}-scene-${item}`">{{ item }}</span>
                                         </div>
-                                        <div v-else class="agent-tool-empty">无</div>
+                                        <div v-else class="agent-tool-empty">暂无</div>
                                     </div>
                                     <div class="agent-tool-doc-row">
                                         <div class="agent-tool-artifact-title">输入参数</div>
@@ -115,21 +115,21 @@
                                         <div v-if="getAgentToolDetail().produces.length" class="agent-tool-tags">
                                             <span v-for="item in getAgentToolDetail().produces" :key="`${getAgentToolDetail().name}-produces-${item}`">{{ item }}</span>
                                         </div>
-                                        <div v-else class="agent-tool-empty">无</div>
+                                        <div v-else class="agent-tool-empty">暂无</div>
                                     </div>
                                     <div class="agent-tool-doc-row">
                                         <div class="agent-tool-artifact-title">证据链字段</div>
                                         <div v-if="getAgentToolDetail().evidenceContract.length" class="agent-tool-tags">
                                             <span v-for="item in getAgentToolDetail().evidenceContract" :key="`${getAgentToolDetail().name}-evidence-${item}`">{{ item }}</span>
                                         </div>
-                                        <div v-else class="agent-tool-empty">无</div>
+                                        <div v-else class="agent-tool-empty">暂无</div>
                                     </div>
                                     <div class="agent-tool-doc-row">
                                         <div class="agent-tool-artifact-title">注意事项</div>
                                         <div v-if="getAgentToolDetail().cautions.length" class="agent-tool-cautions">
                                             {{ getAgentToolDetail().cautions.join('；') }}
                                         </div>
-                                        <div v-else class="agent-tool-empty">无</div>
+                                        <div v-else class="agent-tool-empty">暂无</div>
                                     </div>
                                 </div>
                             </section>
@@ -159,7 +159,7 @@
                                 <span
                                     v-if="tab.closable"
                                     class="agent-top-tab-close"
-                                    title="关闭窗口"
+                                    title="鍏抽棴绐楀彛"
                                     @click.stop="closeAgentTopTab(tab.id, $event)">
                                     ×
                                 </span>
@@ -168,7 +168,7 @@
                                 <button
                                     type="button"
                                     class="agent-top-tab-add"
-                                    title="添加窗口"
+                                    title="娣诲姞绐楀彛"
                                     @click="toggleAgentCreateTabMenu($event)">
                                     +
                                 </button>
@@ -192,10 +192,99 @@
 
                         <div v-if="isAgentSummaryTabActive()" class="agent-summary-tab-view">
                             <div v-if="shouldShowAgentSummaryGeneratingState()" class="agent-summary-loading">
-                                <div class="agent-summary-loading-spinner" aria-hidden="true"></div>
-                                <div class="agent-summary-loading-title">正在生成商业判断型总结</div>
-                                <div class="agent-summary-loading-desc">
-                                    {{ getAgentSummaryPhaseLabel() || '请稍候，正在整合结构化证据并输出总结' }}
+                                <div class="agent-summary-loading-head">
+                                    <div class="agent-summary-loading-spinner" aria-hidden="true"></div>
+                                    <div class="agent-summary-loading-title">正在生成商业判断型总结</div>
+                                    <div class="agent-summary-loading-desc">
+                                        {{ getAgentSummaryPhaseLabel() || '请稍候，正在整合结构化证据并输出总结' }}
+                                    </div>
+                                </div>
+                                <div class="agent-summary-loading-grid">
+                                    <section
+                                        v-for="section in getAgentSummaryGeneratingSections()"
+                                        :key="`summary-loading-${section.key}`"
+                                        class="agent-summary-card agent-summary-card-skeleton"
+                                        :class="`is-${section.status}`">
+                                        <div class="agent-summary-card-head">
+                                            <div class="agent-summary-card-title">{{ section.title }}</div>
+                                            <span class="agent-summary-skeleton-badge" :class="`is-${section.status}`">
+                                                {{ section.statusLabel }}
+                                            </span>
+                                        </div>
+                                        <div v-if="section.detail" class="agent-summary-skeleton-desc">{{ section.detail }}</div>
+                                        <div v-if="section.content" class="agent-summary-skeleton-live">
+                                            <template v-if="section.key === 'tags'">
+                                                <div class="agent-summary-tags">
+                                                    <span
+                                                        v-for="(item, idx) in ((section.payload || {}).icsc_tags || [])"
+                                                        :key="`summary-live-tag-${idx}`"
+                                                        class="agent-summary-chip">
+                                                        {{ item }}
+                                                    </span>
+                                                </div>
+                                            </template>
+                                            <template v-else-if="section.key === 'followups'">
+                                                <div class="agent-summary-actions">
+                                                    <button
+                                                        v-for="(item, idx) in ((section.payload || {}).followup_questions || [])"
+                                                        :key="`summary-live-followup-${idx}`"
+                                                        type="button"
+                                                        class="agent-shortcut-chip"
+                                                        @click="openAgentFollowupFromSummary(item)">
+                                                        {{ item }}
+                                                    </button>
+                                                </div>
+                                            </template>
+                                            <template v-else>
+                                                <div class="agent-summary-live-text">{{ section.content }}</div>
+                                            </template>
+                                        </div>
+                                        <template v-if="section.layout === 'text'">
+                                            <template v-if="!section.content">
+                                            <div class="agent-summary-skeleton-line is-wide"></div>
+                                            <div class="agent-summary-skeleton-line is-medium"></div>
+                                            </template>
+                                        </template>
+                                        <template v-else-if="section.layout === 'tags'">
+                                            <template v-if="!section.content">
+                                            <div class="agent-summary-skeleton-tags">
+                                                <span class="agent-summary-skeleton-chip"></span>
+                                                <span class="agent-summary-skeleton-chip is-wide"></span>
+                                                <span class="agent-summary-skeleton-chip"></span>
+                                            </div>
+                                            </template>
+                                        </template>
+                                        <template v-else-if="section.layout === 'panel'">
+                                            <template v-if="!section.content">
+                                            <div class="agent-summary-skeleton-panel">
+                                                <div class="agent-summary-skeleton-line short"></div>
+                                                <div class="agent-summary-skeleton-line"></div>
+                                                <div class="agent-summary-skeleton-line is-medium"></div>
+                                            </div>
+                                            <div class="agent-summary-skeleton-panel">
+                                                <div class="agent-summary-skeleton-line short"></div>
+                                                <div class="agent-summary-skeleton-line"></div>
+                                                <div class="agent-summary-skeleton-line is-medium"></div>
+                                            </div>
+                                            </template>
+                                        </template>
+                                        <template v-else-if="section.layout === 'actions'">
+                                            <template v-if="!section.content">
+                                            <div class="agent-summary-skeleton-actions">
+                                                <span class="agent-summary-skeleton-chip is-wide"></span>
+                                                <span class="agent-summary-skeleton-chip"></span>
+                                                <span class="agent-summary-skeleton-chip"></span>
+                                            </div>
+                                            </template>
+                                        </template>
+                                        <template v-else>
+                                            <template v-if="!section.content">
+                                            <div class="agent-summary-skeleton-line short"></div>
+                                            <div class="agent-summary-skeleton-line"></div>
+                                            <div class="agent-summary-skeleton-line is-medium"></div>
+                                            </template>
+                                        </template>
+                                    </section>
                                 </div>
                             </div>
                             <div v-else-if="shouldShowAgentSummaryGeneratedState()" class="agent-summary-grid">
@@ -212,22 +301,17 @@
                                         <span v-for="(tag, idx) in (getAgentSummaryPack().icsc_tags || [])" :key="`summary-icsc-${idx}`">{{ tag }}</span>
                                     </div>
                                 </section>
-                                <section class="agent-summary-card">
-                                    <div class="agent-summary-card-title">二级结论</div>
-                                    <div class="agent-summary-secondary-grid">
-                                        <section
-                                            v-for="(item, idx) in getAgentSummarySecondaryConclusions()"
-                                            :key="`summary-secondary-${idx}`"
-                                            class="agent-summary-secondary-panel">
-                                            <div class="agent-summary-secondary-panel-title">{{ item.title || '-' }}</div>
-                                            <div class="agent-summary-secondary-panel-body">{{ item.reasoning || '-' }}</div>
-                                            <div
-                                                v-for="(dimension, dimIdx) in (item.dimensions || [])"
-                                                :key="`summary-secondary-${idx}-dim-${dimIdx}`"
-                                                class="agent-summary-secondary-dimension">
-                                                <strong>{{ dimension.label || '-' }}:</strong>{{ dimension.conclusion || '-' }}
-                                            </div>
-                                        </section>
+                                <section
+                                    v-for="(item, idx) in getAgentSummarySecondaryConclusions()"
+                                    :key="`summary-secondary-${idx}`"
+                                    class="agent-summary-card">
+                                    <div class="agent-summary-card-title">{{ item.title || '-' }}</div>
+                                    <div class="agent-summary-line">{{ item.reasoning || '-' }}</div>
+                                    <div
+                                        v-for="(dimension, dimIdx) in (item.dimensions || [])"
+                                        :key="`summary-secondary-${idx}-dim-${dimIdx}`"
+                                        class="agent-summary-secondary-dimension">
+                                        <strong>{{ dimension.label || '-' }}:</strong>{{ dimension.conclusion || '-' }}
                                     </div>
                                 </section>
                                 <section class="agent-summary-card">
@@ -251,20 +335,13 @@
                                 <section class="agent-summary-card">
                                     <div class="agent-summary-card-title">快捷追问</div>
                                     <div class="agent-summary-actions">
-                                        <button type="button" class="agent-shortcut-chip" @click="openAgentFollowupFromSummary('请解释这份总结背后的证据链与判断依据')">解释结论依据</button>
-                                        <button type="button" class="agent-shortcut-chip" @click="openAgentFollowupFromSummary('请展开这一范围的业态建议与主要风险')">展开业态建议</button>
-                                        <button type="button" class="agent-shortcut-chip" @click="openAgentFollowupFromSummary('请把这份总结转成可执行清单')">转为执行清单</button>
-                                    </div>
-                                </section>
-                                <section class="agent-summary-card">
-                                    <div class="agent-summary-card-title">总结操作</div>
-                                    <div class="agent-summary-actions">
                                         <button
+                                            v-for="(item, idx) in getAgentSummaryFollowupQuestions()"
+                                            :key="`summary-followup-${idx}`"
                                             type="button"
                                             class="agent-shortcut-chip"
-                                            :disabled="isAgentSummaryPrimaryActionDisabled()"
-                                            @click="resetAgentSummaryRecompute">
-                                            {{ agentSummaryGenerating ? '处理中...' : '并行重新获取' }}
+                                            @click="openAgentFollowupFromSummary(item)">
+                                            {{ item }}
                                         </button>
                                     </div>
                                 </section>
@@ -320,9 +397,40 @@
                                             <div v-if="task.key === 'poi_grid'" class="agent-summary-task-params">
                                                 <label class="agent-summary-task-field">
                                                     <span>网格级别</span>
-                                                    <select v-model="h3GridResolution" :disabled="task.status === 'running' || agentSummaryGenerating">
+                                                    <select
+                                                        v-model="h3GridResolution"
+                                                        :disabled="task.status === 'running' || agentSummaryGenerating"
+                                                        @change="onSummaryTaskParameterChange('poi_grid')">
                                                         <option v-for="option in [8, 9, 10, 11, 12]" :key="`summary-grid-resolution-${option}`" :value="option">
                                                             {{ option }}
+                                                        </option>
+                                                    </select>
+                                                </label>
+                                            </div>
+
+                                            <div v-if="task.key === 'population'" class="agent-summary-task-params">
+                                                <label class="agent-summary-task-field">
+                                                    <span>人口年份</span>
+                                                    <select
+                                                        v-model="populationSelectedYear"
+                                                        :disabled="task.status === 'running' || agentSummaryGenerating || isLoadingPopulationMeta"
+                                                        @change="onSummaryTaskParameterChange('population')">
+                                                        <option v-for="option in getPopulationYearOptions()" :key="`summary-population-year-${option.value}`" :value="option.value">
+                                                            {{ option.label }}
+                                                        </option>
+                                                    </select>
+                                                </label>
+                                            </div>
+
+                                            <div v-if="task.key === 'nightlight'" class="agent-summary-task-params">
+                                                <label class="agent-summary-task-field">
+                                                    <span>夜光年份</span>
+                                                    <select
+                                                        v-model.number="nightlightSelectedYear"
+                                                        :disabled="task.status === 'running' || agentSummaryGenerating || isLoadingNightlightMeta"
+                                                        @change="onSummaryTaskParameterChange('nightlight')">
+                                                        <option v-for="option in getNightlightYearOptions()" :key="`summary-nightlight-year-${option.year}`" :value="option.year">
+                                                            {{ option.label }}
                                                         </option>
                                                     </select>
                                                 </label>
@@ -362,16 +470,8 @@
                                                 ? '生成中...'
                                                 : (canGenerateSummaryAfterTasks()
                                                     ? '生成总结'
-                                                    : (shouldUseSummaryFullRecompute() ? '并行重新获取' : '补齐缺失'))
+                                                    : (shouldUseSummaryFullRecompute() ? '复用并补齐' : '补齐缺失'))
                                         }}
-                                    </button>
-                                    <button
-                                        v-if="!canGenerateSummaryAfterTasks() && !shouldUseSummaryFullRecompute()"
-                                        type="button"
-                                        class="agent-summary-gate-btn is-secondary"
-                                        :disabled="isAgentSummaryPrimaryActionDisabled()"
-                                        @click="startSummaryFullRecompute()">
-                                        从抓取重新开始
                                     </button>
                                 </div>
                             </div>
@@ -470,7 +570,7 @@
                                                                     <div class="agent-plan-item-main">
                                                                         <div class="agent-plan-item-title-row">
                                                                             <div class="agent-plan-item-title">{{ item.title }}</div>
-                                                                            <div v-if="item.optional" class="agent-plan-item-optional">可选</div>
+                                                                        <div v-if="item.optional" class="agent-plan-item-optional">可选</div>
                                                                         </div>
                                                                         <div v-if="item.detail" class="agent-plan-item-detail">{{ item.detail }}</div>
                                                                     </div>
@@ -584,7 +684,7 @@
                                         <div class="agent-decision-layout">
                                             <div class="agent-card agent-card-decision">
                                                 <div class="agent-card-type">decision</div>
-                                                <div class="agent-card-title">核心判断</div>
+                                                <div class="agent-card-title">鏍稿績鍒ゆ柇</div>
                                                 <div class="agent-card-content">{{ agentDecision.summary }}</div>
                                                 <div class="agent-decision-badges">
                                                     <span class="agent-decision-badge">{{ getAgentDecisionStrengthLabel(agentDecision.strength) }}</span>
@@ -595,12 +695,12 @@
 
                                             <div v-if="agentSupport.length" class="agent-card">
                                                 <div class="agent-card-type">support</div>
-                                                <div class="agent-card-title">为什么这么判断</div>
+                                                <div class="agent-card-title">为什么这样判断</div>
                                                 <ul class="agent-card-items">
                                                     <li v-for="(item, index) in agentSupport" :key="getAgentStructuredItemKey(item, index)">
                                                         <span class="agent-structured-headline">{{ item.headline || item.metric }}</span>
                                                         <span class="agent-structured-detail">{{ item.interpretation }}</span>
-                                                        <span class="agent-structured-meta">来源：{{ item.source || '未标注' }}｜置信度：{{ item.confidence || 'weak' }}</span>
+                                                        <span class="agent-structured-meta">来源：{{ item.source || '未标注' }}；置信度：{{ item.confidence || 'weak' }}</span>
                                                     </li>
                                                 </ul>
                                             </div>
@@ -610,7 +710,7 @@
                                                 <div class="agent-card-title">还不能判断什么</div>
                                                 <ul class="agent-card-items">
                                                     <li v-for="(item, index) in agentCounterpoints" :key="`agent-counterpoint-${getAgentStructuredItemKey(item, index)}`">
-                                                        <span class="agent-structured-headline">{{ item.title || '约束' }}</span>
+                                                        <span class="agent-structured-headline">{{ item.title || '绾︽潫' }}</span>
                                                         <span class="agent-structured-detail">{{ item.detail }}</span>
                                                     </li>
                                                     <li v-for="(item, index) in agentBoundary" :key="`agent-boundary-${getAgentStructuredItemKey(item, index)}`">
@@ -636,7 +736,7 @@
                                                         <div v-if="item.detail" class="agent-structured-detail">{{ item.detail }}</div>
                                                         <div v-if="item.condition || item.target" class="agent-structured-meta">
                                                             <span v-if="item.condition">触发条件：{{ item.condition }}</span>
-                                                            <span v-if="item.target">｜目标：{{ item.target }}</span>
+                                                            <span v-if="item.target">锝滅洰鏍囷細{{ item.target }}</span>
                                                         </div>
                                                     </li>
                                                 </ul>
@@ -669,7 +769,7 @@
 
                                 <div v-if="agentResearchNotes.length || agentNextSuggestions.length || agentCitations.length" class="agent-meta-inline">
                                     <div v-if="agentResearchNotes.length" class="agent-meta-group">
-                                        <div class="agent-meta-title">研究笔记</div>
+                                        <div class="agent-meta-title">鐮旂┒绗旇</div>
                                         <ul class="agent-meta-list">
                                             <li v-for="(item, index) in agentResearchNotes" :key="`agent-main-note-${index}`">{{ item }}</li>
                                         </ul>
@@ -695,12 +795,12 @@
                             <div class="agent-chat-shortcuts">
                                 <button type="button" class="agent-shortcut-chip" @click="queueAgentPrompt('总结这个区域的商业特征')">总结区域</button>
                                 <button type="button" class="agent-shortcut-chip" @click="queueAgentPrompt('哪里适合补充餐饮')">补充餐饮</button>
-                                <button type="button" class="agent-shortcut-chip" @click="queueAgentPrompt('为什么这里路网差')">路网原因</button>
+                                <button type="button" class="agent-shortcut-chip" @click="queueAgentPrompt('为什么这里路网较差')">路网原因</button>
                                 <button type="button" class="agent-shortcut-chip" @click="queueAgentPrompt('下一步做什么分析')">下一步建议</button>
                             </div>
 
                             <div class="agent-composer-card">
-                                <button type="button" class="agent-composer-plus" @click="startNewAgentChat" title="新聊天">+</button>
+                                <button type="button" class="agent-composer-plus" @click="startNewAgentChat" title="新对话">+</button>
                                 <textarea
                                     v-model="agentInput"
                                     class="agent-composer-input"
@@ -729,7 +829,7 @@
 
             <div v-show="!isAgentWorkspaceActive()" class="analysis-map-stage">
             <div v-if="sidebarView === 'wizard' && step === 2" class="h3-map-toolbar">
-                <button type="button" class="h3-map-tool-btn h3-map-save-btn" @click="saveAndRestart" title="保存并开启新分析">
+                <button type="button" class="h3-map-tool-btn h3-map-save-btn" @click="saveAndRestart" title="淇濆瓨骞跺紑鍚柊鍒嗘瀽">
                     <svg class="h3-map-tool-icon" viewBox="0 0 24 24" aria-hidden="true">
                         <path d="M4 5.5A1.5 1.5 0 0 1 5.5 4h10.2l4.3 4.3V18.5A1.5 1.5 0 0 1 18.5 20h-13A1.5 1.5 0 0 1 4 18.5z"></path>
                         <path d="M8 4.5v5h7v-5"></path>
@@ -742,13 +842,13 @@
                     <button type="button" class="h3-map-tool-btn h3-map-simplify-btn"
                         :class="{ active: h3SimplifyMenuOpen }"
                         @click.stop="toggleSimplifyMenu"
-                        title="显示配置">
+                        title="鏄剧ず閰嶇疆">
                         <svg class="h3-map-tool-icon" viewBox="0 0 24 24" aria-hidden="true">
                             <path d="M4 7h16"></path>
                             <path d="M4 12h16"></path>
                             <path d="M4 17h16"></path>
                         </svg>
-                        <span class="h3-map-tool-text">显示</span>
+                        <span class="h3-map-tool-text">鏄剧ず</span>
                         <svg class="h3-map-tool-caret" viewBox="0 0 24 24" aria-hidden="true">
                             <path d="m6 9 6 6 6-6"></path>
                         </svg>
@@ -851,7 +951,7 @@
                             <path d="M8 10h8"></path>
                             <path d="M8 14h6"></path>
                         </svg>
-                        <span class="h3-map-tool-text">任务</span>
+                        <span class="h3-map-tool-text">浠诲姟</span>
                         <span v-if="getH3PendingTaskCount() > 0" class="h3-task-count">{{ getH3PendingTaskCount() }}</span>
                     </button>
                 </div>
@@ -879,7 +979,7 @@
             <div v-if="sidebarView === 'wizard' && step === 2 && h3ExportTasksOpen" class="h3-export-task-panel">
                 <div class="h3-export-task-panel-header">
                     <span>导出任务</span>
-                    <button type="button" class="h3-export-task-close" @click="closeH3ExportTasks">关闭</button>
+                    <button type="button" class="h3-export-task-close" @click="closeH3ExportTasks">鍏抽棴</button>
                 </div>
                 <div v-if="!h3ExportTasks.length" class="h3-export-task-empty">暂无任务</div>
                 <template v-else>
@@ -929,8 +1029,8 @@
                 v-if="sidebarView === 'wizard'"
                 type="button"
                 class="map-recenter-btn"
-                title="回到中心"
-                aria-label="回到中心"
+                title="鍥炲埌涓績"
+                aria-label="鍥炲埌涓績"
                 :disabled="!mapCore || !mapCore.map"
                 @click="goMapBackToCenter">
                 <svg viewBox="0 0 24 24" aria-hidden="true">

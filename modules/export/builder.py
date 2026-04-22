@@ -676,7 +676,6 @@ def _build_h3_professional_export(part: str, payload: AnalysisExportBundleReques
         grid_features=grid_features,
         poi_features=poi_features,
         style_meta=_json_safe_dict(h3_payload.style_meta),
-        arcgis_python_path=None,
         timeout_sec=300,
     )
     content = export_result.get("content") or b""

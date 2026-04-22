@@ -124,16 +124,16 @@ def _get_record_title_source(record: Optional[Dict[str, Any]]) -> str:
     return TITLE_SOURCE_FALLBACK
 
 
-def _get_record_analysis_fingerprint(record: Optional[Dict[str, Any]]) -> str:
+def _get_record_history_id(record: Optional[Dict[str, Any]]) -> str:
     if not isinstance(record, dict):
         return ""
-    direct = _normalize_text(record.get("analysis_fingerprint"), max_length=512)
+    direct = _normalize_text(record.get("history_id"), max_length=128)
     if direct:
         return direct
     snapshot = record.get("snapshot") if isinstance(record.get("snapshot"), dict) else {}
     meta = snapshot.get("_meta") if isinstance(snapshot, dict) else {}
     if isinstance(meta, dict):
-        return _normalize_text(meta.get("analysis_fingerprint"), max_length=512)
+        return _normalize_text(meta.get("history_id"), max_length=128)
     return ""
 
 
@@ -212,12 +212,12 @@ def build_snapshot_payload(request: AgentSessionSnapshotRequest) -> Dict[str, An
         "plan": request.plan.model_dump(),
         "risk_confirmations": [str(item) for item in request.risk_confirmations],
     }
-    analysis_fingerprint = _normalize_text(request.analysis_fingerprint, max_length=512)
+    history_id = _normalize_text(request.history_id, max_length=128)
     session_kind = normalize_agent_session_kind(request.session_kind)
-    if analysis_fingerprint or session_kind:
+    if history_id or session_kind:
         payload["_meta"] = {}
-        if analysis_fingerprint:
-            payload["_meta"]["analysis_fingerprint"] = analysis_fingerprint
+        if history_id:
+            payload["_meta"]["history_id"] = history_id
         if session_kind:
             payload["_meta"]["session_kind"] = session_kind
     return payload
@@ -238,7 +238,7 @@ def build_turn_persist_payload(payload: AgentTurnRequest, response: AgentTurnRes
         preview="",
         status=response.status,
         stage=response.stage,
-        analysis_fingerprint=_normalize_text(payload.analysis_fingerprint, max_length=512),
+        history_id=_normalize_text(payload.history_id, max_length=128),
         session_kind=SESSION_KIND_FOLLOWUP,
         input="" if response.status == "answered" else str(payload.messages[-1].content if payload.messages else ""),
         messages=[AgentMessage(**item) for item in messages],
@@ -295,7 +295,7 @@ def _build_summary_model(record: Dict[str, Any]) -> AgentSessionSummary:
         title=str(record.get("title") or ""),
         preview=str(record.get("preview") or ""),
         status=str(record.get("status") or "idle"),
-        analysis_fingerprint=_get_record_analysis_fingerprint(record),
+        history_id=_get_record_history_id(record),
         is_pinned=bool(record.get("is_pinned")),
         title_source=_get_record_title_source(record),
         session_kind=_get_record_session_kind(record),
@@ -338,8 +338,8 @@ def get_agent_session_detail(session_id: str, repo) -> AgentSessionDetail:
 
 def upsert_agent_session(session_id: str, request: AgentSessionSnapshotRequest, repo) -> AgentSessionDetail:
     existing_record = repo.get_record(session_id)
-    if not _normalize_text(request.analysis_fingerprint):
-        request.analysis_fingerprint = _get_record_analysis_fingerprint(existing_record)
+    if not _normalize_text(request.history_id):
+        request.history_id = _get_record_history_id(existing_record)
     if not normalize_agent_session_kind(request.session_kind):
         request.session_kind = _get_record_session_kind(existing_record)
     title, title_source = _resolve_upsert_title(request, existing_record)

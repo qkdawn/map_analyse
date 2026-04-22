@@ -19,6 +19,7 @@
                 this.populationSubTab = 'analysis';
                 this.scopeSource = '';
                 this.currentHistoryRecordId = '';
+                this.currentHistoryPolygonWgs84 = [];
                 this.drawnScopePolygon = [];
                 this.lastIsochroneGeoJSON = null;
                 this.h3GridStatus = '';
@@ -28,6 +29,7 @@
                 this.resetH3AnalysisState();
                 this.resetPopulationAnalysisState({ keepMeta: true, keepYear: true });
                 this.resetNightlightAnalysisState({ keepMeta: true, keepYear: true });
+                if (typeof this.resetGwrAnalysisState === 'function') this.resetGwrAnalysisState();
                 this.clearIsochroneDebugState();
                 this.clearPoiOverlayLayers({
                     reason: 'clear_analysis_layers',
@@ -115,6 +117,7 @@
                 this.resultDataSource = this.normalizePoiSource(this.poiDataSource, 'local');
                 this.scopeSource = '';
                 this.currentHistoryRecordId = '';
+                this.currentHistoryPolygonWgs84 = [];
                 this.drawnScopePolygon = [];
                 this.lastIsochroneGeoJSON = null;
                 this.h3ExportMenuOpen = false;
@@ -134,6 +137,7 @@
                 this.clearH3Grid();
                 this.resetPopulationAnalysisState({ keepMeta: true, keepYear: true });
                 this.resetNightlightAnalysisState({ keepMeta: true, keepYear: true });
+                if (typeof this.resetGwrAnalysisState === 'function') this.resetGwrAnalysisState();
                 this.clearScopeOutlineDisplay();
                 this.disposePoiChart();
                 this.disposePopulationCharts();

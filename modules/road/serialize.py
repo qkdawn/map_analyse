@@ -337,7 +337,6 @@ def build_road_analysis_result(
     merge_geojson_edges: bool,
     merge_bucket_step: float,
     use_arcgis_webgl: bool,
-    arcgis_python_path: Optional[str],
     arcgis_timeout_sec: int,
     arcgis_metric_field: Optional[str],
     analysis_engine_label: str,
@@ -799,7 +798,6 @@ def build_road_analysis_result(
                 road_features=features_out,
                 metric_field=default_webgl_metric_field,
                 target_coord_type="gcj02",
-                arcgis_python_path=arcgis_python_path,
                 timeout_sec=int(max(5, int(arcgis_timeout_sec or 20))),
             )
             webgl_payload = {

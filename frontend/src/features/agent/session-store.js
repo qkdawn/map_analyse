@@ -18,7 +18,6 @@ import {
   normalizeAgentPanelPreloadNotes,
   normalizeAgentPlanEnvelope,
   normalizeAgentSessionSummary,
-  stableAgentHash,
   sortAgentSessions,
 } from './normalizers.js'
 import {
@@ -34,7 +33,7 @@ function createAgentSessionStoreMethods() {
       return createAgentSessionRecord({
         title: String(seedTitle || '').trim() || '新聊天',
         preview: '开始一段新的分析对话',
-        analysisFingerprint: this.getCurrentAgentAnalysisFingerprint(),
+        historyId: this.getCurrentAgentHistoryId(),
         status: 'idle',
         sessionKind: 'followup',
         persisted: false,
@@ -45,46 +44,20 @@ function createAgentSessionStoreMethods() {
     getAgentHistorySessions() {
       return this.agentSessions.filter((item) => !!(item && item.persisted))
     },
-    getCurrentAgentAnalysisFingerprint() {
-      return asText(this.buildAgentAnalysisFingerprint())
-    },
-    getCurrentAgentScopeFingerprint() {
-      const scope = typeof this.getIsochronePolygonPayload === 'function' ? this.getIsochronePolygonPayload() : []
-      const drawnScope = (typeof this.getDrawnScopePolygonPoints === 'function') ? this.getDrawnScopePolygonPoints() : []
-      const scopeForFingerprint = Array.isArray(scope) && scope.length >= 3 ? scope : drawnScope
-      if (!Array.isArray(scopeForFingerprint) || scopeForFingerprint.length < 3) return ''
-      return `scope:${stableAgentHash(scopeForFingerprint)}`
-    },
-    getCurrentAgentRangeFingerprints() {
-      const fingerprints = new Set()
-      const currentHistoryId = asText(this.currentHistoryRecordId)
-      if (asText(this.scopeSource) === 'history' && currentHistoryId) {
-        fingerprints.add(`history:${currentHistoryId}`)
-      }
-      const currentScopeFingerprint = this.getCurrentAgentScopeFingerprint()
-      if (currentScopeFingerprint) fingerprints.add(currentScopeFingerprint)
-      const isAgentContext = asText(this.activeStep3Panel) === 'agent'
-        || (typeof this.isAgentSummaryTabActive === 'function' && this.isAgentSummaryTabActive())
-      if (isAgentContext) {
-        const activeId = asText(this.activeAgentSessionId || this.agentConversationId)
-        const activeSession = activeId ? this.readSessionState(activeId) : null
-        const activeFingerprint = asText(activeSession && activeSession.analysisFingerprint)
-        if (activeFingerprint && activeFingerprint === currentScopeFingerprint) {
-          fingerprints.add(activeFingerprint)
-        }
-      }
-      return Array.from(fingerprints)
+    getCurrentAgentHistoryId() {
+      if (asText(this.scopeSource) !== 'history') return ''
+      return asText(this.currentHistoryRecordId)
     },
     getAgentCurrentRangeSessions() {
-      const currentFingerprints = new Set(this.getCurrentAgentRangeFingerprints())
-      if (!currentFingerprints.size) return []
-      return this.getAgentHistorySessions().filter((item) => currentFingerprints.has(asText(item && item.analysisFingerprint)))
+      const currentHistoryId = this.getCurrentAgentHistoryId()
+      if (!currentHistoryId) return []
+      return this.getAgentHistorySessions().filter((item) => asText(item && item.historyId) === currentHistoryId)
     },
     getAgentOtherRangeSessions() {
-      const currentFingerprints = new Set(this.getCurrentAgentRangeFingerprints())
+      const currentHistoryId = this.getCurrentAgentHistoryId()
       return this.getAgentHistorySessions().filter((item) => {
-        const sessionFingerprint = asText(item && item.analysisFingerprint)
-        return !currentFingerprints.size || !currentFingerprints.has(sessionFingerprint)
+        const sessionHistoryId = asText(item && item.historyId)
+        return !currentHistoryId || !sessionHistoryId || sessionHistoryId !== currentHistoryId
       })
     },
     isAgentSummaryHistorySession(session = null) {
@@ -348,7 +321,7 @@ function createAgentSessionStoreMethods() {
         id: detail && detail.id,
         title: detail && detail.title,
         preview: detail && detail.preview,
-        analysisFingerprint: (detail && (detail.analysis_fingerprint || detail.analysisFingerprint)) || (existing && existing.analysisFingerprint),
+        historyId: (detail && (detail.history_id || detail.historyId)) || (existing && existing.historyId),
         status: detail && detail.status,
         stage: detail && detail.stage,
         input: detail && detail.input,
@@ -363,6 +336,8 @@ function createAgentSessionStoreMethods() {
         snapshotLoaded: true,
         titleSource: detail && detail.title_source,
         sessionKind: detail && detail.session_kind,
+        hasSummaryPack: !!(detail && detail.has_summary_pack),
+        hasFollowupMessages: !!(detail && detail.has_followup_messages),
         createdAt: detail && detail.created_at,
         updatedAt: detail && detail.updated_at,
         pinnedAt: detail && detail.pinned_at,
@@ -415,9 +390,9 @@ function createAgentSessionStoreMethods() {
         updatedAt: new Date().toISOString(),
         createdAt: existing && existing.createdAt ? existing.createdAt : new Date().toISOString(),
         pinnedAt: existing && existing.pinnedAt ? existing.pinnedAt : '',
-        analysisFingerprint: Object.prototype.hasOwnProperty.call(options || {}, 'analysisFingerprint')
-          ? asText(options.analysisFingerprint)
-          : (asText(existing && existing.analysisFingerprint) || this.getCurrentAgentAnalysisFingerprint()),
+        historyId: Object.prototype.hasOwnProperty.call(options || {}, 'historyId')
+          ? asText(options.historyId)
+          : (asText(existing && existing.historyId) || this.getCurrentAgentHistoryId()),
         sessionKind: Object.prototype.hasOwnProperty.call(options || {}, 'sessionKind')
           ? asText(options.sessionKind)
           : asText(existing && existing.sessionKind),

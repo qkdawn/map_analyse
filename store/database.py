@@ -14,9 +14,7 @@ from sqlalchemy.orm import sessionmaker
 from core.config import settings
 from .history_keys import (
     build_history_record_id,
-    build_scope_fingerprint_from_polygon,
     coerce_json_value,
-    extract_history_key_from_fingerprint,
 )
 from .models import AgentSession, AnalysisHistory, Base, PoiResult
 
@@ -76,7 +74,7 @@ def _coerce_datetime_value(value: object) -> datetime:
     return datetime.utcnow()
 
 
-def _rewrite_agent_snapshot_history_fingerprint(snapshot: object, history_id_by_scope: dict[str, str], old_to_new_history_id: dict[str, str]) -> dict | None:
+def _rewrite_agent_snapshot_history_id(snapshot: object, old_to_new_history_id: dict[str, str]) -> dict | None:
     if not isinstance(snapshot, dict):
         return None
     payload = dict(snapshot)
@@ -85,23 +83,11 @@ def _rewrite_agent_snapshot_history_fingerprint(snapshot: object, history_id_by_
         meta = {}
     else:
         meta = dict(meta)
-    raw_fingerprint = str(meta.get("analysis_fingerprint") or "").strip()
-    next_fingerprint = raw_fingerprint
-    history_key = extract_history_key_from_fingerprint(raw_fingerprint)
-    if history_key and history_key in old_to_new_history_id:
-        next_fingerprint = f"history:{old_to_new_history_id[history_key]}"
-    elif raw_fingerprint.startswith("scope:") and raw_fingerprint in history_id_by_scope:
-        next_fingerprint = f"history:{history_id_by_scope[raw_fingerprint]}"
-    else:
-        scope = payload.get("scope") if isinstance(payload.get("scope"), dict) else {}
-        polygon_scope = build_scope_fingerprint_from_polygon(scope.get("polygon"))
-        drawn_scope = build_scope_fingerprint_from_polygon(scope.get("drawn_polygon"))
-        matched_history_id = history_id_by_scope.get(polygon_scope) or history_id_by_scope.get(drawn_scope)
-        if matched_history_id:
-            next_fingerprint = f"history:{matched_history_id}"
-    if next_fingerprint == raw_fingerprint:
+    raw_history_id = str(meta.get("history_id") or "").strip()
+    next_history_id = old_to_new_history_id.get(raw_history_id, raw_history_id)
+    if next_history_id == raw_history_id:
         return None
-    meta["analysis_fingerprint"] = next_fingerprint
+    meta["history_id"] = next_history_id
     payload["_meta"] = meta
     return payload
 
@@ -165,12 +151,6 @@ def _migrate_history_tables_to_hash_ids() -> None:
             if existing is None or _history_row_rank(candidate) >= _history_row_rank(existing):
                 poi_by_history_hash[new_history_id] = candidate
 
-        history_id_by_scope: dict[str, str] = {}
-        for history_id, row in history_by_hash.items():
-            scope_fingerprint = build_scope_fingerprint_from_polygon(row.get("result_polygon"))
-            if scope_fingerprint:
-                history_id_by_scope[scope_fingerprint] = history_id
-
         if inspector.has_table("poi_results"):
             connection.execute(text("DROP TABLE poi_results"))
         if inspector.has_table("analysis_history"):
@@ -212,11 +192,7 @@ def _migrate_history_tables_to_hash_ids() -> None:
             ).mappings().all()
             for row in session_rows:
                 snapshot = coerce_json_value(row.get("snapshot"))
-                next_snapshot = _rewrite_agent_snapshot_history_fingerprint(
-                    snapshot,
-                    history_id_by_scope,
-                    old_to_new_history_id,
-                )
+                next_snapshot = _rewrite_agent_snapshot_history_id(snapshot, old_to_new_history_id)
                 if next_snapshot is None:
                     continue
                 connection.execute(

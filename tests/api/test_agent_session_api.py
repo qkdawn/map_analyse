@@ -53,7 +53,7 @@ def test_agent_session_crud_api(monkeypatch):
                 "title": "商业分析",
                 "preview": "开始一段新的分析对话",
                 "status": "idle",
-                "analysis_fingerprint": "fp-current",
+                "history_id": "history-current",
                 "session_kind": "summary",
                 "is_pinned": False,
                 "input": "",
@@ -74,7 +74,7 @@ def test_agent_session_crud_api(monkeypatch):
 
         assert put_resp.status_code == 200
         assert put_resp.json()["title"] == "商业分析"
-        assert put_resp.json()["analysis_fingerprint"] == "fp-current"
+        assert put_resp.json()["history_id"] == "history-current"
         assert put_resp.json()["session_kind"] == "summary"
         assert put_resp.json()["title_source"] == "user"
 
@@ -92,12 +92,12 @@ def test_agent_session_crud_api(monkeypatch):
         assert list_resp.status_code == 200
         assert len(list_resp.json()) == 1
         assert list_resp.json()[0]["id"] == "agent-1"
-        assert list_resp.json()[0]["analysis_fingerprint"] == "fp-current"
+        assert list_resp.json()[0]["history_id"] == "history-current"
         assert list_resp.json()[0]["session_kind"] == "summary"
 
         detail_resp = client.get("/api/v1/analysis/agent/sessions/agent-1")
         assert detail_resp.status_code == 200
-        assert detail_resp.json()["analysis_fingerprint"] == "fp-current"
+        assert detail_resp.json()["history_id"] == "history-current"
         assert detail_resp.json()["messages"][0]["content"] == "总结这个区域"
         assert detail_resp.json()["diagnostics"]["thinking_timeline"][0]["id"] == "thinking-1"
 
@@ -132,7 +132,7 @@ def test_agent_turn_persists_multiple_statuses(monkeypatch):
                 "/api/v1/analysis/agent/turn",
                 json={
                     "conversation_id": f"agent-{index}",
-                    "analysis_fingerprint": f"fp-{index}",
+                    "history_id": f"history-{index}",
                     "messages": [{"role": "user", "content": f"问题-{index}"}],
                     "analysis_snapshot": {"scope": {"polygon": [[1, 1], [1, 2], [2, 2], [1, 1]]}},
                 },
@@ -144,11 +144,11 @@ def test_agent_turn_persists_multiple_statuses(monkeypatch):
         list_resp = client.get("/api/v1/analysis/agent/sessions")
         assert list_resp.status_code == 200
         assert len(list_resp.json()) == 4
-        assert {item["analysis_fingerprint"] for item in list_resp.json()} == {"fp-1", "fp-2", "fp-3", "fp-4"}
+        assert {item["history_id"] for item in list_resp.json()} == {"history-1", "history-2", "history-3", "history-4"}
 
         answered_detail = client.get("/api/v1/analysis/agent/sessions/agent-1")
         assert answered_detail.status_code == 200
-        assert answered_detail.json()["analysis_fingerprint"] == "fp-1"
+        assert answered_detail.json()["history_id"] == "history-1"
         assert answered_detail.json()["messages"][-1]["role"] == "assistant"
         assert answered_detail.json()["diagnostics"]["thinking_timeline"][0]["id"] == "thinking-answer"
 
@@ -189,7 +189,7 @@ def test_agent_turn_generates_title_only_for_first_persist(monkeypatch):
             "/api/v1/analysis/agent/turn",
             json={
                 "conversation_id": "agent-title",
-                "analysis_fingerprint": "fp-1",
+                "history_id": "history-1",
                 "messages": [{"role": "user", "content": "总结这个区域的商业结构"}],
                 "analysis_snapshot": {"scope": {"polygon": [[1, 1], [1, 2], [2, 2], [1, 1]]}},
             },
@@ -200,7 +200,7 @@ def test_agent_turn_generates_title_only_for_first_persist(monkeypatch):
             "/api/v1/analysis/agent/turn",
             json={
                 "conversation_id": "agent-title",
-                "analysis_fingerprint": "fp-2",
+                "history_id": "history-2",
                 "messages": [
                     {"role": "user", "content": "总结这个区域的商业结构"},
                     {"role": "assistant", "content": "已完成分析"},
@@ -213,7 +213,7 @@ def test_agent_turn_generates_title_only_for_first_persist(monkeypatch):
 
         detail_resp = client.get("/api/v1/analysis/agent/sessions/agent-title")
         assert detail_resp.status_code == 200
-        assert detail_resp.json()["analysis_fingerprint"] == "fp-2"
+        assert detail_resp.json()["history_id"] == "history-2"
         assert detail_resp.json()["title"] == "AI 自动标题"
         assert detail_resp.json()["title_source"] == "ai"
         assert len(generated_titles) == 1
@@ -265,7 +265,7 @@ def test_agent_turn_keeps_user_title_without_auto_override(monkeypatch):
             "/api/v1/analysis/agent/turn",
             json={
                 "conversation_id": "agent-user-title",
-                "analysis_fingerprint": "fp-1",
+                "history_id": "history-1",
                 "messages": [{"role": "user", "content": "总结这个区域"}],
                 "analysis_snapshot": {"scope": {"polygon": [[1, 1], [1, 2], [2, 2], [1, 1]]}},
             },

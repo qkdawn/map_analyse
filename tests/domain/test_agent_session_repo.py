@@ -8,7 +8,7 @@ sys.path.append(str(Path(__file__).resolve().parents[2]))
 
 import store.agent_session_repo as agent_session_repo_module
 from store.agent_session_repo import AgentSessionRepo
-from store.models import AgentSession, Base
+from store.models import Base
 
 
 def _install_repo(monkeypatch):
@@ -25,13 +25,13 @@ def test_upsert_and_get_agent_session_record(monkeypatch):
     repo.upsert_record(
         "agent-1",
         title="商业分析",
-        preview="总结这个区域",
+        preview="开始一段新的分析对话",
         status="answered",
         snapshot={
             "input": "",
             "messages": [{"role": "user", "content": "总结这个区域"}],
             "cards": [{"type": "summary", "title": "概览", "content": "已完成分析", "items": []}],
-            "_meta": {"analysis_fingerprint": "fp-current", "session_kind": "summary"},
+            "_meta": {"history_id": "history-current", "session_kind": "summary"},
         },
         title_source="fallback",
     )
@@ -41,9 +41,9 @@ def test_upsert_and_get_agent_session_record(monkeypatch):
     assert record is not None
     assert record["id"] == "agent-1"
     assert record["title"] == "商业分析"
-    assert record["preview"] == "总结这个区域"
+    assert record["preview"] == "开始一段新的分析对话"
     assert record["status"] == "answered"
-    assert record["analysis_fingerprint"] == "fp-current"
+    assert record["history_id"] == "history-current"
     assert record["session_kind"] == "summary"
     assert record["title_source"] == "fallback"
     assert record["snapshot"]["messages"][0]["content"] == "总结这个区域"
@@ -85,23 +85,23 @@ def test_update_metadata_unpins_session(monkeypatch):
 
     repo.upsert_record(
         "agent-1",
-        title="会话",
+        title="原始标题",
         preview="preview",
         status="idle",
         snapshot={"messages": []},
         is_pinned=True,
     )
 
-    updated = repo.update_metadata("agent-1", title="新名称", is_pinned=False)
+    updated = repo.update_metadata("agent-1", title="手动改名", is_pinned=False)
 
     assert updated is not None
-    assert updated["title"] == "新名称"
+    assert updated["title"] == "手动改名"
     assert updated["is_pinned"] is False
     assert updated["pinned_at"] is None
     assert updated["title_source"] == "user"
 
 
-def test_missing_agent_session_fingerprint_defaults_empty(monkeypatch):
+def test_missing_agent_session_history_id_defaults_empty(monkeypatch):
     repo, _ = _install_repo(monkeypatch)
 
     repo.upsert_record(
@@ -114,7 +114,7 @@ def test_missing_agent_session_fingerprint_defaults_empty(monkeypatch):
 
     records = repo.list_records()
 
-    assert records[0]["analysis_fingerprint"] == ""
+    assert records[0]["history_id"] == ""
 
 
 def test_list_records_exposes_summary_and_followup_flags(monkeypatch):
@@ -130,7 +130,7 @@ def test_list_records_exposes_summary_and_followup_flags(monkeypatch):
             "output": {
                 "panel_payloads": {
                     "summary_pack": {
-                        "headline_judgment": {"summary": "社区型生活消费商业区"},
+                        "headline_judgment": {"summary": "这是一个生活消费主导的商业区"},
                     }
                 }
             },
@@ -142,7 +142,7 @@ def test_list_records_exposes_summary_and_followup_flags(monkeypatch):
         preview="followup",
         status="answered",
         snapshot={
-            "messages": [{"role": "user", "content": "为什么这里夜间活跃度低？"}],
+            "messages": [{"role": "user", "content": "为什么这里路网较弱"}],
             "output": {"panel_payloads": {}},
         },
     )

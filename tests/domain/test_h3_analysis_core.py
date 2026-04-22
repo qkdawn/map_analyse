@@ -182,26 +182,6 @@ def test_summary_contains_descriptive_render_meta():
     assert "message" in lisa_meta
 
 
-def test_analyze_h3_grid_arcgis_failure_raises():
-    try:
-        analyze_h3_grid(
-            polygon=_sample_gcj02_polygon(),
-            resolution=10,
-            coord_type="gcj02",
-            include_mode="intersects",
-            min_overlap_ratio=0.0,
-            pois=_sample_pois_gcj02(),
-            poi_coord_type="gcj02",
-            neighbor_ring=1,
-            use_arcgis=True,
-            arcgis_python_path=r"C:\\not_exists\\ArcGIS\\python.exe",
-        )
-    except RuntimeError as exc:
-        assert "ArcGIS桥接失败" in str(exc)
-        return
-    raise AssertionError("Expected RuntimeError when ArcGIS bridge fails")
-
-
 if __name__ == "__main__":
     test_poi_count_consistency()
     test_single_category_entropy_zero()
@@ -210,5 +190,4 @@ if __name__ == "__main__":
     test_moran_i_is_none_or_finite()
     test_spatial_structure_fields_exist()
     test_summary_contains_descriptive_render_meta()
-    test_analyze_h3_grid_arcgis_failure_raises()
     print("H3 analysis core tests passed.")

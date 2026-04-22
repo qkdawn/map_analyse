@@ -3,6 +3,7 @@
             historyDetailAbortController: null,
             historyDetailLoadToken: 0,
             currentHistoryRecordId: '',
+            currentHistoryPolygonWgs84: [],
         };
     }
 
@@ -283,6 +284,9 @@
                     this.scopeSource = '';
                     this.lastIsochroneGeoJSON = null;
                 }
+                this.currentHistoryPolygonWgs84 = Array.isArray(data && data.polygon_wgs84)
+                    ? JSON.parse(JSON.stringify(data.polygon_wgs84))
+                    : [];
                 this.applySimplifyConfig();
 
                 this.step = 2;
@@ -326,6 +330,7 @@
                 let baseRestored = false;
                 try {
                     this.currentHistoryRecordId = historyId;
+                    this.currentHistoryPolygonWgs84 = [];
                     this.cancelHistoryLoading();
                     this.cancelHistoryDetailLoading();
                     this.stopScopeDrawing();

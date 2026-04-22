@@ -46,7 +46,7 @@ def test_road_syntax_api_local_segment_defaults_radii(monkeypatch):
             }
         }
 
-    monkeypatch.setattr("router.app.analyze_road_syntax", _fake_analyze_road_syntax)
+    monkeypatch.setattr("router.domains.road.analyze_road_syntax", _fake_analyze_road_syntax)
 
     payload = {
         "polygon": _sample_polygon(),
@@ -72,7 +72,7 @@ def test_road_syntax_api_local_axial_pass_through(monkeypatch):
             }
         }
 
-    monkeypatch.setattr("router.app.analyze_road_syntax", _fake_analyze_road_syntax)
+    monkeypatch.setattr("router.domains.road.analyze_road_syntax", _fake_analyze_road_syntax)
 
     payload = {
         "polygon": _sample_polygon(),

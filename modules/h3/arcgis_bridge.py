@@ -330,7 +330,6 @@ def _build_rows(features: List[Dict[str, Any]], stats_by_cell: Dict[str, Dict[st
 def run_arcgis_h3_analysis(
     features: List[Dict[str, Any]],
     stats_by_cell: Dict[str, Dict[str, Any]],
-    arcgis_python_path: Optional[str] = None,
     knn_neighbors: int = 8,
     timeout_sec: int = 240,
     export_image: bool = True,
@@ -358,8 +357,9 @@ def run_arcgis_h3_analysis(
         "timeout_sec": int(max(30, int(timeout_sec))),
         "run_id": run_id,
     }
-    if arcgis_python_path:
-        payload["arcgis_python_path"] = str(arcgis_python_path)
+    configured_python_path = str(settings.arcgis_python_path or "").strip()
+    if configured_python_path:
+        payload["arcgis_python_path"] = configured_python_path
 
     endpoint = str(settings.arcgis_bridge_base_url or "").rstrip("/") + "/v1/arcgis/h3/analyze"
     headers = {
@@ -451,7 +451,6 @@ def run_arcgis_h3_export(
     grid_features: List[Dict[str, Any]],
     poi_features: Optional[List[Dict[str, Any]]] = None,
     style_meta: Optional[Dict[str, Any]] = None,
-    arcgis_python_path: Optional[str] = None,
     timeout_sec: int = 300,
 ) -> Dict[str, Any]:
     if not settings.arcgis_bridge_enabled:
@@ -486,8 +485,9 @@ def run_arcgis_h3_export(
         "timeout_sec": int(max(30, int(timeout_sec or 300))),
         "run_id": run_id,
     }
-    if arcgis_python_path:
-        payload["arcgis_python_path"] = str(arcgis_python_path)
+    configured_python_path = str(settings.arcgis_python_path or "").strip()
+    if configured_python_path:
+        payload["arcgis_python_path"] = configured_python_path
 
     endpoint = str(settings.arcgis_bridge_base_url or "").rstrip("/") + "/v1/arcgis/h3/export"
     headers = {

@@ -9,6 +9,7 @@ import { createAnalysisHistoryInitialState, createAnalysisHistoryMethods } from 
 import { createAnalysisH3InitialState, createAnalysisH3Methods } from '../../../features/h3/panel'
 import { createAnalysisPopulationInitialState, createAnalysisPopulationMethods } from '../../../features/population/panel'
 import { createAnalysisNightlightInitialState, createAnalysisNightlightMethods } from '../../../features/nightlight/panel'
+import { createAnalysisGwrInitialState, createAnalysisGwrMethods } from '../../../features/gwr/panel'
 import { createAnalysisTimeseriesInitialState, createAnalysisTimeseriesMethods } from '../../../features/timeseries/panel'
 import { createAnalysisExportInitialState, createAnalysisExportMethods } from '../../../features/export/export-bundle'
 import { createRoadSyntaxUiMethods } from '../../../features/road/ui'
@@ -23,6 +24,7 @@ import { useAnalysisHistoryStore, ANALYSIS_HISTORY_STATE_KEYS } from '../../../s
 import { useAnalysisH3Store, ANALYSIS_H3_STATE_KEYS } from '../../../stores/analysis/h3'
 import { useAnalysisPopulationStore, ANALYSIS_POPULATION_STATE_KEYS } from '../../../stores/analysis/population'
 import { useAnalysisNightlightStore, ANALYSIS_NIGHTLIGHT_STATE_KEYS } from '../../../stores/analysis/nightlight'
+import { useAnalysisGwrStore, ANALYSIS_GWR_STATE_KEYS } from '../../../stores/analysis/gwr'
 import { useAnalysisTimeseriesStore, ANALYSIS_TIMESERIES_STATE_KEYS } from '../../../stores/analysis/timeseries'
 import { useAnalysisExportStore, ANALYSIS_EXPORT_STATE_KEYS } from '../../../stores/analysis/export'
 import { useAnalysisRoadStore, ANALYSIS_ROAD_STATE_KEYS } from '../../../stores/analysis/road'
@@ -71,6 +73,8 @@ function createAnalysisBootstrapContext(options = {}) {
   const populationMethods = createAnalysisPopulationMethods()
   const buildAnalysisNightlightInitialState = () => createAnalysisNightlightInitialState()
   const nightlightMethods = createAnalysisNightlightMethods()
+  const buildAnalysisGwrInitialState = () => createAnalysisGwrInitialState()
+  const gwrMethods = createAnalysisGwrMethods()
   const buildAnalysisTimeseriesInitialState = () => createAnalysisTimeseriesInitialState()
   const timeseriesMethods = createAnalysisTimeseriesMethods()
   const buildAnalysisExportInitialState = () => createAnalysisExportInitialState()
@@ -116,6 +120,7 @@ function createAnalysisBootstrapContext(options = {}) {
     buildAnalysisH3InitialState,
     buildAnalysisPopulationInitialState,
     buildAnalysisNightlightInitialState,
+    buildAnalysisGwrInitialState,
     buildAnalysisTimeseriesInitialState,
     buildAnalysisExportInitialState,
     buildRoadSyntaxInitialState,
@@ -126,6 +131,7 @@ function createAnalysisBootstrapContext(options = {}) {
   const h3Store = useAnalysisH3Store(pinia)
   const populationStore = useAnalysisPopulationStore(pinia)
   const nightlightStore = useAnalysisNightlightStore(pinia)
+  const gwrStore = useAnalysisGwrStore(pinia)
   const timeseriesStore = useAnalysisTimeseriesStore(pinia)
   const exportStore = useAnalysisExportStore(pinia)
   const roadStore = useAnalysisRoadStore(pinia)
@@ -135,6 +141,7 @@ function createAnalysisBootstrapContext(options = {}) {
     { store: h3Store, fieldKeys: ANALYSIS_H3_STATE_KEYS },
     { store: populationStore, fieldKeys: ANALYSIS_POPULATION_STATE_KEYS },
     { store: nightlightStore, fieldKeys: ANALYSIS_NIGHTLIGHT_STATE_KEYS },
+    { store: gwrStore, fieldKeys: ANALYSIS_GWR_STATE_KEYS },
     { store: timeseriesStore, fieldKeys: ANALYSIS_TIMESERIES_STATE_KEYS },
     { store: exportStore, fieldKeys: ANALYSIS_EXPORT_STATE_KEYS },
     { store: roadStore, fieldKeys: ANALYSIS_ROAD_STATE_KEYS },
@@ -157,6 +164,7 @@ function createAnalysisBootstrapContext(options = {}) {
       h3Methods,
       populationMethods,
       nightlightMethods,
+      gwrMethods,
       timeseriesMethods,
       exportMethods,
       roadSyntaxOverlayCommitMethods,

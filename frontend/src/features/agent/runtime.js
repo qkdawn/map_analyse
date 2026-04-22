@@ -27,7 +27,6 @@ import {
   normalizeAgentTraceThinkingItem,
   normalizeAgentTurnPayload,
   normalizeAgentWaitingThinkingItem,
-  stableAgentHash,
   upsertReasoningDeltaInList,
   upsertThinkingItemInList,
 } from './normalizers.js'
@@ -599,18 +598,9 @@ function createAgentRuntimeMethods() {
         return false
       }
     },
-    buildAgentAnalysisFingerprint() {
-      const historyId = asText(this.currentHistoryRecordId)
-      if (asText(this.scopeSource) === 'history' && historyId) {
-        return `history:${historyId}`
-      }
-      const scope = this.getIsochronePolygonPayload()
-      const drawnScope = (typeof this.getDrawnScopePolygonPoints === 'function') ? this.getDrawnScopePolygonPoints() : []
-      const scopeForFingerprint = Array.isArray(scope) && scope.length >= 3 ? scope : drawnScope
-      if (Array.isArray(scopeForFingerprint) && scopeForFingerprint.length >= 3) {
-        return `scope:${stableAgentHash(scopeForFingerprint)}`
-      }
-      return ''
+    getCurrentAgentHistoryId() {
+      if (asText(this.scopeSource) !== 'history') return ''
+      return asText(this.currentHistoryRecordId)
     },
     buildAgentAnalysisSnapshot() {
       const pois = Array.isArray(this.allPoisDetails) ? this.allPoisDetails.slice(0, 500) : []
@@ -687,7 +677,7 @@ function createAgentRuntimeMethods() {
         : (clampText(merged.title, 60) || deriveAgentSessionTitle(messages))
       return {
         title,
-        analysis_fingerprint: asText(merged.analysisFingerprint) || this.getCurrentAgentAnalysisFingerprint(),
+        history_id: asText(merged.historyId) || this.getCurrentAgentHistoryId(),
         session_kind: asText(merged.sessionKind),
         preview: clampText(merged.preview, 120) || deriveAgentSessionPreview(merged),
         status: asText(merged.status || 'idle') || 'idle',
@@ -808,7 +798,7 @@ function createAgentRuntimeMethods() {
       const currentSession = this.syncCurrentAgentSession() || this.readSessionState(this.activeAgentSessionId)
       const targetSessionId = asText((currentSession && currentSession.id) || this.activeAgentSessionId || this.agentConversationId) || this.createAgentSession().id
       const wasPersisted = !!(currentSession && currentSession.persisted)
-      const analysisFingerprint = this.getCurrentAgentAnalysisFingerprint()
+      const historyId = this.getCurrentAgentHistoryId()
       const requestAbortController = typeof AbortController !== 'undefined' ? new AbortController() : null
       const requestRiskConfirmations = Array.isArray(options && options.riskConfirmations)
         ? options.riskConfirmations
@@ -830,7 +820,7 @@ function createAgentRuntimeMethods() {
         currentSession,
         targetSessionId,
         wasPersisted,
-        analysisFingerprint,
+        historyId,
         requestAbortController,
         requestRiskConfirmations,
         nextMessages,
@@ -869,7 +859,7 @@ function createAgentRuntimeMethods() {
         question,
         targetSessionId,
         wasPersisted,
-        analysisFingerprint,
+        historyId,
         requestAbortController,
         requestRiskConfirmations,
         nextMessages,
@@ -879,7 +869,7 @@ function createAgentRuntimeMethods() {
         sessionKind: 'followup',
         persisted: wasPersisted,
         snapshotLoaded: true,
-        analysisFingerprint,
+        historyId,
         input: '',
         messages: nextMessages,
         cards: [],
@@ -935,7 +925,7 @@ function createAgentRuntimeMethods() {
           signal: requestAbortController ? requestAbortController.signal : undefined,
           body: JSON.stringify({
             conversation_id: targetSessionId,
-            analysis_fingerprint: analysisFingerprint,
+            history_id: historyId,
             governance_mode: 'auto',
             messages: nextMessages,
             analysis_snapshot: this.buildAgentAnalysisSnapshot(),

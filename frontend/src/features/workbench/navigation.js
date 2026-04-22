@@ -4,6 +4,7 @@
         H3_SETTINGS: 'h3_settings',
         POPULATION: 'population',
         NIGHTLIGHT: 'nightlight',
+        GWR: 'gwr',
         TIMESERIES: 'timeseries',
         SYNTAX: 'syntax',
         AGENT: 'agent',
@@ -29,6 +30,7 @@
                         this.hasSimplifyDisplayTarget('h3')
                         || this.hasSimplifyDisplayTarget('population')
                         || this.hasSimplifyDisplayTarget('nightlight')
+                        || this.hasSimplifyDisplayTarget('gwr')
                         || this.hasSimplifyDisplayTarget('timeseries')
                         || this.hasSimplifyDisplayTarget('syntax')
                     );
@@ -174,6 +176,13 @@
                     this.clearNightlightDisplayOnLeave();
                 }
                 if (
+                    previousPanel === STEP3_PANEL_IDS.GWR
+                    && nextPanelId !== STEP3_PANEL_IDS.GWR
+                    && !(typeof this.hasSimplifyDisplayTarget === 'function' && this.hasSimplifyDisplayTarget('gwr'))
+                ) {
+                    this.clearGwrDisplayOnLeave();
+                }
+                if (
                     previousPanel === STEP3_PANEL_IDS.TIMESERIES
                     && nextPanelId !== STEP3_PANEL_IDS.TIMESERIES
                     && !(typeof this.hasSimplifyDisplayTarget === 'function' && this.hasSimplifyDisplayTarget('timeseries'))
@@ -227,6 +236,16 @@
                 if (nextPanelId === STEP3_PANEL_IDS.NIGHTLIGHT) {
                     this.ensureNightlightPanelEntryState();
                     this.restoreNightlightDisplayOnEnter();
+                    this.applySimplifyPointVisibility();
+                    return;
+                }
+                if (nextPanelId === STEP3_PANEL_IDS.GWR) {
+                    if (typeof this.ensureGwrPanelEntryState === 'function') {
+                        this.ensureGwrPanelEntryState();
+                    }
+                    if (typeof this.restoreGwrDisplayOnEnter === 'function') {
+                        this.restoreGwrDisplayOnEnter();
+                    }
                     this.applySimplifyPointVisibility();
                     return;
                 }

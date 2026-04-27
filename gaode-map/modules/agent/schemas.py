@@ -1,0 +1,676 @@
+from __future__ import annotations
+
+from typing import Any, Dict, List, Literal, Optional
+
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+
+ToolCategory = Literal["information", "action", "processing"]
+ToolLayer = Literal["L1", "L2", "L4"]
+ToolUiTier = Literal["foundation", "capability", "scenario"]
+ToolDataDomain = Literal[
+    "poi",
+    "grid",
+    "population",
+    "nightlight",
+    "road",
+    "landuse",
+    "remote_sensing",
+    "commerce",
+    "policy",
+    "competitor",
+    "general",
+]
+ToolCapabilityType = Literal["fetch", "transform", "analyze", "interpret", "decide", "none"]
+ToolSceneType = Literal[
+    "area_character",
+    "site_selection",
+    "vitality",
+    "tod",
+    "livability",
+    "facility_gap",
+    "renewal_priority",
+    "general",
+]
+ToolLlmExposure = Literal["primary", "secondary", "hidden"]
+GovernanceMode = Literal["auto", "guarded", "readonly"]
+AgentStatus = Literal["answered", "requires_clarification", "requires_risk_confirmation", "failed"]
+AgentStage = Literal[
+    "gating",
+    "clarifying",
+    "context_ready",
+    "planning",
+    "executing",
+    "auditing",
+    "replanning",
+    "synthesizing",
+    "answered",
+    "requires_clarification",
+    "requires_risk_confirmation",
+    "failed",
+]
+PersistedAgentStatus = Literal[
+    "idle",
+    "running",
+    "answered",
+    "requires_clarification",
+    "requires_risk_confirmation",
+    "failed",
+]
+ToolStatus = Literal["success", "failed", "skipped"]
+ToolLoopStatus = Literal["completed", "requires_risk_confirmation", "failed"]
+CardType = Literal["summary", "evidence", "recommendation"]
+AgentSessionTitleSource = Literal["user", "ai", "fallback"]
+AgentTurnStreamEventType = Literal["meta", "status", "thinking", "reasoning_delta", "trace", "plan", "final", "error"]
+AgentSummaryStreamEventType = Literal[
+    "status",
+    "section_start",
+    "section_delta",
+    "section_complete",
+    "panel_payload",
+    "final",
+    "error",
+]
+ThinkingState = Literal["pending", "active", "completed", "failed"]
+EvidenceConfidence = Literal["strong", "moderate", "weak"]
+DecisionMode = Literal["cognition", "judgment", "action"]
+DecisionStrength = Literal["strong", "moderate", "weak"]
+
+
+class AgentMessage(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    role: Literal["system", "user", "assistant"] = "user"
+    content: str = ""
+
+
+class AnalysisSnapshot(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    context: Dict[str, Any] = Field(default_factory=dict)
+    scope: Dict[str, Any] = Field(default_factory=dict)
+    pois: List[Dict[str, Any]] = Field(default_factory=list)
+    poi_summary: Dict[str, Any] = Field(default_factory=dict)
+    h3: Dict[str, Any] = Field(default_factory=dict)
+    road: Dict[str, Any] = Field(default_factory=dict)
+    population: Dict[str, Any] = Field(default_factory=dict)
+    nightlight: Dict[str, Any] = Field(default_factory=dict)
+    frontend_analysis: Dict[str, Any] = Field(default_factory=dict)
+    active_panel: str = ""
+    current_filters: Dict[str, Any] = Field(default_factory=dict)
+
+
+class AgentTurnRequest(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    conversation_id: str = ""
+    history_id: str = ""
+    messages: List[AgentMessage] = Field(default_factory=list)
+    analysis_snapshot: AnalysisSnapshot = Field(default_factory=AnalysisSnapshot)
+    risk_confirmations: List[str] = Field(default_factory=list)
+    governance_mode: GovernanceMode = "auto"
+
+
+class AgentSummaryRequest(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    conversation_id: str = ""
+    history_id: str = ""
+    analysis_snapshot: AnalysisSnapshot = Field(default_factory=AnalysisSnapshot)
+
+
+class AgentSummaryDataReadiness(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    checked: bool = False
+    ready: bool = False
+    missing_tasks: List[str] = Field(default_factory=list)
+    reused: List[str] = Field(default_factory=list)
+    fetched: List[str] = Field(default_factory=list)
+
+
+class AgentSummaryProgressStep(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    key: str = ""
+    label: str = ""
+    status: Literal["pending", "running", "completed", "failed"] = "pending"
+
+
+class AgentSummaryReadinessResponse(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    data_readiness: AgentSummaryDataReadiness = Field(default_factory=AgentSummaryDataReadiness)
+    error: str = ""
+    warnings: List[str] = Field(default_factory=list)
+    phases: List[str] = Field(default_factory=list)
+    progress_steps: List[AgentSummaryProgressStep] = Field(default_factory=list)
+
+
+class AgentSummaryGenerateResponse(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    data_readiness: AgentSummaryDataReadiness = Field(default_factory=AgentSummaryDataReadiness)
+    panel_payloads: Dict[str, Any] = Field(default_factory=dict)
+    summary_pack: Dict[str, Any] = Field(default_factory=dict)
+    error: str = ""
+    warnings: List[str] = Field(default_factory=list)
+    phases: List[str] = Field(default_factory=list)
+    progress_steps: List[AgentSummaryProgressStep] = Field(default_factory=list)
+
+
+class ToolSpec(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    name: str
+    description: str
+    category: ToolCategory
+    layer: ToolLayer
+    ui_tier: ToolUiTier = "foundation"
+    data_domain: ToolDataDomain = "general"
+    capability_type: ToolCapabilityType = "none"
+    scene_type: ToolSceneType = "general"
+    llm_exposure: ToolLlmExposure = "secondary"
+    toolkit_id: str = ""
+    default_policy_key: str = ""
+    evidence_contract: List[str] = Field(default_factory=list)
+    applicable_scenarios: List[str] = Field(default_factory=list)
+    cautions: List[str] = Field(default_factory=list)
+    requires: List[str] = Field(default_factory=list)
+    produces: List[str] = Field(default_factory=list)
+    input_schema: Dict[str, Any] = Field(default_factory=dict)
+    output_schema: Dict[str, Any] = Field(default_factory=dict)
+    readonly: bool = False
+    cost_level: Literal["safe", "normal", "expensive"] = "safe"
+    risk_level: Literal["safe", "guarded", "expensive"] = "safe"
+    timeout_sec: int = 30
+    cacheable: bool = False
+
+
+class AgentToolSummary(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    name: str
+    description: str = ""
+    category: ToolCategory
+    layer: ToolLayer
+    ui_tier: ToolUiTier = "foundation"
+    data_domain: ToolDataDomain = "general"
+    capability_type: ToolCapabilityType = "none"
+    scene_type: ToolSceneType = "general"
+    llm_exposure: ToolLlmExposure = "secondary"
+    toolkit_id: str = ""
+    default_policy_key: str = ""
+    evidence_contract: List[str] = Field(default_factory=list)
+    applicable_scenarios: List[str] = Field(default_factory=list)
+    cautions: List[str] = Field(default_factory=list)
+    requires: List[str] = Field(default_factory=list)
+    produces: List[str] = Field(default_factory=list)
+    input_schema: Dict[str, Any] = Field(default_factory=dict)
+    output_schema: Dict[str, Any] = Field(default_factory=dict)
+    readonly: bool = False
+    cost_level: Literal["safe", "normal", "expensive"] = "safe"
+    risk_level: Literal["safe", "guarded", "expensive"] = "safe"
+    timeout_sec: int = 30
+    cacheable: bool = False
+
+
+class PlanStep(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    tool_name: str
+    arguments: Dict[str, Any] = Field(default_factory=dict)
+    reason: str = ""
+    evidence_goal: str = ""
+    expected_artifacts: List[str] = Field(default_factory=list)
+    optional: bool = False
+
+
+class ToolResult(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    tool_name: str
+    status: ToolStatus = "success"
+    result: Dict[str, Any] = Field(default_factory=dict)
+    evidence: List[Dict[str, Any]] = Field(default_factory=list)
+    warnings: List[str] = Field(default_factory=list)
+    artifacts: Dict[str, Any] = Field(default_factory=dict)
+    error: Optional[str] = None
+
+
+class ExecutionTraceItem(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    tool_name: str
+    status: ToolStatus
+    reason: str = ""
+    message: str = ""
+    cost_level: str = "safe"
+    risk_level: str = "safe"
+    evidence_count: int = 0
+    warning_count: int = 0
+
+
+class AssistantCard(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    type: CardType
+    title: str
+    content: str
+    items: List[Any] = Field(default_factory=list)
+
+
+class AgentEvidenceItem(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    metric: str
+    value: Any = None
+    interpretation: str = ""
+    source: str = ""
+    confidence: EvidenceConfidence = "weak"
+    limitation: str = ""
+
+
+class DecisionPayload(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    summary: str = ""
+    mode: DecisionMode = "judgment"
+    strength: DecisionStrength = "weak"
+    can_act: bool = False
+
+
+class DecisionEvidenceItem(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    key: str = ""
+    metric: str = ""
+    headline: str = ""
+    value: Any = None
+    interpretation: str = ""
+    source: str = ""
+    confidence: EvidenceConfidence = "weak"
+    limitation: str = ""
+    supports: List[str] = Field(default_factory=list)
+    is_key: bool = False
+
+
+class DecisionCounterpointItem(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    kind: Literal["conflict", "missing", "boundary"] = "boundary"
+    title: str = ""
+    detail: str = ""
+
+
+class DecisionActionItem(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    title: str = ""
+    detail: str = ""
+    condition: str = ""
+    target: str = ""
+    prompt: str = ""
+
+
+class DecisionBoundaryItem(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    title: str = ""
+    detail: str = ""
+
+
+class GateDecision(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    status: Literal["pass", "clarify", "block"] = "pass"
+    clarification_question: str = ""
+    clarification_questions: List[str] = Field(default_factory=list)
+    clarification_options: List[str] = Field(default_factory=list)
+    missing_information: List[str] = Field(default_factory=list)
+    question_type: str = ""
+    summary: str = ""
+    blocked_reason: str = ""
+    research_notes: List[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _normalize_clarification(self):
+        if not self.clarification_question and self.clarification_questions:
+            self.clarification_question = "\n".join(
+                f"{index + 1}. {item}"
+                for index, item in enumerate(self.clarification_questions[:3])
+                if str(item).strip()
+            )
+        return self
+
+
+class ClarificationBundle(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    missing_information: List[str] = Field(default_factory=list)
+    questions: List[str] = Field(default_factory=list)
+    summary: str = ""
+
+
+class PlanningResult(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    goal: str = ""
+    question_type: str = ""
+    summary: str = ""
+    requires_tools: bool = True
+    stop_condition: str = ""
+    evidence_focus: List[str] = Field(default_factory=list)
+    steps: List[PlanStep] = Field(default_factory=list)
+
+
+class AuditVerdict(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    status: Literal["pass", "replan", "fail"] = "pass"
+    summary: str = ""
+    issues: List[str] = Field(default_factory=list)
+    missing_evidence: List[str] = Field(default_factory=list)
+    replan_instructions: str = ""
+    should_answer: bool = True
+
+
+class AgentContextSummary(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    has_scope: bool = False
+    available_results: List[str] = Field(default_factory=list)
+    active_panel: str = ""
+    filters_digest: Dict[str, Any] = Field(default_factory=dict)
+
+
+class ContextBundle(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    facts: Dict[str, Any] = Field(default_factory=dict)
+    analysis: Dict[str, Any] = Field(default_factory=dict)
+    limits: List[str] = Field(default_factory=list)
+    available_artifacts: List[str] = Field(default_factory=list)
+    context_summary: AgentContextSummary = Field(default_factory=AgentContextSummary)
+
+
+class AuditResult(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    passed: bool = True
+    issues: List[str] = Field(default_factory=list)
+    followup_plan: List[PlanStep] = Field(default_factory=list)
+    missing_evidence: List[str] = Field(default_factory=list)
+    required_evidence: List[str] = Field(default_factory=list)
+
+
+class WorkingMemory(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    artifacts: Dict[str, Any] = Field(default_factory=dict)
+    tool_results: List[ToolResult] = Field(default_factory=list)
+    execution_trace: List[ExecutionTraceItem] = Field(default_factory=list)
+    research_notes: List[str] = Field(default_factory=list)
+    audit_issues: List[str] = Field(default_factory=list)
+    followup_plan: List[PlanStep] = Field(default_factory=list)
+
+
+class ToolLoopResult(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    status: ToolLoopStatus = "completed"
+    steps: List[PlanStep] = Field(default_factory=list)
+    used_tools: List[str] = Field(default_factory=list)
+    execution_trace: List[ExecutionTraceItem] = Field(default_factory=list)
+    tool_results: List[ToolResult] = Field(default_factory=list)
+    artifacts: Dict[str, Any] = Field(default_factory=dict)
+    research_notes: List[str] = Field(default_factory=list)
+    provider_response_id: Optional[str] = None
+    assistant_summary: str = ""
+    stop_reason: str = ""
+    warnings: List[str] = Field(default_factory=list)
+    error: str = ""
+    risk_prompt: str = ""
+
+
+class AgentTurnOutput(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    cards: List[AssistantCard] = Field(default_factory=list)
+    clarification_question: str = ""
+    clarification_options: List[str] = Field(default_factory=list)
+    risk_prompt: str = ""
+    next_suggestions: List[str] = Field(default_factory=list)
+    panel_payloads: Dict[str, Any] = Field(default_factory=dict)
+    decision: DecisionPayload = Field(default_factory=DecisionPayload)
+    support: List[DecisionEvidenceItem] = Field(default_factory=list)
+    counterpoints: List[DecisionCounterpointItem] = Field(default_factory=list)
+    actions: List[DecisionActionItem] = Field(default_factory=list)
+    boundary: List[DecisionBoundaryItem] = Field(default_factory=list)
+
+
+class AgentTurnDiagnostics(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    execution_trace: List[ExecutionTraceItem] = Field(default_factory=list)
+    used_tools: List[str] = Field(default_factory=list)
+    citations: List[str] = Field(default_factory=list)
+    research_notes: List[str] = Field(default_factory=list)
+    audit_issues: List[str] = Field(default_factory=list)
+    thinking_timeline: List["AgentThinkingItem"] = Field(default_factory=list)
+    planning_summary: str = ""
+    audit_summary: str = ""
+    replan_count: int = 0
+    error: str = ""
+
+
+class AgentThinkingItem(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    id: str
+    phase: str
+    title: str
+    detail: str = ""
+    items: List[str] = Field(default_factory=list)
+    meta: Dict[str, Any] = Field(default_factory=dict)
+    state: ThinkingState = "pending"
+
+
+class AgentTurnStreamEvent(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    type: AgentTurnStreamEventType
+    payload: Dict[str, Any] = Field(default_factory=dict)
+
+
+class AgentSummaryStreamEvent(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    type: AgentSummaryStreamEventType
+    payload: Dict[str, Any] = Field(default_factory=dict)
+
+
+class AgentPlanEnvelope(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    steps: List[PlanStep] = Field(default_factory=list)
+    followup_steps: List[PlanStep] = Field(default_factory=list)
+    followup_applied: bool = False
+    summary: str = ""
+
+
+class AgentTurnResponse(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    status: AgentStatus
+    stage: AgentStage = "answered"
+    output: AgentTurnOutput = Field(default_factory=AgentTurnOutput)
+    diagnostics: AgentTurnDiagnostics = Field(default_factory=AgentTurnDiagnostics)
+    context_summary: AgentContextSummary = Field(default_factory=AgentContextSummary)
+    plan: AgentPlanEnvelope = Field(default_factory=AgentPlanEnvelope)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _populate_stage(cls, value: Any) -> Any:
+        if not isinstance(value, dict):
+            return value
+        value = dict(value)
+        if "output" not in value:
+            value["output"] = {
+                "cards": value.pop("assistant_cards", value.pop("cards", [])),
+                "clarification_question": value.pop("clarification_question", ""),
+                "clarification_options": value.pop("clarification_options", []),
+                "risk_prompt": value.pop("risk_prompt", ""),
+                "next_suggestions": value.pop("next_suggestions", []),
+                "panel_payloads": value.pop("panel_payloads", {}),
+                "decision": value.pop("decision", {}),
+                "support": value.pop("support", []),
+                "counterpoints": value.pop("counterpoints", []),
+                "actions": value.pop("actions", []),
+                "boundary": value.pop("boundary", []),
+            }
+        if "diagnostics" not in value:
+            value["diagnostics"] = {
+                "execution_trace": value.pop("execution_trace", []),
+                "used_tools": value.pop("used_tools", []),
+                "citations": value.pop("citations", []),
+                "research_notes": value.pop("research_notes", []),
+                "audit_issues": value.pop("audit_issues", []),
+                "thinking_timeline": value.pop("thinking_timeline", []),
+                "planning_summary": value.pop("planning_summary", ""),
+                "audit_summary": value.pop("audit_summary", ""),
+                "replan_count": value.pop("replan_count", 0),
+                "error": value.pop("error", ""),
+            }
+        if value.get("stage"):
+            return value
+        status = str(value.get("status") or "").strip()
+        if status == "requires_clarification":
+            value["stage"] = "requires_clarification"
+        elif status == "requires_risk_confirmation":
+            value["stage"] = "requires_risk_confirmation"
+        elif status == "failed":
+            value["stage"] = "failed"
+        else:
+            value["stage"] = "answered"
+        return value
+
+    @property
+    def assistant_cards(self) -> List[AssistantCard]:
+        return list(self.output.cards or [])
+
+    @property
+    def clarification_question(self) -> str:
+        return str(self.output.clarification_question or "")
+
+    @property
+    def risk_prompt(self) -> str:
+        return str(self.output.risk_prompt or "")
+
+    @property
+    def next_suggestions(self) -> List[str]:
+        return list(self.output.next_suggestions or [])
+
+    @property
+    def execution_trace(self) -> List[ExecutionTraceItem]:
+        return list(self.diagnostics.execution_trace or [])
+
+    @property
+    def used_tools(self) -> List[str]:
+        return list(self.diagnostics.used_tools or [])
+
+    @property
+    def citations(self) -> List[str]:
+        return list(self.diagnostics.citations or [])
+
+    @property
+    def research_notes(self) -> List[str]:
+        return list(self.diagnostics.research_notes or [])
+
+
+class AgentSessionSummary(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    id: str
+    title: str = ""
+    preview: str = ""
+    status: PersistedAgentStatus = "idle"
+    history_id: str = ""
+    is_pinned: bool = False
+    title_source: AgentSessionTitleSource = "fallback"
+    panel_kind: str = ""
+    created_at: str = ""
+    updated_at: str = ""
+    pinned_at: Optional[str] = None
+
+
+class AgentSessionSnapshotRequest(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    title: str = ""
+    preview: str = ""
+    status: PersistedAgentStatus = "idle"
+    stage: AgentStage = "gating"
+    history_id: str = ""
+    panel_kind: str = ""
+    is_pinned: Optional[bool] = None
+    input: str = ""
+    messages: List[AgentMessage] = Field(default_factory=list)
+    output: AgentTurnOutput = Field(default_factory=AgentTurnOutput)
+    diagnostics: AgentTurnDiagnostics = Field(default_factory=AgentTurnDiagnostics)
+    context_summary: AgentContextSummary = Field(default_factory=AgentContextSummary)
+    plan: AgentPlanEnvelope = Field(default_factory=AgentPlanEnvelope)
+    risk_confirmations: List[str] = Field(default_factory=list)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _normalize_legacy_shape(cls, value: Any) -> Any:
+        if not isinstance(value, dict):
+            return value
+        value = dict(value)
+        if "output" not in value:
+            value["output"] = {
+                "cards": value.pop("cards", []),
+                "clarification_question": value.pop("clarification_question", ""),
+                "clarification_options": value.pop("clarification_options", []),
+                "risk_prompt": value.pop("risk_prompt", ""),
+                "next_suggestions": value.pop("next_suggestions", []),
+                "panel_payloads": value.pop("panel_payloads", {}),
+                "decision": value.pop("decision", {}),
+                "support": value.pop("support", []),
+                "counterpoints": value.pop("counterpoints", []),
+                "actions": value.pop("actions", []),
+                "boundary": value.pop("boundary", []),
+            }
+        if "diagnostics" not in value:
+            value["diagnostics"] = {
+                "execution_trace": value.pop("execution_trace", []),
+                "used_tools": value.pop("used_tools", []),
+                "citations": value.pop("citations", []),
+                "research_notes": value.pop("research_notes", []),
+                "audit_issues": value.pop("audit_issues", []),
+                "thinking_timeline": value.pop("thinking_timeline", []),
+                "planning_summary": value.pop("planning_summary", ""),
+                "audit_summary": value.pop("audit_summary", ""),
+                "replan_count": value.pop("replan_count", 0),
+                "error": value.pop("error", ""),
+            }
+        return value
+
+
+class AgentSessionMetadataPatchRequest(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    title: Optional[str] = None
+    is_pinned: Optional[bool] = None
+
+
+class AgentSessionDetail(AgentSessionSummary):
+    stage: AgentStage = "gating"
+    input: str = ""
+    messages: List[AgentMessage] = Field(default_factory=list)
+    output: AgentTurnOutput = Field(default_factory=AgentTurnOutput)
+    diagnostics: AgentTurnDiagnostics = Field(default_factory=AgentTurnDiagnostics)
+    context_summary: AgentContextSummary = Field(default_factory=AgentContextSummary)
+    plan: AgentPlanEnvelope = Field(default_factory=AgentPlanEnvelope)
+    risk_confirmations: List[str] = Field(default_factory=list)

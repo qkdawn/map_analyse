@@ -1,0 +1,14 @@
+﻿<div class="agent-thinking-head">
+    <div class="agent-thinking-status">
+        <span class="agent-thinking-dot" :class="{ 'is-running': agentLoading }"></span>
+        <span>{{ getAgentThinkingStatusLabel() }}</span>
+        <span v-if="getAgentThinkingElapsedLabel()" class="agent-thinking-elapsed">{{ getAgentThinkingElapsedLabel() }}</span>
+    </div>
+    <button
+        v-if="agentThinkingTimeline.length || agentReasoningBlocks.length || agentExecutionTrace.length || getAgentPlanChecklist().visible || agentResearchNotes.length"
+        type="button"
+        class="agent-thinking-toggle"
+        @click="toggleAgentThinkingExpanded">
+        {{ agentThinkingExpanded ? '收起过程' : '查看过程' }}
+    </button>
+</div>

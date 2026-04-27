@@ -34,12 +34,12 @@
     };
   </script>
   <script src="https://webapi.amap.com/maps?v=1.4.15&key={{ amap_js_api_key }}"></script>
-  <script src="https://cdn.bootcdn.net/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script src="/static/vendor/html2canvas.min.js?v={{ static_version }}"></script>
 
-  <script src="/static/js/map-utils.js"></script>
-  <script src="/static/js/map-core.js"></script>
-  <script src="/static/js/map-exporter.js"></script>
-  <script src="/static/js/draw-bound.js"></script>
+  <script src="/static/js/map/utils.js"></script>
+  <script src="/static/js/map/core.js"></script>
+  <script src="/static/js/map/exporter.js"></script>
+  <script src="/static/js/map/polygon-panel.js"></script>
 
   {% block extra_js %}{% endblock %}
 

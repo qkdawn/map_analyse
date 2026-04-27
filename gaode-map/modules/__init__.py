@@ -1,6 +1,6 @@
-"""Convenience exports for service helpers."""
+"""Convenience exports for provider helpers."""
 
-from .gaode_service import (
+from .providers.amap import (
     generate_map_json,
     get_around_place,
     get_city_place,

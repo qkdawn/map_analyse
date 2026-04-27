@@ -4,7 +4,7 @@
 """
 
 from pathlib import Path
-from typing import List, Literal, Optional
+from typing import List, Literal
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -43,14 +43,16 @@ class Settings(BaseSettings):
         validation_alias="CLEANUP_INTERVAL_HOURS",
         description="Background cleanup interval in hours",
     )
-    db_path: str = str(Path(__file__).resolve().parent.parent / "data" / "map.db")  # SQLite 数据文件路径
-    db_url: Optional[str] = Field(None, validation_alias="DB_URL", description="数据库连接字符串")
+    db_url: str = Field("", validation_alias="DB_URL", description="数据库连接字符串")
 
     @property
     def sqlalchemy_database_uri(self) -> str:
-        if self.db_url:
-            return self.db_url
-        return f"sqlite:///{self.db_path}"
+        db_url = str(self.db_url or "").strip()
+        if not db_url:
+            raise ValueError("DB_URL is required. Configure a MySQL connection string.")
+        if db_url.lower().startswith("sqlite"):
+            raise ValueError("SQLite is no longer supported. Configure DB_URL with mysql+pymysql://...")
+        return db_url
 
     # 高德地图API配置
     amap_web_service_key: str = Field(
@@ -71,6 +73,63 @@ class Settings(BaseSettings):
         "",
         validation_alias="TIANDITU_KEY",
         description="天地图 Web 瓦片服务 Key（tk）",
+    )
+
+    # AI Agent provider 配置
+    ai_enabled: bool = Field(
+        False,
+        validation_alias="AI_ENABLED",
+        description="是否启用 LLM provider（未启用时 Agent tool loop 不可用）",
+    )
+    ai_provider: Literal["deepseek"] = Field(
+        "deepseek",
+        validation_alias="AI_PROVIDER",
+        description="Agent 使用的 AI provider 类型",
+    )
+    ai_base_url: str = Field(
+        "",
+        validation_alias="AI_BASE_URL",
+        description="LLM provider API 基础地址，例如 https://api.deepseek.com/v1",
+    )
+    ai_api_key: str = Field(
+        "",
+        validation_alias="AI_API_KEY",
+        description="LLM provider API Key",
+    )
+    ai_model: str = Field(
+        "",
+        validation_alias="AI_MODEL",
+        description="Agent 使用的模型名，例如 deepseek-chat",
+    )
+    ai_thinking_enabled: bool = Field(
+        True,
+        validation_alias="AI_THINKING_ENABLED",
+        description="是否为 DeepSeek chat completions 启用 thinking mode 并流式展示 reasoning_content",
+    )
+    ai_timeout_s: int = Field(
+        60,
+        validation_alias="AI_TIMEOUT_S",
+        description="AI provider 请求超时时间（秒）",
+    )
+    ai_max_context_turns: int = Field(
+        12,
+        validation_alias="AI_MAX_CONTEXT_TURNS",
+        description="发送给 LLM tool loop 的最大历史轮次数",
+    )
+    ai_max_tool_steps: int = Field(
+        8,
+        validation_alias="AI_MAX_TOOL_STEPS",
+        description="LLM tool-calling loop 最大工具步数",
+    )
+    ai_max_tool_errors: int = Field(
+        2,
+        validation_alias="AI_MAX_TOOL_ERRORS",
+        description="LLM tool-calling loop 连续工具错误上限",
+    )
+    ai_max_replans: int = Field(
+        2,
+        validation_alias="AI_MAX_REPLANS",
+        description="Agent 在审计未通过时允许重新规划的最大次数",
     )
 
     # 本地历史数据查询服务配置
@@ -104,6 +163,61 @@ class Settings(BaseSettings):
         validation_alias="OVERPASS_ENDPOINT",
         description="Local Overpass API endpoint",
     )
+    overpass_query_timeout_s: int = Field(
+        60,
+        validation_alias="OVERPASS_QUERY_TIMEOUT_S",
+        description="Timeout passed to Overpass QL [timeout] (seconds)",
+    )
+    overpass_http_timeout_s: int = Field(
+        90,
+        validation_alias="OVERPASS_HTTP_TIMEOUT_S",
+        description="HTTP read timeout for Overpass request (seconds)",
+    )
+    overpass_retry_count: int = Field(
+        1,
+        validation_alias="OVERPASS_RETRY_COUNT",
+        description="Retry times for Overpass timeout/runtime errors",
+    )
+    overpass_cache_ttl_s: int = Field(
+        45,
+        validation_alias="OVERPASS_CACHE_TTL_S",
+        description="In-process cache TTL for Overpass responses (seconds)",
+    )
+    overpass_cache_max_entries: int = Field(
+        16,
+        validation_alias="OVERPASS_CACHE_MAX_ENTRIES",
+        description="Maximum in-process cached Overpass query entries",
+    )
+    city_boundary_dir: str = Field(
+        "/mapdata/boundaries",
+        validation_alias="CITY_BOUNDARY_DIR",
+        description="Directory containing local city boundary GeoJSON files",
+    )
+    population_data_dir: str = Field(
+        str(Path(__file__).resolve().parent.parent / "runtime" / "population_data"),
+        validation_alias="POPULATION_DATA_DIR",
+        description="Directory containing population GeoTIFF files",
+    )
+    population_data_year: str = Field(
+        "2026",
+        validation_alias="POPULATION_DATA_YEAR",
+        description="Population dataset year to read from the population data directory",
+    )
+    population_preview_max_size: int = Field(
+        2048,
+        validation_alias="POPULATION_PREVIEW_MAX_SIZE",
+        description="Maximum preview PNG size for population raster outputs",
+    )
+    nightlight_data_dir: str = Field(
+        "/mapdata/nightlight/processed",
+        validation_alias="NIGHTLIGHT_DATA_DIR",
+        description="Directory containing processed Black Marble GeoTIFF files and manifest",
+    )
+    nightlight_preview_max_size: int = Field(
+        2048,
+        validation_alias="NIGHTLIGHT_PREVIEW_MAX_SIZE",
+        description="Maximum preview PNG size for nightlight raster outputs",
+    )
 
     # ArcGIS HTTP bridge config
     arcgis_bridge_enabled: bool = Field(
@@ -112,9 +226,14 @@ class Settings(BaseSettings):
         description="Whether ArcGIS HTTP bridge is enabled",
     )
     arcgis_bridge_base_url: str = Field(
-        "http://host.docker.internal:18081",
+        "",
         validation_alias="ARCGIS_BRIDGE_BASE_URL",
         description="ArcGIS bridge base URL",
+    )
+    arcgis_bridge_port: int = Field(
+        18081,
+        validation_alias="ARCGIS_BRIDGE_PORT",
+        description="ArcGIS bridge port exposed by the host bridge service",
     )
     arcgis_bridge_token: str = Field(
         "",
@@ -136,6 +255,21 @@ class Settings(BaseSettings):
         validation_alias="ARCGIS_EXPORT_MAX_MB",
         description="Maximum export file size accepted from bridge (MB)",
     )
+    arcgis_python_path: str = Field(
+        "",
+        validation_alias="ARCGIS_PYTHON_PATH",
+        description="ArcGIS Python runtime path used by the host bridge",
+    )
+    arcgis_script_path: str = Field(
+        "",
+        validation_alias="ARCGIS_SCRIPT_PATH",
+        description="ArcGIS H3 pipeline script path used by the host bridge",
+    )
+    arcgis_road_syntax_sdna_script_path: str = Field(
+        "",
+        validation_alias="ARCGIS_ROAD_SYNTAX_SDNA_SCRIPT_PATH",
+        description="ArcGIS road syntax SDNA script path used by the host bridge",
+    )
 
     # depthmapX CLI config
     depthmapx_cli_path: str = Field(
@@ -152,6 +286,11 @@ class Settings(BaseSettings):
         1024,
         validation_alias="DEPTHMAPX_TULIP_BINS",
         description="Tulip bins for segment tulip analysis (4-1024)",
+    )
+    road_syntax_global_edge_cap: int = Field(
+        22000,
+        validation_alias="ROAD_SYNTAX_GLOBAL_EDGE_CAP",
+        description="Max input edges for global road-syntax major profile",
     )
 
 

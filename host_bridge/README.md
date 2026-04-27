@@ -11,6 +11,7 @@ Copy `.env.example` values into your Windows environment (or set them in shell):
 - `ARCGIS_SCRIPT_PATH`
 - `ARCGIS_EXPORT_SCRIPT_PATH`
 - `ARCGIS_ROAD_SYNTAX_SCRIPT_PATH`
+- `ARCGIS_GWR_SCRIPT_PATH`
 - `ARCGIS_BRIDGE_PORT` (optional, default `18081`)
 
 ## 2) Install dependencies

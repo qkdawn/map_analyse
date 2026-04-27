@@ -72,3 +72,41 @@ class ArcGISRoadSyntaxWebGLResponse(BaseModel):
     elapsed_ms: float = 0.0
     error: Optional[str] = None
     trace_id: str
+
+
+class ArcGISGwrRequest(BaseModel):
+    rows: List[Dict[str, Any]] = Field(default_factory=list)
+    dependent_variable: str = "nightlight_radiance"
+    variables: List[Dict[str, Any]] = Field(default_factory=list)
+    timeout_sec: int = Field(240, ge=30, le=3600)
+    run_id: Optional[str] = None
+    arcgis_python_path: Optional[str] = None
+
+
+class ArcGISGwrSummary(BaseModel):
+    status: str = "ok"
+    r2: Optional[float] = None
+    adjusted_r2: Optional[float] = None
+    mean_abs_residual: Optional[float] = None
+    rmse: Optional[float] = None
+    top_variables: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+class ArcGISGwrCellOut(BaseModel):
+    cell_id: str
+    observed: Optional[float] = None
+    predicted: Optional[float] = None
+    residual: Optional[float] = None
+    local_r2: Optional[float] = None
+    coefficients: Dict[str, Optional[float]] = Field(default_factory=dict)
+    predictors: Dict[str, Optional[float]] = Field(default_factory=dict)
+
+
+class ArcGISGwrResponse(BaseModel):
+    ok: bool = True
+    status: str = "ok"
+    summary: ArcGISGwrSummary = Field(default_factory=ArcGISGwrSummary)
+    cells: List[ArcGISGwrCellOut] = Field(default_factory=list)
+    diagnostics: Dict[str, Any] = Field(default_factory=dict)
+    error: Optional[str] = None
+    trace_id: str

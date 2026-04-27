@@ -1,0 +1,1581 @@
+﻿
+
+        <!-- Left Sidebar: Wizard Dashboard -->
+        <aside class="sidebar"
+            :class="{ 'is-step3-collapsed': sidebarView === 'wizard' && Number(step) === 2 && isStep3SidebarCollapsed }">
+            <div class="sidebar-header">
+                <div v-if="sidebarView === 'wizard'" class="step-header-nav" style="margin:0; width:100%;">
+                    <button v-if="step === 1" class="btn-text-back" @click="backToHome">← 返回主页</button>
+                </div>
+
+                <div v-if="sidebarView === 'history'" class="step-header-nav history-header-nav">
+                    <div class="history-header-slot left">
+                        <button class="btn-text-back"
+                            @click="backFromHistory()" style="margin:0;">
+                            {{ getHistoryBackButtonLabel() }}
+                        </button>
+                    </div>
+                    <h3 class="history-header-title">历史记录</h3>
+                    <div class="history-header-slot right" style="display:flex; align-items:center; justify-content:flex-end; gap:8px;">
+                        <button v-if="!isSelectionMode" class="btn-text-back history-icon-btn"
+                            :class="{ 'is-loading': historyLoading }"
+                            @click="refreshHistoryList" :disabled="historyLoading" style="margin:0;"
+                            title="刷新历史记录" aria-label="刷新历史记录">
+                            <svg viewBox="0 0 24 24" aria-hidden="true">
+                                <path d="M20 5v5h-5"></path>
+                                <path d="M4 19v-5h5"></path>
+                                <path d="M6.2 8.2A8 8 0 0 1 18 10"></path>
+                                <path d="M17.8 15.8A8 8 0 0 1 6 14"></path>
+                            </svg>
+                        </button>
+                        <button class="btn-text-back" @click="toggleSelectionMode(!isSelectionMode)" style="margin:0;">
+                            {{ isSelectionMode ? '完成' : '管理' }}
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="sidebar-content">
+                <!-- Start Screen -->
+                <div v-show="sidebarView === 'start'" class="home-menu">
+                    <div class="home-card" @click="confirmNavigation(() => resetAnalysis())">
+                        <div class="home-icon">
+                            <img src="/static/images/search.svg" alt="探索">
+                        </div>
+                        <div class="home-text">
+                            <h3>实时探索</h3>
+                            <p>Real-time Explore</p>
+                            <p style="margin-top:4px; color:#999;">基于高德实时数据分析</p>
+                        </div>
+                    </div>
+
+                    <div class="home-card"
+                        @click="confirmNavigation(() => openHistoryView())">
+                        <div class="home-icon">
+                            <img src="/static/images/history.svg" alt="档案">
+                        </div>
+                        <div class="home-text">
+                            <h3>本地档案</h3>
+                            <p>Local Archives</p>
+                            <p style="margin-top:4px; color:#999;">查看往期分析记录</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- History View -->
+                <div v-show="sidebarView === 'history'" class="history-list" style="padding-bottom: 80px;">
+                    <div v-if="historyLoading && historyList.length === 0">
+                        <div v-for="n in historySkeletonCount" :key="'history-skeleton-' + n" class="history-card history-skeleton-card">
+                            <div style="flex:1;">
+                                <div class="skeleton-line skeleton-line-title"></div>
+                                <div class="skeleton-line skeleton-line-meta"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div v-for="item in historyList" :key="item.id" class="history-card"
+                        @click="handleHistoryItemClick(item)"
+                        :class="{'selection-mode': isSelectionMode, 'selected': selectedHistoryIds.includes(item.id)}">
+
+                        <!-- Checkbox for Selection Mode -->
+                        <div v-if="isSelectionMode" class="checkbox-wrapper">
+                            <div class="custom-checkbox" :class="{checked: selectedHistoryIds.includes(item.id)}">
+                                <svg v-if="selectedHistoryIds.includes(item.id)" viewBox="0 0 24 24" fill="none"
+                                    stroke="currentColor" stroke-width="3">
+                                    <polyline points="20 6 9 17 4 12"></polyline>
+                                </svg>
+                            </div>
+                        </div>
+
+                        <div style="flex:1;">
+                            <div class="card-header">
+                                <span class="card-title">{{ formatHistoryTitle(item.description) }}</span>
+                            </div>
+                            <div class="card-meta">
+                                <div class="meta-row">
+                                    <span class="meta-tag mode-tag">
+                                        <span v-if="item.params && item.params.mode === 'driving'">
+                                            <img src="/static/images/driving.svg"> 驾车
+                                        </span>
+                                        <span v-else-if="item.params && item.params.mode === 'bicycling'">
+                                            <img src="/static/images/cycling.svg"> 骑行
+                                        </span>
+                                        <span v-else>
+                                            <img src="/static/images/walking.svg"> 步行
+                                        </span>
+                                    </span>
+                                    <span v-if="item.params && item.params.time_min" class="meta-tag time-tag">
+                                        <img src="/static/images/time.svg"> {{ item.params.time_min }}分
+                                    </span>
+                                    <span class="meta-tag source-tag">
+                                        数据源 {{ item._sourceLabel || '未标记' }}
+                                    </span>
+                                    <span v-if="Number(item.ai_session_count || 0) > 0" class="meta-tag source-tag">
+                                        AI记录 {{ Number(item.ai_session_count || 0) }}
+                                    </span>
+                                </div>
+                                <span class="meta-date">
+                                    {{ item._createdDateText || item.created_at }}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Batch Delete Footer -->
+                    <div v-if="isSelectionMode"
+                        style="position:fixed; bottom:0; left:0; width:var(--sidebar-width); background:#fff; padding:15px; border-top:1px solid #eee; box-shadow:0 -2px 10px rgba(0,0,0,0.05); z-index:100; box-sizing:border-box; display:flex; gap:10px;">
+                        <button class="btn-black" :disabled="selectedHistoryIds.length === 0"
+                            @click="deleteSelectedHistory" style="background: #ff4d4f; border:none; width:100%;">
+                            删除选中 ({{ selectedHistoryIds.length }})
+                        </button>
+                    </div>
+
+                    <div v-if="!historyLoading && historyList.length === 0"
+                        style="text-align:center; padding:40px 20px; color:#999; display:flex; flex-direction:column; align-items:center;">
+                        <img src="/static/images/empty.svg"
+                            style="width:48px; height:48px; opacity:0.3; margin-bottom:10px;">
+                        <span>暂无历史记录</span>
+                    </div>
+                </div>
+
+                <!-- Wizard View Wrapper -->
+                <div v-show="sidebarView === 'wizard'" style="display:contents;">
+
+                    <!-- Step 1: Location & Analysis -->
+                    <div v-show="step === 1" class="wizard-step">
+                        <div class="step-title">
+                            <h3>1. 地点与范围</h3>
+                        </div>
+
+                        <div class="form-group">
+                            <label>范围模式</label>
+                            <div class="mode-select">
+                                <div class="mode-select">
+                                    <div class="mode-option" :class="{active: isochroneScopeMode==='point'}"
+                                        @click="setIsochroneScopeMode('point')">点等时圈</div>
+                                    <div class="mode-option" :class="{active: isochroneScopeMode==='area'}"
+                                        @click="setIsochroneScopeMode('area')">面等时圈</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div v-if="isochroneScopeMode === 'point'" class="form-group search-group">
+                            <input type="text" id="keyword" class="minimal-input" placeholder="搜索地点..."
+                                @keyup.enter="triggerSearch">
+                            <button class="btn-icon" @click="triggerSearch">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                    stroke-width="2">
+                                    <circle cx="11" cy="11" r="8"></circle>
+                                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                                </svg>
+                            </button>
+                        </div>
+
+                        <div class="form-group">
+                            <div v-if="isochroneScopeMode === 'area' && hasDrawnScopePolygon()" class="status-badge success">
+                                已绘制区域: {{ getDrawnScopePointCount() }} 个顶点
+                            </div>
+                            <div v-else-if="isochroneScopeMode === 'point' && selectedPoint" class="status-badge success">
+                                已选: {{ selectedPoint.lng.toFixed(4) }}, {{ selectedPoint.lat.toFixed(4) }}
+                            </div>
+                            <div v-else-if="isochroneScopeMode === 'point'" class="status-badge warning">请在地图上点击/搜索选择起点</div>
+                            <div v-else class="status-badge warning">请先绘制分析区域</div>
+                        </div>
+
+                        <div class="form-group">
+                            <label>出行方式</label>
+                            <div class="mode-select">
+                                <div class="mode-select">
+                                    <div class="mode-option" :class="{active: transportMode==='walking'}"
+                                        @click="transportMode='walking'">步行 <img src="/static/images/walking.svg"></div>
+                                    <div class="mode-option" :class="{active: transportMode==='bicycling'}"
+                                        @click="transportMode='bicycling'">骑行 <img src="/static/images/cycling.svg">
+                                    </div>
+                                    <div class="mode-option" :class="{active: transportMode==='driving'}"
+                                        @click="transportMode='driving'">驾车 <img src="/static/images/driving.svg"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label>时间范围: {{ timeHorizon }} 分钟</label>
+                            <input type="range" v-model.number="timeHorizon" class="minimal-range" min="5" max="60"
+                                step="5">
+                        </div>
+                        <div class="form-group" style="display:flex; align-items:center; gap:8px;">
+                            <label style="margin:0;">底图源</label>
+                            <select v-model="basemapSource" @change="onBasemapSourceChange"
+                                class="minimal-input" style="padding:4px 8px; max-width:180px;">
+                                <option value="tianditu">天地图（国内科研）</option>
+                                <option value="osm">OpenStreetMap（科研）</option>
+                                <option value="amap">高德（业务）</option>
+                            </select>
+                        </div>
+
+                        <button v-if="isochroneScopeMode === 'area'" class="btn-outline" style="margin-top:8px;" :disabled="isCalculating"
+                            @click="toggleScopeDrawing">
+                            {{ drawScopeActive ? '结束绘制' : '绘制区域（多边形）' }}
+                        </button>
+                        <button v-if="isochroneScopeMode === 'area'" class="btn-outline" style="margin-top:8px;"
+                            :disabled="isCalculating || !hasDrawnScopePolygon()" @click="clearDrawnScopePolygon">
+                            清除绘制区域
+                        </button>
+                        <button v-if="isochroneScopeMode === 'point'" class="btn-black"
+                            :disabled="!selectedPoint || isCalculating || drawScopeActive"
+                            @click="startAnalysis">
+                            {{ isCalculating ? '处理中...' : '下一步: 生成等时圈' }}
+                        </button>
+                        <button v-if="isochroneScopeMode === 'point'" class="btn-outline" style="margin-top:8px;"
+                            :disabled="!selectedPoint || isCalculating || drawScopeActive"
+                            @click="startCircleAnalysis">
+                            {{ isCalculating ? '处理中...' : '下一步: 生成圆形圈' }}
+                        </button>
+                        <button v-if="isochroneScopeMode === 'area'" class="btn-black"
+                            :disabled="!hasDrawnScopePolygon() || isCalculating || drawScopeActive"
+                            @click="startAnalysis">
+                            {{ isCalculating ? '处理中...' : '下一步: 基于绘制范围生成等时圈' }}
+                        </button>
+                        <div v-if="errorMessage" class="error-msg">{{ errorMessage }}</div>
+                        <div v-if="basemapSource === 'tianditu' && tdtDiag && tdtDiag.ok === false"
+                            style="margin-top:10px; padding:10px; border:1px solid #f1b0b7; border-radius:8px; background:#fff7f7;">
+                            <div style="font-size:12px; font-weight:600; color:#9f1239; margin-bottom:6px;">天地图诊断信息</div>
+                            <div style="font-size:11px; color:#6b7280; line-height:1.5; margin-bottom:6px;">
+                                阶段={{ tdtDiag.phase || '-' }}；状态={{ tdtDiag.status === null || tdtDiag.status === undefined ? '-' : tdtDiag.status }}；内容类型={{ tdtDiag.contentType || '-' }}
+                            </div>
+                            <pre
+                                style="margin:0; max-height:120px; overflow:auto; white-space:pre-wrap; word-break:break-all; font-size:11px; line-height:1.45; color:#4b5563; background:#fff; border:1px solid #e5e7eb; border-radius:6px; padding:8px;">{{ buildTdtDiagText() }}</pre>
+                            <div style="display:flex; align-items:center; gap:8px; margin-top:8px;">
+                                <button type="button" class="btn-outline" style="margin-top:0; padding:6px 12px; width:auto;"
+                                    @click="copyTdtDiag">
+                                    复制诊断
+                                </button>
+                                <span style="font-size:11px; color:#6b7280;">{{ tdtDiagCopyStatus }}</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Step 2: Results & Filter -->
+                    <div v-show="step === 2" class="wizard-step wizard-step-step3">
+                        <div v-show="!isStep3SidebarCollapsed" class="step-header-nav step3-header-nav">
+                            <div class="step3-header-main">
+                                <h3>2. 结果分析</h3>
+                            </div>
+                            <button
+                                type="button"
+                                class="btn-text-back step3-sidebar-toggle"
+                                title="收起侧边栏"
+                                aria-label="收起侧边栏"
+                                @click="toggleStep3SidebarCollapsed(true)">
+                                <svg class="step3-sidebar-toggle-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                    <rect x="3.5" y="4" width="17" height="16" rx="3"></rect>
+                                    <line x1="9" y1="4" x2="9" y2="20"></line>
+                                    <polyline points="11.5,12 14,9.5 14,14.5 11.5,12"></polyline>
+                                </svg>
+                            </button>
+                        </div>
+
+                        <div class="step3-layout" :class="{ 'is-collapsed': isStep3SidebarCollapsed }">
+                            <div v-if="isStep3SidebarCollapsed" class="step3-collapsed-top">
+                                <button
+                                    type="button"
+                                    class="btn-text-back step3-sidebar-expand-toggle"
+                                    title="展开侧边栏"
+                                    aria-label="展开侧边栏"
+                                    @click="toggleStep3SidebarCollapsed(false)">
+                                    <svg class="step3-sidebar-toggle-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                        <rect x="3.5" y="4" width="17" height="16" rx="3"></rect>
+                                        <line x1="9" y1="4" x2="9" y2="20"></line>
+                                        <polyline points="14.5,12 12,9.5 12,14.5 14.5,12"></polyline>
+                                    </svg>
+                                </button>
+                            </div>
+                            <div class="nav-rail">
+                                <div v-for="(item, index) in step3NavItems" :key="item.id" class="nav-item" :class="{
+                                        active: activeStep3Panel === item.id,
+                                        dragging: dragIndex === index,
+                                        'insert-before': isDraggingNav && dragOverIndex === index && dragInsertPosition === 'before',
+                                        'insert-after': isDraggingNav && dragOverIndex === index && dragInsertPosition === 'after'
+                                    }" :title="item.title" draggable="true" @click="selectStep3Panel(item.id)"
+                                    @dragstart="onStep3DragStart(index, $event)"
+                                    @dragover="onStep3DragOver(index, $event)" @drop="onStep3Drop(index)"
+                                    @dragend="onStep3DragEnd">
+                                    <span>{{ item.label }}</span>
+                                    <span
+                                        v-if="item.id === 'agent' && getRunningAgentSessionCount() > 0"
+                                        class="agent-nav-running-badge">
+                                        {{ getAgentRunningBadgeText() }}
+                                    </span>
+                                </div>
+                            </div>
+
+                                <div v-show="!isStep3SidebarCollapsed" class="panel-area panel-area-fill">
+                                    <div class="panel agent-panel agent-sidebar-panel" v-show="activeStep3Panel === 'agent'" @click="closeAgentSessionMenu">
+                                        <button type="button" class="agent-sidebar-new-btn" @click="startNewAgentChat">
+                                            <svg class="agent-sidebar-new-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                                <path d="M12 20h9"/>
+                                                <path d="M16.5 3.5a2.12 2.12 0 1 1 3 3L7 19l-4 1 1-4z"/>
+                                                <path d="M15 5l3 3"/>
+                                            </svg>
+                                            <span class="agent-sidebar-new-title">新聊天</span>
+                                        </button>
+                                        <button
+                                            type="button"
+                                            class="agent-sidebar-new-btn agent-sidebar-tool-btn"
+                                            :class="{ active: agentWorkspaceView === 'tools' }"
+                                            @click="openAgentToolsPanel">
+                                            <svg class="agent-sidebar-new-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                                <path d="M4 7h16"/>
+                                                <path d="M4 12h16"/>
+                                                <path d="M4 17h16"/>
+                                            </svg>
+                                            <span class="agent-sidebar-new-title">工具</span>
+                                            <span v-if="agentToolsLoading" class="agent-sidebar-tool-loading">加载中</span>
+                                        </button>
+
+                                    <div class="agent-sidebar-section">
+                                        <div class="agent-sidebar-section-label">历史</div>
+                                        <div class="agent-sidebar-history" @click="closeAgentSessionMenu" @scroll.passive="closeAgentSessionMenu">
+                                            <template v-if="getAgentHistorySessions().length">
+                                                <div
+                                                    v-for="group in getAgentRangeSessionGroups()"
+                                                    :key="`agent-history-group-${group.id}`"
+                                                    class="agent-sidebar-history-group">
+                                                    <div class="agent-sidebar-history-folder agent-sidebar-history-folder--primary">
+                                                        <span class="agent-sidebar-history-folder-icon agent-sidebar-history-folder-icon--primary"></span>
+                                                        <span class="agent-sidebar-history-folder-title agent-sidebar-history-folder-title--primary">{{ group.title }}</span>
+                                                        <span class="agent-sidebar-history-folder-count agent-sidebar-history-folder-count--primary">{{ group.count }}</span>
+                                                    </div>
+                                                    <div v-if="group.panels && group.panels.length" class="agent-sidebar-history-group-list">
+                                                        <div
+                                                            v-for="panel in group.panels"
+                                                            :key="`agent-history-panel-${group.id}-${panel.id}`"
+                                                            class="agent-sidebar-history-subgroup">
+                                                            <div class="agent-sidebar-history-folder agent-sidebar-history-folder--secondary">
+                                                                <span class="agent-sidebar-history-folder-icon agent-sidebar-history-folder-icon--secondary"></span>
+                                                                <span class="agent-sidebar-history-folder-title agent-sidebar-history-folder-title--secondary">{{ panel.title }}</span>
+                                                                <span class="agent-sidebar-history-folder-count agent-sidebar-history-folder-count--secondary">{{ panel.count }}</span>
+                                                            </div>
+                                                            <div v-if="panel.sessions && panel.sessions.length" class="agent-sidebar-history-group-list">
+                                                                <div
+                                                                    v-for="session in panel.sessions"
+                                                                    :key="session.id"
+                                                                    class="agent-sidebar-history-item"
+                                                                    :class="{
+                                                                        active: activeAgentSessionId === session.id || isAgentHistorySessionTabActive(session.id),
+                                                                        'is-loading': agentSessionDetailLoadingId === session.id,
+                                                                        'menu-open': agentSessionMenuId === session.id
+                                                                    }"
+                                                                    @click.stop>
+                                                                    <button
+                                                                        type="button"
+                                                                        class="agent-sidebar-history-main"
+                                                                        @click="openAgentHistorySessionTab(session.id)">
+                                                                        <div class="agent-sidebar-history-head">
+                                                                            <div class="agent-sidebar-history-title">{{ getAgentSessionTitle(session) }}</div>
+                                                                            <span v-if="isAgentSessionRunning(session.id)" class="agent-sidebar-history-running">执行中</span>
+                                                                            <span v-if="session.isPinned" class="agent-sidebar-history-pin">置顶</span>
+                                                                        </div>
+                                                                        <div class="agent-sidebar-history-preview">{{ getAgentSessionPreview(session) }}</div>
+                                                                    </button>
+                                                                    <div class="agent-sidebar-history-actions">
+                                                                        <button
+                                                                            type="button"
+                                                                            class="agent-sidebar-history-menu-btn"
+                                                                            :title="agentSessionMenuId === session.id ? '关闭操作菜单' : '打开操作菜单'"
+                                                                            @click="toggleAgentSessionMenu(session.id, $event)">
+                                                                            <span></span>
+                                                                            <span></span>
+                                                                            <span></span>
+                                                                        </button>
+                                                                        <div
+                                                                            v-if="agentSessionMenuId === session.id"
+                                                                            class="agent-sidebar-history-menu"
+                                                                            @click.stop>
+                                                                            <button type="button" @click="openAgentRenameDialog(session.id, $event)">重命名</button>
+                                                                            <button type="button" @click="toggleAgentSessionPinned(session.id, $event)">
+                                                                                {{ session.isPinned ? '取消置顶' : '置顶' }}
+                                                                            </button>
+                                                                            <button type="button" class="is-danger" @click="deleteAgentSession(session.id, $event)">删除</button>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                            <div v-else class="agent-sidebar-history-empty">
+                                                                {{ panel.emptyText }}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <div v-else class="agent-sidebar-history-empty">
+                                                        {{ group.emptyText }}
+                                                    </div>
+                                                </div>
+                                            </template>
+                                            <div v-else class="agent-sidebar-history-empty">
+                                                暂无历史对话
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div v-if="agentRenameDialogOpen" class="agent-rename-dialog-mask" @click="closeAgentRenameDialog">
+                                        <div class="agent-rename-dialog" @click.stop>
+                                            <div class="agent-rename-dialog-title">重命名对话</div>
+                                            <input
+                                                v-model="agentRenameInput"
+                                                type="text"
+                                                class="agent-rename-dialog-input"
+                                                maxlength="60"
+                                                placeholder="请输入对话名称"
+                                                @keydown.enter.prevent="submitAgentRename">
+                                            <div class="agent-rename-dialog-actions">
+                                                <button type="button" class="agent-rename-btn agent-rename-btn-secondary" @click="closeAgentRenameDialog">取消</button>
+                                                <button type="button" class="agent-rename-btn agent-rename-btn-primary" @click="submitAgentRename">确定</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="panel poi-panel" v-show="activeStep3Panel === 'poi'">
+                                    <div class="poi-panel-topbar">
+                                        <div class="h3-subtabs h3-stage-tabs poi-stage-tabs">
+                                            <button type="button" class="h3-subtab-pill h3-stage-pill"
+                                                :class="{ active: poiSubTab === 'load' }"
+                                                @click="setPoiSubTab('load')">抓取</button>
+                                            <button type="button" class="h3-subtab-pill h3-stage-pill"
+                                                :class="{ active: poiSubTab === 'category' }"
+                                                @click="setPoiSubTab('category')">分类</button>
+                                            <button type="button" class="h3-subtab-pill h3-stage-pill"
+                                                :class="{ active: poiSubTab === 'analysis' }"
+                                                @click="setPoiSubTab('analysis')">分析</button>
+                                            <button type="button" class="h3-subtab-pill h3-stage-pill"
+                                                :class="{ active: poiSubTab === 'grid' }"
+                                                @click="setPoiSubTab('grid')">网格</button>
+                                        </div>
+                                        <div class="poi-panel-header" v-show="poiSubTab !== 'grid'">
+                                            <div class="poi-panel-actions">
+                                                <span id="poiTotalCount" class="count-badge">总数 0</span>
+                                                <button v-show="poiSubTab === 'category'" id="toggleAllPoi" type="button"
+                                                    class="btn-outline btn-compact">全部隐藏</button>
+                                                <button v-show="poiSubTab === 'category'" id="toggleExpandAll" class="btn-outline btn-compact">全部展开</button>
+                                            </div>
+                                        </div>
+                                        <div v-if="poiSubTab !== 'grid' && shouldShowPoiPanelStatus()" class="poi-panel-status" :class="{ 'is-loading': isHistoryPoiRestoring() }">
+                                            <span v-if="isHistoryPoiRestoring()" class="poi-panel-status-dot"></span>
+                                            <span>{{ getPoiPanelStatusText() }}</span>
+                                        </div>
+                                    </div>
+                                    <div v-show="poiSubTab === 'load'" class="poi-subpanel">
+                                        <div class="category-grid">
+                                            <div v-for="cat in poiCategories" :key="cat.id" class="cat-card" :class="{checked: cat.checked}">
+                                                <div class="cat-color" :style="{background: cat.color}"></div>
+                                                <div class="cat-texts">
+                                                    <div class="cat-header-row">
+                                                        <label class="cat-check" @click.stop>
+                                                            <input type="checkbox" :checked="cat.checked"
+                                                                @change="togglePoiCategory(cat, $event.target.checked)">
+                                                            <span class="cat-name">{{ cat.name }}</span>
+                                                        </label>
+                                                        <button v-if="getPoiSubItems(cat.id).length" type="button" class="cat-expand-btn"
+                                                            @click.stop="togglePoiCategoryExpand(cat.id)">
+                                                            {{ expandedPoiCategoryId === cat.id ? '收起' : '展开' }}
+                                                        </button>
+                                                    </div>
+                                                    <div class="cat-subtypes" v-if="getPoiSubItems(cat.id).length">
+                                                        已选 {{ getPoiSubSelectedCount(cat.id) }}/{{ getPoiSubItems(cat.id).length }} 个小类
+                                                    </div>
+                                                    <div class="cat-subitem-list" v-show="expandedPoiCategoryId === cat.id"
+                                                        v-if="getPoiSubItems(cat.id).length">
+                                                        <label v-for="item in getPoiSubItems(cat.id)" :key="`step2-sub-${cat.id}-${item.id}`"
+                                                            class="cat-subitem" @click.stop>
+                                                            <input type="checkbox" :checked="isPoiSubItemChecked(item.id)"
+                                                                @change="onPoiSubItemToggle(cat, item, $event.target.checked)">
+                                                            <span>{{ item.label }}</span>
+                                                        </label>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div class="form-group" style="display:flex; align-items:center; gap:8px;">
+                                            <label style="margin:0;">POI年份</label>
+                                            <select v-model="poiYearSource" class="minimal-input"
+                                                style="padding:4px 8px; max-width:180px;">
+                                                <option value="2020">2020 本地</option>
+                                                <option value="2022">2022 本地</option>
+                                                <option value="2024">2024 本地</option>
+                                                <option value="2026">2026 高德</option>
+                                            </select>
+                                        </div>
+
+                                        <button class="btn-black" :disabled="isFetchingPois" @click="fetchPois">
+                                            {{ isFetchingPois ? '数据抓取中 ' + fetchProgress + '%' : '开始抓取 POI' }}
+                                        </button>
+
+                                        <div v-if="isFetchingPois"
+                                            style="margin-top:10px; background:#f0f0f0; height:6px; border-radius:3px; overflow:hidden;">
+                                            <div
+                                                :style="{width: fetchProgress + '%', background:'#000', height:'100%', transition:'width 0.3s ease'}">
+                                            </div>
+                                        </div>
+                                        <div v-if="isFetchingPois && fetchSubtypeProgress.categoryName" class="fetch-subtype-progress">
+                                            <div class="line">
+                                                <span class="label">当前大类：</span>
+                                                <span>{{ fetchSubtypeProgress.categoryName }}</span>
+                                            </div>
+                                            <div class="line">
+                                                <span class="label">已命中小类：</span>
+                                                <template v-if="fetchSubtypeProgress.typeNamesPreview.length">
+                                                    <span>{{ fetchSubtypeProgress.typeNamesPreview.join('、') }}</span>
+                                                    <span v-if="fetchSubtypeProgress.hiddenTypeCount > 0">
+                                                         等{{ fetchSubtypeProgress.typeNamesFullCount }}个小类
+                                                    </span>
+                                                </template>
+                                                <template v-else>
+                                                    <span>暂无</span>
+                                                </template>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div v-show="poiSubTab === 'category'" class="poi-subpanel">
+                                        <div id="filtersContainer" class="poi-filters-wrapper"></div>
+                                    </div>
+                                    <div v-show="poiSubTab === 'analysis'" class="poi-subpanel poi-kde-panel">
+                                        <div class="h3-subtabs poi-analysis-tabs">
+                                            <button type="button" class="h3-subtab-pill"
+                                                :class="{ active: poiAnalysisSubTab === 'kde' }"
+                                                @click="setPoiAnalysisSubTab('kde')">核密度</button>
+                                            <button type="button" class="h3-subtab-pill"
+                                                :class="{ active: poiAnalysisSubTab === 'stats' }"
+                                                @click="setPoiAnalysisSubTab('stats')">统计</button>
+                                        </div>
+                                        <div class="poi-kde-intro">
+                                            <div class="poi-kde-title">{{ poiAnalysisSubTab === 'stats' ? '热点统计视图' : '核密度热力图' }}</div>
+                                        </div>
+                                        <div v-show="poiAnalysisSubTab === 'kde'" class="poi-kde-controls">
+                                            <label class="poi-kde-range-field">
+                                                <span>核密度半径</span>
+                                                <input type="range" min="12" max="60" step="2"
+                                                    v-model.number="poiKdeRadius"
+                                                    @input="refreshPoiKdeOverlay">
+                                                <strong>{{ poiKdeRadius }}</strong>
+                                            </label>
+                                        </div>
+                                        <div v-show="poiAnalysisSubTab === 'kde'" class="poi-kde-gradient-card">
+                                            <div class="poi-kde-gradient-head">
+                                                <span>热力强度</span>
+                                                <span>低 → 高</span>
+                                            </div>
+                                            <div class="poi-kde-gradient-bar"></div>
+                                        </div>
+                                        <div v-show="poiAnalysisSubTab === 'stats'" class="poi-kde-stat-grid">
+                                            <div class="poi-kde-stat-card">
+                                                <span class="poi-kde-stat-label">可见 POI</span>
+                                                <strong>{{ poiKdeStats.visiblePointCount }}</strong>
+                                            </div>
+                                            <div class="poi-kde-stat-card">
+                                                <span class="poi-kde-stat-label">热力上限</span>
+                                                <strong>{{ poiKdeStats.maxIntensity }}</strong>
+                                            </div>
+                                            <div class="poi-kde-stat-card">
+                                                <span class="poi-kde-stat-label">热点类别</span>
+                                                <strong>{{ poiKdeStats.topCategoryRows.length }}</strong>
+                                            </div>
+                                        </div>
+                                        <div v-show="poiAnalysisSubTab === 'stats'" class="poi-kde-chart-card">
+                                            <div class="poi-kde-chart-head">
+                                                <span>热点类别柱状图</span>
+                                                <span>全部类别</span>
+                                            </div>
+                                            <div v-if="poiKdeStats.chartRows.length" class="poi-kde-bar-chart-scroll">
+                                                <div class="poi-kde-bar-chart"
+                                                    :style="{
+                                                        gridTemplateColumns: `repeat(${Math.max(1, poiKdeStats.chartRows.length)}, minmax(34px, 1fr))`,
+                                                        minWidth: `${Math.max(360, poiKdeStats.chartRows.length * 48)}px`
+                                                    }">
+                                                <div v-for="row in poiKdeStats.chartRows" :key="`poi-kde-chart-${row.id}`" class="poi-kde-bar-col">
+                                                    <div class="poi-kde-bar-wrap">
+                                                        <div class="poi-kde-bar" :style="{ height: `${row.height}%`, background: row.color }"></div>
+                                                    </div>
+                                                    <strong class="poi-kde-bar-value">{{ row.value }}</strong>
+                                                    <div class="poi-kde-bar-label">{{ row.shortLabel }}</div>
+                                                </div>
+                                                </div>
+                                            </div>
+                                            <div v-else class="panel-placeholder">当前没有可用于统计的 POI。</div>
+                                        </div>
+                                    </div>
+                                <div class="poi-subpanel poi-grid-subpanel" v-show="poiSubTab === 'grid'">
+                                    <div class="h3-subtabs h3-stage-tabs">
+                                        <button type="button" class="h3-subtab-pill h3-stage-pill"
+                                            :class="{ active: h3MainStage === 'params' }"
+                                            @click="onH3MainStageChange('params')">参数</button>
+                                        <button type="button" class="h3-subtab-pill h3-stage-pill"
+                                            :class="{ active: h3MainStage === 'analysis' }"
+                                            @click="onH3MainStageChange('analysis')">分析</button>
+                                        <button type="button" class="h3-subtab-pill h3-stage-pill"
+                                            :class="{ active: h3MainStage === 'diagnosis' }"
+                                            @click="onH3MainStageChange('diagnosis')">诊断</button>
+                                        <button type="button" class="h3-subtab-pill h3-stage-pill"
+                                            :class="{ active: h3MainStage === 'evaluate' }"
+                                            @click="onH3MainStageChange('evaluate')">评估</button>
+                                    </div>
+                                    <div v-if="h3MainStage === 'params'" class="h3-params-card">
+                                        <div class="h3-params-grid">
+                                            <label class="h3-params-field">
+                                                <span class="h3-params-label">网格级别</span>
+                                                <select v-model.number="h3GridResolution" @change="onH3ResolutionChange" class="h3-params-select">
+                                                    <option :value="8">8</option>
+                                                    <option :value="9">9</option>
+                                                    <option :value="10">10</option>
+                                                    <option :value="11">11</option>
+                                                </select>
+                                            </label>
+                                            <label class="h3-params-field">
+                                                <span class="h3-params-label">邻域圈层</span>
+                                                <select v-model.number="h3NeighborRing" class="h3-params-select">
+                                                    <option :value="1">ring=1</option>
+                                                    <option :value="2">ring=2</option>
+                                                    <option :value="3">ring=3</option>
+                                                </select>
+                                            </label>
+                                            <label class="h3-params-field h3-params-field-wide">
+                                                <span class="h3-params-label">包含模式</span>
+                                                <select v-model="h3GridIncludeMode" @change="onH3GridSettingsChange" class="h3-params-select">
+                                                    <option value="intersects">相交优先（边缘保留）</option>
+                                                    <option value="inside">完全包含（严格）</option>
+                                                </select>
+                                            </label>
+                                            <div class="h3-params-field h3-params-field-wide">
+                                                <span class="h3-params-label">最小重叠比例</span>
+                                                <div class="h3-params-range-row">
+                                                    <input type="range" min="0" max="0.9" step="0.05"
+                                                        v-model.number="h3GridMinOverlapRatio" @change="onH3GridSettingsChange"
+                                                        class="minimal-range h3-params-range">
+                                                    <span class="range-value">{{ h3GridMinOverlapRatio.toFixed(2) }}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="h3-params-chips">
+                                            <span class="count-badge">网格数 {{ h3GridCount }}</span>
+                                        </div>
+                                        <div class="h3-params-actions">
+                                            <button class="h3-btn h3-btn-ghost"
+                                                :disabled="h3GridCount === 0" @click="clearH3Grid">
+                                                清空网络
+                                            </button>
+                                            <button class="h3-btn h3-btn-primary h3-params-compute-btn"
+                                                :disabled="isComputingH3Analysis || isGeneratingH3ArcgisSnapshot || !lastIsochroneGeoJSON"
+                                                @click="computeH3Analysis">
+                                                {{ isComputingH3Analysis ? '分析中...' : '计算分析' }}
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div class="h3-subtabs"
+                                        v-if="h3MainStage !== 'params' && h3AnalysisGridFeatures.length > 0 && getH3CurrentStageTabs().length > 1"
+                                        style="margin-top:6px; grid-template-columns: repeat(2, minmax(0, 1fr));">
+                                        <button type="button" class="h3-subtab-pill"
+                                            v-for="tab in getH3CurrentStageTabs()"
+                                            :key="`h3-subtab-${tab}`"
+                                            :class="{ active: h3SubTab === tab }"
+                                            @click="onH3SubTabChange(tab)">
+                                            {{ h3SubTabLabels[tab] || tab }}
+                                        </button>
+                                    </div>
+                                    <div class="filter-section"
+                                        v-if="h3AnalysisGridFeatures.length > 0 && h3MainStage === 'analysis' && h3SubTab === 'metric_map'"
+                                        style="margin-top:8px; display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+                                        <label style="display:flex; align-items:center; gap:6px; font-size:12px; color:#666;">
+                                            地图指标
+                                            <select v-model="h3MetricView" @change="onH3MetricViewChange"
+                                                style="padding:4px 6px; border:1px solid #ddd; border-radius:6px; font-size:12px;">
+                                                <option value="density">密度</option>
+                                                <option value="entropy">局部熵</option>
+                                                <option value="neighbor_delta">邻域差值（本格-邻域）</option>
+                                            </select>
+                                        </label>
+                                    </div>
+                                    <div class="filter-section"
+                                        v-if="h3AnalysisGridFeatures.length > 0 && h3MainStage === 'analysis' && h3SubTab === 'structure_map'"
+                                        style="margin-top:8px; display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+                                        <label style="display:flex; align-items:center; gap:6px; font-size:12px; color:#666;">
+                                            结构图层
+                                            <select v-model="h3StructureFillMode" @change="onH3StructureFillModeChange"
+                                                style="padding:4px 6px; border:1px solid #ddd; border-radius:6px; font-size:12px;">
+                                                <option value="gi_z">Gi*（Z-score 连续）</option>
+                                                <option value="lisa_i">LISA（LMiIndex 连续）</option>
+                                            </select>
+                                        </label>
+                                    </div>
+                                    <div class="filter-section h3-control-row h3-control-row-tight"
+                                        v-if="h3AnalysisGridFeatures.length > 0 && (h3MainStage === 'diagnosis' || h3MainStage === 'evaluate')"
+                                        style="margin-top:8px;">
+                                        <label style="display:flex; align-items:center; gap:6px; font-size:12px; color:#666;">
+                                            TopN
+                                            <input type="number" min="3" max="30" step="1"
+                                                v-model.number="h3DecisionTopN" @change="onH3DecisionSettingsChange"
+                                                style="width:68px; padding:4px 6px; border:1px solid #ddd; border-radius:6px; font-size:12px;">
+                                        </label>
+                                        <label v-if="h3SubTab === 'lq' || h3SubTab === 'gap'"
+                                            style="display:flex; align-items:center; gap:6px; font-size:12px; color:#666;">
+                                            目标业态
+                                            <select v-model="h3TargetCategory" @change="onH3DecisionSettingsChange"
+                                                style="padding:4px 6px; border:1px solid #ddd; border-radius:6px; font-size:12px;">
+                                                <option v-for="item in h3CategoryMeta" :key="`target-${item.key}`" :value="item.key">
+                                                    {{ item.label }}
+                                                </option>
+                                            </select>
+                                        </label>
+                                        <label class="h3-check-chip h3-check-chip-compact">
+                                            <input type="checkbox" v-model="h3OnlySignificant" @change="onH3DecisionSettingsChange">
+                                            仅结构网格
+                                        </label>
+                                    </div>
+                                    <div v-if="h3MainStage === 'analysis' && h3SubTab === 'metric_map' && h3AnalysisSummary"
+                                        style="margin-top:10px; display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+                                        <div class="count-badge">POI总数 {{ h3AnalysisSummary.poi_count }}</div>
+                                        <div class="count-badge">平均密度 {{ h3AnalysisSummary.avg_density_poi_per_km2.toFixed(2) }}</div>
+                                        <div class="count-badge">平均熵 {{ h3AnalysisSummary.avg_local_entropy.toFixed(3) }}</div>
+                                        <div class="count-badge">网格数 {{ h3AnalysisSummary.grid_count ?? h3GridCount }}</div>
+                                        <div class="count-badge">Gi*有效格 {{ (h3AnalysisSummary.gi_z_stats && h3AnalysisSummary.gi_z_stats.count) ?? 0 }}</div>
+                                        <div class="count-badge">LISA有效格 {{ (h3AnalysisSummary.lisa_i_stats && h3AnalysisSummary.lisa_i_stats.count) ?? 0 }}</div>
+                                    </div>
+                                    <div v-if="h3MainStage === 'analysis' && h3SubTab === 'metric_map' && h3AnalysisSummary" class="h3-analysis-hint">
+                                        看密度、混合度和邻域差值，优先找“高密且邻域为正”的连续片区。
+                                    </div>
+                                    <div v-if="h3MainStage !== 'params' && h3Legend && h3Legend.items && h3Legend.items.length"
+                                        style="margin-top:10px; border:1px solid #eef1f4; border-radius:8px; padding:8px 10px; background:#fafbfc;">
+                                        <div style="font-size:12px; color:#374151; font-weight:600; margin-bottom:6px;">
+                                            {{ h3Legend.title }}
+                                            <span style="color:#6b7280; font-weight:400;">
+                                                {{ h3Legend.unit ? `（${h3Legend.unit}）` : '' }}
+                                            </span>
+                                        </div>
+                                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px 10px;">
+                                            <div v-for="(item, idx) in h3Legend.items" :key="`legend-${idx}`"
+                                                style="display:flex; align-items:center; gap:6px; font-size:11px; color:#4b5563;">
+                                                <span :style="{display:'inline-block', width:'12px', height:'12px', borderRadius:'2px', background:item.color, border:'1px solid #d1d5db'}"></span>
+                                                <span>{{ item.label }}</span>
+                                            </div>
+                                        </div>
+                                        <div v-if="h3Legend.noDataLabel"
+                                            style="margin-top:6px; font-size:11px; color:#6b7280; display:flex; align-items:center; gap:6px;">
+                                            <span :style="{display:'inline-block', width:'12px', height:'12px', borderRadius:'2px', background:h3Legend.noDataColor || '#d1d5db', border:'1px solid #d1d5db'}"></span>
+                                            <span>{{ h3Legend.noDataLabel }}</span>
+                                        </div>
+                                    </div>
+                                    <div v-if="h3MainStage === 'analysis' && h3SubTab === 'metric_map' && h3AnalysisSummary" style="margin-top:10px;">
+                                        <div id="h3CategoryChart" style="height:180px;"></div>
+                                        <div id="h3DensityChart" style="height:180px; margin-top:8px;"></div>
+                                    </div>
+                                    <div v-if="h3MainStage === 'analysis' && h3SubTab === 'structure_map' && h3DerivedStats.structureSummary" style="margin-top:10px;">
+                                        <div class="h3-analysis-hint">
+                                            结构图口径：仅使用 ArcGIS 连续字段。Gi* 使用 GiZScore；LISA 使用 LMiIndex；网格边框统一蓝色。
+                                        </div>
+                                        <div v-if="h3AnalysisSummary"
+                                            style="margin-top:10px; display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+                                            <div class="count-badge">莫兰指数 {{ h3AnalysisSummary.global_moran_i_density ?? 'N/A' }}</div>
+                                            <div class="count-badge">莫兰z值 {{ h3AnalysisSummary.global_moran_z_score ?? 'N/A' }}</div>
+                                            <div v-if="h3StructureFillMode === 'gi_z'" class="count-badge">
+                                                Gi*有效格 {{ (h3AnalysisSummary.gi_z_stats && h3AnalysisSummary.gi_z_stats.count) ?? 0 }}
+                                            </div>
+                                            <div v-else class="count-badge">
+                                                LISA有效格 {{ (h3AnalysisSummary.lisa_i_stats && h3AnalysisSummary.lisa_i_stats.count) ?? 0 }}
+                                            </div>
+                                            <div class="count-badge">引擎 {{ (h3AnalysisSummary.analysis_engine || 'pysal').toUpperCase() }}</div>
+                                        </div>
+                                        <div v-if="h3DerivedStats.structureSummary.lisaRenderMeta && h3DerivedStats.structureSummary.lisaRenderMeta.degraded"
+                                            class="h3-analysis-hint" style="margin-top:8px;">
+                                            {{ h3DerivedStats.structureSummary.lisaRenderMeta.message || 'LMiIndex方差不足' }}
+                                        </div>
+                                        <div v-if="h3AnalysisSummary && h3AnalysisSummary.arcgis_status"
+                                            class="h3-analysis-hint" style="margin-top:8px;">
+                                            {{ h3AnalysisSummary.arcgis_status }}
+                                        </div>
+                                        <div v-if="h3AnalysisSummary" style="margin-top:8px; display:flex; justify-content:flex-end;">
+                                            <button
+                                                type="button"
+                                                class="btn-outline btn-compact"
+                                                :disabled="isComputingH3Analysis || isGeneratingH3ArcgisSnapshot"
+                                                @click="generateH3ArcgisSnapshot">
+                                                {{ isGeneratingH3ArcgisSnapshot ? '生成快照中...' : '生成结构快照' }}
+                                            </button>
+                                        </div>
+                                        <div v-if="h3AnalysisSummary && !getArcgisSnapshotUrl()"
+                                            class="h3-analysis-hint" style="margin-top:8px;">
+                                            当前未生成结构快照，可点击“生成结构快照”按需生成。
+                                        </div>
+                                        <div v-if="h3AnalysisSummary && getArcgisSnapshotUrl()"
+                                            style="margin-top:10px; border:1px solid #eef1f4; border-radius:10px; padding:8px; background:#fafbfc;">
+                                            <div style="font-size:12px; color:#374151; font-weight:600; margin-bottom:6px;">
+                                                {{ getArcgisSnapshotTitle() }}
+                                            </div>
+                                            <img :src="getArcgisSnapshotSrc()"
+                                                @load="h3ArcgisSnapshotLoadError = false"
+                                                @error="h3ArcgisSnapshotLoadError = true"
+                                                alt="ArcGIS结构图"
+                                                style="width:100%; border-radius:8px; border:1px solid #dbe2ea;" />
+                                            <div v-if="h3ArcgisSnapshotLoadError" class="h3-analysis-hint" style="margin-top:8px;">
+                                                ArcGIS结构快照加载失败，请重算一次或切换结构图层后重试。
+                                            </div>
+                                        </div>
+                                        <div class="h3-decision-cards">
+                                            <div class="h3-decision-card">
+                                                <div class="label">Gi* 均值</div>
+                                                <div class="value">{{ h3DerivedStats.structureSummary.giZStats.mean === null ? '-' : h3DerivedStats.structureSummary.giZStats.mean.toFixed(2) }}</div>
+                                            </div>
+                                            <div class="h3-decision-card">
+                                                <div class="label">Gi* 中位数</div>
+                                                <div class="value">{{ h3DerivedStats.structureSummary.giZStats.p50 === null ? '-' : h3DerivedStats.structureSummary.giZStats.p50.toFixed(2) }}</div>
+                                            </div>
+                                            <div class="h3-decision-card">
+                                                <div class="label">LISA 正值占比</div>
+                                                <div class="value">{{ h3DerivedStats.structureSummary.lisaPositivePct === null ? '-' : `${(h3DerivedStats.structureSummary.lisaPositivePct * 100).toFixed(1)}%` }}</div>
+                                            </div>
+                                            <div class="h3-decision-card">
+                                                <div class="label">LISA 负值占比</div>
+                                                <div class="value">{{ h3DerivedStats.structureSummary.lisaNegativePct === null ? '-' : `${(h3DerivedStats.structureSummary.lisaNegativePct * 100).toFixed(1)}%` }}</div>
+                                            </div>
+                                        </div>
+                                        <div id="h3StructureChart" style="height:180px;"></div>
+                                        <table class="h3-mini-table" style="margin-top:8px;">
+                                            <thead>
+                                                <tr>
+                                                    <th>H3</th><th>Gi*z</th><th>LISA I</th><th>结构信号</th><th>密度</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <tr v-for="row in h3DerivedStats.structureSummary.rows.slice(0, h3DecisionTopN)"
+                                                    :key="`structure-${row.h3_id}`"
+                                                    :class="{ 'h3-row-active': row.h3_id === selectedH3Id }">
+                                                    <td>
+                                                        <button type="button" class="h3-id-btn" :title="row.h3_id"
+                                                            @click="focusGridByH3Id(row.h3_id)">
+                                                            {{ shortH3Id(row.h3_id) }}
+                                                        </button>
+                                                    </td>
+                                                    <td>{{ row.gi_star_z_score === null ? '-' : row.gi_star_z_score.toFixed(2) }}</td>
+                                                    <td>{{ row.lisa_i === null ? '-' : row.lisa_i.toFixed(2) }}</td>
+                                                    <td>{{ Number.isFinite(row.structure_signal) ? row.structure_signal.toFixed(2) : '-' }}</td>
+                                                    <td>{{ row.density === null ? '-' : row.density.toFixed(2) }}</td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    <div v-if="h3MainStage === 'diagnosis' && h3SubTab === 'typing' && h3DerivedStats.typingSummary" style="margin-top:10px;">
+                                        <div class="h3-analysis-hint">
+                                            看四象限结构：高密高混合偏成熟，高密低混合偏单核，低密高混合偏潜力，低密低混合偏薄弱；同时参考可信度。
+                                        </div>
+                                        <div class="h3-decision-cards">
+                                            <div class="h3-decision-card">
+                                                <div class="label">机会网格数</div>
+                                                <div class="value">{{ h3DerivedStats.typingSummary.opportunityCount }}</div>
+                                            </div>
+                                            <div class="h3-decision-card">
+                                                <div class="label">最高密度</div>
+                                                <div class="value">{{ h3DerivedStats.typingSummary.maxDensity.toFixed(2) }}</div>
+                                            </div>
+                                            <div class="h3-decision-card">
+                                                <div class="label">建议动作</div>
+                                                <div class="value small">{{ h3DerivedStats.typingSummary.recommendation }}</div>
+                                            </div>
+                                        </div>
+                                        <table class="h3-mini-table">
+                                            <thead>
+                                                <tr>
+                                                    <th>H3</th><th>POI</th><th>密度</th><th>熵</th><th>可信度</th><th>分型</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <tr v-for="row in h3DerivedStats.typingSummary.rows.slice(0, h3DecisionTopN)"
+                                                    :key="`typing-${row.h3_id}`"
+                                                    :class="{ 'h3-row-active': row.h3_id === selectedH3Id }">
+                                                    <td>
+                                                        <button type="button" class="h3-id-btn" :title="row.h3_id"
+                                                            @click="focusGridByH3Id(row.h3_id)">
+                                                            {{ shortH3Id(row.h3_id) }}
+                                                        </button>
+                                                    </td>
+                                                    <td>{{ row.poi_count }}</td>
+                                                    <td>{{ row.density.toFixed(2) }}</td>
+                                                    <td>{{ row.entropy_norm === null ? '-' : row.entropy_norm.toFixed(2) }}</td>
+                                                    <td>{{ (row.confidence && row.confidence.label) || '低' }}</td>
+                                                    <td>{{ row.type_label }}</td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    <div v-if="h3MainStage === 'diagnosis' && h3SubTab === 'lq' && h3DerivedStats.lqSummary" style="margin-top:10px;">
+                                        <div class="h3-analysis-hint">
+                                            看目标业态相对本分析区是否更强：大于1偏强，小于1偏弱；已做小样本平滑。
+                                        </div>
+                                        <div class="h3-decision-cards">
+                                            <div class="h3-decision-card">
+                                                <div class="label">优势网格数</div>
+                                                <div class="value">{{ h3DerivedStats.lqSummary.opportunityCount }}</div>
+                                            </div>
+                                            <div class="h3-decision-card">
+                                                <div class="label">最高优势值</div>
+                                                <div class="value">{{ h3DerivedStats.lqSummary.maxLq.toFixed(2) }}</div>
+                                            </div>
+                                            <div class="h3-decision-card">
+                                                <div class="label">建议业态</div>
+                                                <div class="value small">{{ h3DerivedStats.lqSummary.recommendation }}</div>
+                                            </div>
+                                        </div>
+                                        <div id="h3LqChart" style="height:180px;"></div>
+                                        <table class="h3-mini-table" style="margin-top:8px;">
+                                            <thead>
+                                                <tr>
+                                                    <th>H3</th><th>POI</th><th>密度</th><th>熵</th><th>可信度</th><th>结构参考</th><th>优势值</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <tr v-for="row in h3DerivedStats.lqSummary.rows.slice(0, h3DecisionTopN)"
+                                                    :key="`lq-${row.h3_id}`"
+                                                    :class="{ 'h3-row-active': row.h3_id === selectedH3Id }">
+                                                    <td>
+                                                        <button type="button" class="h3-id-btn" :title="row.h3_id"
+                                                            @click="focusGridByH3Id(row.h3_id)">
+                                                            {{ shortH3Id(row.h3_id) }}
+                                                        </button>
+                                                    </td>
+                                                    <td>{{ row.poi_count }}</td>
+                                                    <td>{{ row.density.toFixed(2) }}</td>
+                                                    <td>{{ row.entropy_norm === null ? '-' : row.entropy_norm.toFixed(2) }}</td>
+                                                    <td>{{ (row.confidence && row.confidence.label) || '低' }}</td>
+                                                    <td>{{ Number.isFinite(row.structure_signal) ? row.structure_signal.toFixed(2) : '-' }}</td>
+                                                    <td>{{ row.lq_target === null ? '-' : row.lq_target.toFixed(2) }}</td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    <div v-if="h3MainStage === 'evaluate' && h3SubTab === 'gap' && h3DerivedStats.gapSummary" style="margin-top:10px;">
+                                        <div class="h3-analysis-hint">
+                                            先看“需求分位”和“供给分位”，再看两者差值；需求高且供给低的网格优先补位。
+                                        </div>
+                                        <div v-if="h3DerivedStats.gapSummary.mappingWarning" class="panel-placeholder"
+                                            style="margin-top:8px; border-color:#fde68a; background:#fffbeb; color:#92400e;">
+                                            {{ h3DerivedStats.gapSummary.mappingWarning }}
+                                        </div>
+                                        <div class="h3-decision-cards">
+                                            <div class="h3-decision-card">
+                                                <div class="label">高缺口网格</div>
+                                                <div class="value">{{ h3DerivedStats.gapSummary.opportunityCount }}</div>
+                                            </div>
+                                            <div class="h3-decision-card">
+                                                <div class="label">最高缺口分</div>
+                                                <div class="value">{{ h3DerivedStats.gapSummary.maxGap.toFixed(2) }}</div>
+                                            </div>
+                                            <div class="h3-decision-card">
+                                                <div class="label">建议优先区</div>
+                                                <div class="value small">{{ h3DerivedStats.gapSummary.recommendation }}</div>
+                                            </div>
+                                        </div>
+                                        <div class="panel-placeholder" style="margin-top:8px;">
+                                            {{ h3DerivedStats.gapSummary.insight || '缺口分 = 需求百分位 - 目标业态供给百分位（越高越可能供给偏弱）' }}
+                                        </div>
+                                        <div id="h3GapChart" style="height:180px; margin-top:8px;"></div>
+                                        <table class="h3-mini-table" style="margin-top:8px;">
+                                            <thead>
+                                                <tr>
+                                                    <th>H3</th><th>需求分位</th><th>供给分位</th><th>缺口分</th><th>可信度</th><th>结论</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <tr v-for="row in h3DerivedStats.gapSummary.rows.slice(0, h3DecisionTopN)"
+                                                    :key="`gap-${row.h3_id}`"
+                                                    :class="{ 'h3-row-active': row.h3_id === selectedH3Id }">
+                                                    <td>
+                                                        <button type="button" class="h3-id-btn" :title="row.h3_id"
+                                                            @click="focusGridByH3Id(row.h3_id)">
+                                                            {{ shortH3Id(row.h3_id) }}
+                                                        </button>
+                                                    </td>
+                                                    <td>{{ Math.round((row.demand_pct || 0) * 100) }}</td>
+                                                    <td>{{ Math.round((row.supply_pct || 0) * 100) }}</td>
+                                                    <td>{{ row.gap_score === null ? '-' : row.gap_score.toFixed(2) }}</td>
+                                                    <td>{{ (row.confidence && row.confidence.label) || '低' }}</td>
+                                                    <td>{{ row.gap_zone_label || '-' }}</td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    <div v-if="h3GridStatus" class="status-text"
+                                        style="margin-top:10px; display:flex; align-items:center; gap:8px; justify-content:flex-start;">
+                                        <span>{{ h3GridStatus }}</span>
+                                        <button v-if="selectedH3Id" type="button"
+                                            style="border:1px solid #d9dee7; background:#fff; color:#4b5563; border-radius:999px; padding:2px 8px; font-size:11px; cursor:pointer;"
+                                            @click="clearGridLock">
+                                            取消锁定
+                                        </button>
+                                    </div>
+                                </div>
+                                </div>
+
+                                <div class="panel poi-panel" v-show="activeStep3Panel === 'population'">
+                                    <div class="poi-subpanel">
+                                        <div v-if="populationOverview" class="h3-subtabs population-view-tabs">
+                                            <button type="button" class="h3-subtab-pill"
+                                                :class="{ active: populationAnalysisView === 'density' }"
+                                                @click="setPopulationAnalysisView('density')">密度</button>
+                                            <button type="button" class="h3-subtab-pill"
+                                                :class="{ active: populationAnalysisView === 'sex' }"
+                                                @click="setPopulationAnalysisView('sex')">性别结构</button>
+                                            <button type="button" class="h3-subtab-pill"
+                                                :class="{ active: populationAnalysisView === 'age' }"
+                                                @click="setPopulationAnalysisView('age')">年龄</button>
+                                        </div>
+                                        <div v-if="populationMeta && getPopulationYearOptions().length" class="population-view-control-row">
+                                            <label class="population-inline-field">
+                                                <span>年份</span>
+                                                <select v-model="populationSelectedYear" @change="onPopulationYearChange" class="h3-params-select">
+                                                    <option v-for="item in getPopulationYearOptions()" :key="`population-year-${item.value}`" :value="item.value">
+                                                        {{ item.label }}
+                                                    </option>
+                                                </select>
+                                            </label>
+                                            <label v-if="populationAnalysisView === 'sex'" class="population-inline-field">
+                                                <span>地图图层</span>
+                                                <select v-model="populationSexMetricMode" @change="onPopulationSexMetricModeChange" class="h3-params-select">
+                                                    <option value="ratio">性别占比（%）</option>
+                                                    <option value="diff">性别差异（人）</option>
+                                                </select>
+                                            </label>
+                                        </div>
+                                        <div v-if="populationLayer && populationLayer.legend" class="population-legend-card" style="margin-top:10px;">
+                                            <div class="population-legend-title">
+                                                {{ populationLayer.legend.title }}
+                                                <span style="color:#6b7280; font-weight:400;">
+                                                    {{ populationLayer.legend.unit ? `（${populationLayer.legend.unit}）` : '' }}
+                                                </span>
+                                            </div>
+                                            <div v-if="populationLayer.legend.kind !== 'categorical'" class="population-legend-gradient" :style="getPopulationLegendGradientStyle()"></div>
+                                            <div class="population-legend-grid">
+                                                <div v-for="(item, idx) in populationLayer.legend.stops" :key="`population-legend-${idx}`"
+                                                    class="population-legend-item">
+                                                    <span class="population-legend-swatch"
+                                                        :style="{ background:item.color }"></span>
+                                                    <span>
+                                                        {{ item.label || (populationLayer.legend.unit === '人/平方公里'
+                                                            ? formatPopulationDensity(item.value)
+                                                            : (populationLayer.legend.unit === '%'
+                                                                ? formatPopulationLegendPercent(item.value)
+                                                                : formatPopulationValue(item.value))) }}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div v-if="populationOverview" class="population-analysis-grid" style="margin-top:10px;">
+                                            <div v-for="row in getPopulationSummaryRows()" :key="`population-card-${row.key}`" class="population-analysis-card">
+                                                <div class="population-analysis-card-label">{{ row.label }}</div>
+                                                <div class="population-analysis-card-value">{{ row.value }}</div>
+                                            </div>
+                                        </div>
+                                        <div v-if="populationOverview" style="margin-top:10px;">
+                                            <div id="populationPrimaryChart" :style="{ height: populationAnalysisView === 'age' ? '240px' : '200px' }"></div>
+                                            <div v-if="populationAnalysisView !== 'age'" id="populationSecondaryChart" style="height:220px; margin-top:8px;"></div>
+                                        </div>
+                                        <div v-else class="panel-placeholder" style="margin-top:10px;">
+                                            {{ isComputingPopulation ? '正在自动计算人口分析...' : '进入人口面板后会自动计算并展示结果。' }}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="panel poi-panel" v-show="activeStep3Panel === 'nightlight'">
+                                    <div class="poi-subpanel">
+                                        <div v-if="nightlightOverview" class="h3-subtabs population-view-tabs">
+                                            <button type="button" class="h3-subtab-pill"
+                                                v-for="item in getNightlightViewOptions()"
+                                                :key="`nightlight-view-${item.value}`"
+                                                :class="{ active: nightlightAnalysisView === item.value }"
+                                                @click="setNightlightAnalysisView(item.value)">{{ item.label }}</button>
+                                        </div>
+                                        <div v-if="nightlightMeta && getNightlightYearOptions().length" class="population-view-control-row">
+                                            <label class="population-inline-field">
+                                                <span>年份</span>
+                                                <select v-model="nightlightSelectedYear" @change="onNightlightYearChange" class="h3-params-select">
+                                                    <option v-for="item in getNightlightYearOptions()" :key="`nightlight-year-${item.year}`" :value="item.year">
+                                                        {{ item.label }}
+                                                    </option>
+                                                </select>
+                                            </label>
+                                        </div>
+                                        <div v-if="nightlightLayer && nightlightLayer.legend" class="population-legend-card" style="margin-top:10px;">
+                                            <div class="population-legend-title">
+                                                {{ nightlightLayer.legend.title }}
+                                                <span style="color:#6b7280; font-weight:400;">
+                                                    {{ nightlightLayer.legend.kind !== 'categorical' && nightlightLayer.legend.unit ? `（${nightlightLayer.legend.unit}）` : '' }}
+                                                </span>
+                                            </div>
+                                            <div v-if="nightlightLayer.legend.kind !== 'categorical'" class="population-legend-gradient" :style="getNightlightLegendGradientStyle()"></div>
+                                            <div class="population-legend-grid">
+                                                <div v-for="(item, idx) in nightlightLayer.legend.stops" :key="`nightlight-legend-${idx}`"
+                                                    class="population-legend-item">
+                                                    <span class="population-legend-swatch" :style="{ background:item.color }"></span>
+                                                    <span>{{ nightlightLayer.legend.kind === 'categorical' ? (item.label || '-') : formatNightlightValue(item.value, 2) }}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div v-if="nightlightOverview" class="population-analysis-grid" style="margin-top:10px;">
+                                            <div v-for="row in getNightlightSummaryRows()" :key="`nightlight-card-${row.key}`" class="population-analysis-card">
+                                                <div class="population-analysis-card-label">{{ row.label }}</div>
+                                                <div class="population-analysis-card-value">{{ row.value }}</div>
+                                            </div>
+                                        </div>
+                                        <div v-if="!nightlightOverview" class="panel-placeholder" style="margin-top:10px;">
+                                            {{ isComputingNightlight ? '正在自动计算夜光分析...' : '进入夜光面板后会自动计算并展示结果。' }}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="panel poi-panel" v-show="activeStep3Panel === 'gwr'">
+                                    <h4>夜光 GWR</h4>
+                                    <div class="poi-subpanel">
+                                        <div class="population-analysis-grid" style="margin-top:10px;">
+                                            <div v-for="row in getGwrReadinessRows()" :key="`gwr-ready-${row.key}`" class="population-analysis-card">
+                                                <div class="population-analysis-card-label">{{ row.label }}</div>
+                                                <div class="population-analysis-card-value" :style="{ color: row.ready ? '#0f766e' : '#b45309' }">{{ row.text }}</div>
+                                            </div>
+                                        </div>
+
+                                        <div class="h3-params-card" style="margin-top:10px;">
+                                            <div class="h3-params-grid">
+                                                <label class="h3-params-field">
+                                                    <span class="h3-params-label">地图指标</span>
+                                                    <select v-model="gwrMetric" class="h3-params-select" @change="onGwrMetricChange">
+                                                        <option v-for="item in getGwrMetricOptions()" :key="`gwr-metric-${item.value}`" :value="item.value">
+                                                            {{ item.label }}
+                                                        </option>
+                                                    </select>
+                                                </label>
+                                            </div>
+                                            <div class="h3-params-actions">
+                                                <button class="h3-btn h3-btn-primary h3-params-compute-btn"
+                                                    :disabled="isComputingGwr || !canComputeGwr()"
+                                                    :title="getGwrBlockingText()"
+                                                    @click="computeGwrAnalysis">
+                                                    {{ isComputingGwr ? '计算中...' : '计算 GWR' }}
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        <div v-if="gwrResult && gwrResult.summary" class="population-analysis-grid" style="margin-top:10px;">
+                                            <div v-for="row in getGwrSummaryRows()" :key="`gwr-card-${row.key}`" class="population-analysis-card">
+                                                <div class="population-analysis-card-label">{{ row.label }}</div>
+                                                <div class="population-analysis-card-value">{{ row.value }}</div>
+                                            </div>
+                                        </div>
+
+                                        <div v-if="getGwrTopVariables().length" style="margin-top:10px; border:1px solid #eef1f4; border-radius:8px; padding:8px 10px; background:#fafbfc;">
+                                            <div style="font-size:12px; color:#374151; font-weight:600; margin-bottom:6px;">主要影响变量</div>
+                                            <div v-for="item in getGwrTopVariables()" :key="`gwr-top-${item.key}`"
+                                                style="display:flex; justify-content:space-between; gap:10px; font-size:12px; color:#4b5563; padding:3px 0;">
+                                                <span>{{ item.label || item.key }}</span>
+                                                <span>{{ formatGwrNumber(item.mean_abs_coefficient, 4) }}</span>
+                                            </div>
+                                        </div>
+
+                                        <div v-if="gwrResult && gwrResult.summary && gwrResult.summary.ok" style="margin-top:10px;">
+                                            <div id="gwrScatterChart" style="height:210px;"></div>
+                                            <div id="gwrCoeffChart" style="height:190px; margin-top:8px;"></div>
+                                        </div>
+
+                                        <div v-if="gwrStatus" class="panel-placeholder" style="margin-top:10px;">
+                                            {{ gwrStatus }}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="panel poi-panel" v-show="activeStep3Panel === 'timeseries'">
+                                    <div class="poi-subpanel">
+                                        <div class="h3-subtabs population-view-tabs">
+                                            <button
+                                                type="button"
+                                                class="h3-subtab-pill"
+                                                v-for="item in getTimeseriesTabOptions()"
+                                                :key="`timeseries-tab-${item.value}`"
+                                                :class="{ active: timeseriesActiveTab === item.value }"
+                                                @click="setTimeseriesTab(item.value)">
+                                                {{ item.label }}
+                                            </button>
+                                        </div>
+
+                                        <div class="population-view-control-row">
+                                            <label v-if="timeseriesActiveTab === 'population'" class="population-inline-field">
+                                                <span>时段</span>
+                                                <select
+                                                    v-model="timeseriesPopulationPeriod"
+                                                    @change="onTimeseriesControlsChange"
+                                                    class="h3-params-select">
+                                                    <option
+                                                        v-for="item in getTimeseriesPeriods('population')"
+                                                        :key="`timeseries-pop-period-${item.value}`"
+                                                        :value="item.value">
+                                                        {{ item.label }}
+                                                    </option>
+                                                </select>
+                                            </label>
+                                            <label v-if="timeseriesActiveTab === 'nightlight'" class="population-inline-field">
+                                                <span>时段</span>
+                                                <select
+                                                    v-model="timeseriesNightlightPeriod"
+                                                    @change="onTimeseriesControlsChange"
+                                                    class="h3-params-select">
+                                                    <option
+                                                        v-for="item in getTimeseriesPeriods('nightlight')"
+                                                        :key="`timeseries-nl-period-${item.value}`"
+                                                        :value="item.value">
+                                                        {{ item.label }}
+                                                    </option>
+                                                </select>
+                                            </label>
+                                            <label v-if="timeseriesActiveTab === 'joint'" class="population-inline-field">
+                                                <span>时段</span>
+                                                <select
+                                                    v-model="timeseriesJointPeriod"
+                                                    @change="onTimeseriesControlsChange"
+                                                    class="h3-params-select">
+                                                    <option
+                                                        v-for="item in getTimeseriesPeriods('joint')"
+                                                        :key="`timeseries-joint-period-${item.value}`"
+                                                        :value="item.value">
+                                                        {{ item.label }}
+                                                    </option>
+                                                </select>
+                                            </label>
+
+                                            <label v-if="timeseriesActiveTab === 'population'" class="population-inline-field">
+                                                <span>图层</span>
+                                                <select
+                                                    v-model="timeseriesPopulationLayerView"
+                                                    @change="onTimeseriesControlsChange"
+                                                    class="h3-params-select">
+                                                    <option
+                                                        v-for="item in getTimeseriesPopulationViewOptions()"
+                                                        :key="`timeseries-pop-view-${item.value}`"
+                                                        :value="item.value">
+                                                        {{ item.label }}
+                                                    </option>
+                                                </select>
+                                            </label>
+                                            <label v-if="timeseriesActiveTab === 'nightlight'" class="population-inline-field">
+                                                <span>图层</span>
+                                                <select
+                                                    v-model="timeseriesNightlightLayerView"
+                                                    @change="onTimeseriesControlsChange"
+                                                    class="h3-params-select">
+                                                    <option
+                                                        v-for="item in getTimeseriesNightlightViewOptions()"
+                                                        :key="`timeseries-nl-view-${item.value}`"
+                                                        :value="item.value">
+                                                        {{ item.label }}
+                                                    </option>
+                                                </select>
+                                            </label>
+
+                                            <button
+                                                type="button"
+                                                class="btn-outline btn-compact"
+                                                :disabled="isComputingTimeseries"
+                                                @click="computeTimeseriesCurrent">
+                                                {{ isComputingTimeseries ? '计算中...' : '刷新时序分析' }}
+                                            </button>
+                                        </div>
+
+                                        <div
+                                            v-if="getCurrentTimeseriesPayload() && getCurrentTimeseriesPayload().layer && getCurrentTimeseriesPayload().layer.legend"
+                                            class="population-legend-card"
+                                            style="margin-top:10px;">
+                                            <div class="population-legend-title">
+                                                {{ getCurrentTimeseriesPayload().layer.legend.title }}
+                                                <span style="color:#6b7280; font-weight:400;">
+                                                    {{ getCurrentTimeseriesPayload().layer.legend.kind !== 'categorical' && getCurrentTimeseriesPayload().layer.legend.unit ? `（${getCurrentTimeseriesPayload().layer.legend.unit}）` : '' }}
+                                                </span>
+                                            </div>
+                                            <div
+                                                v-if="getCurrentTimeseriesPayload().layer.legend.kind !== 'categorical'"
+                                                class="population-legend-gradient"
+                                                :style="getTimeseriesLegendGradientStyle()"></div>
+                                            <div class="population-legend-grid">
+                                                <div
+                                                    v-for="(item, idx) in getCurrentTimeseriesPayload().layer.legend.stops"
+                                                    :key="`timeseries-legend-${idx}`"
+                                                    class="population-legend-item">
+                                                    <span class="population-legend-swatch" :style="{ background: item.color }"></span>
+                                                    <span>{{ getCurrentTimeseriesPayload().layer.legend.kind === 'categorical' ? (item.label || '-') : formatTimeseriesValue(item.value, 2) }}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div v-if="getCurrentTimeseriesPayload()" class="population-analysis-grid" style="margin-top:10px;">
+                                            <div
+                                                v-for="row in getTimeseriesSummaryRows()"
+                                                :key="`timeseries-summary-${row.key}`"
+                                                class="population-analysis-card">
+                                                <div class="population-analysis-card-label">{{ row.label }}</div>
+                                                <div class="population-analysis-card-value">{{ row.value }}</div>
+                                            </div>
+                                        </div>
+
+                                        <div v-if="getTimeseriesInsights().length" class="population-legend-card" style="margin-top:10px;">
+                                            <div class="population-legend-title">关键洞察</div>
+                                            <ul style="margin:8px 0 0; padding-left:18px; color:#334155; line-height:1.6;">
+                                                <li v-for="(item, idx) in getTimeseriesInsights()" :key="`timeseries-insight-${idx}`">
+                                                    {{ item }}
+                                                </li>
+                                            </ul>
+                                        </div>
+
+                                        <div v-if="getTimeseriesSeriesRows().length" class="population-legend-card" style="margin-top:10px;">
+                                            <div class="population-legend-title">时间序列</div>
+                                            <div class="population-legend-grid">
+                                                <div
+                                                    v-for="(row, idx) in getTimeseriesSeriesRows()"
+                                                    :key="`timeseries-series-${idx}`"
+                                                    class="population-legend-item"
+                                                    style="justify-content:space-between;">
+                                                    <span>{{ row.label || row.name || `序列${idx + 1}` }}</span>
+                                                    <span>{{ formatTimeseriesValue(row.value, 2) }}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div v-if="timeseriesStatus" class="panel-placeholder" style="margin-top:10px;">
+                                            {{ timeseriesStatus }}
+                                        </div>
+
+                                        <div v-if="!getCurrentTimeseriesPayload() && !timeseriesStatus" class="panel-placeholder" style="margin-top:10px;">
+                                            {{ isComputingTimeseries ? '正在自动计算时序分析...' : '进入时序面板后会自动计算并展示结果。' }}
+                                        </div>
+                                    </div>
+                                </div>
+
+
+                                <div class="panel" v-show="activeStep3Panel === 'syntax'">
+                                    <h4>路网分析</h4>
+                                    <div class="h3-subtabs" style="margin-top:8px;">
+                                        <button type="button"
+                                            class="h3-subtab-pill"
+                                            v-for="tab in roadSyntaxTabs"
+                                            :key="`road-syntax-tab-${tab.value}`"
+                                            :class="{ active: roadSyntaxMainTab === tab.value }"
+                                            :disabled="tab.value !== 'params' && !canActivateRoadSyntaxTab(tab.value)"
+                                            @click="setRoadSyntaxMainTab(tab.value)">
+                                            {{ tab.label }}
+                                        </button>
+                                    </div>
+
+                                    <div v-if="roadSyntaxMainTab === 'params'" class="h3-params-card" style="margin-top:10px;">
+                                        <div class="h3-params-grid">
+                                            <label class="h3-params-field">
+                                                <span class="h3-params-label">指标预设</span>
+                                                <select v-model="roadSyntaxLastMetricTab" class="h3-params-select">
+                                                    <option v-for="tab in roadSyntaxMetricTabs()" :key="`road-syntax-pref-${tab.value}`" :value="tab.value">
+                                                        {{ tab.label }}
+                                                    </option>
+                                                </select>
+                                            </label>
+                                            <label class="h3-params-field">
+                                                <span class="h3-params-label">图模型</span>
+                                                <select v-model="roadSyntaxGraphModel" class="h3-params-select">
+                                                    <option value="segment">线段图（Segment）</option>
+                                                    <option value="axial">轴线图（Axial）</option>
+                                                </select>
+                                            </label>
+                                            <label class="h3-params-field">
+                                                <span class="h3-params-label">官方色带</span>
+                                                <select v-model="roadSyntaxDepthmapColorScale" class="h3-params-select">
+                                                    <option v-for="opt in roadSyntaxDepthmapColorScaleOptions()"
+                                                        :key="`road-syntax-color-scale-${opt.value}`"
+                                                        :value="opt.value">
+                                                        {{ opt.label }}
+                                                    </option>
+                                                </select>
+                                            </label>
+                                            <label class="h3-params-field">
+                                                <span class="h3-params-label">Blue 阈值</span>
+                                                <input
+                                                    v-model.number="roadSyntaxDisplayBlue"
+                                                    type="number"
+                                                    min="0"
+                                                    max="1"
+                                                    step="0.01"
+                                                    class="h3-params-select"
+                                                    @change="onRoadSyntaxDisplayRangeChange">
+                                            </label>
+                                            <label class="h3-params-field">
+                                                <span class="h3-params-label">Red 阈值</span>
+                                                <input
+                                                    v-model.number="roadSyntaxDisplayRed"
+                                                    type="number"
+                                                    min="0"
+                                                    max="1"
+                                                    step="0.01"
+                                                    class="h3-params-select"
+                                                    @change="onRoadSyntaxDisplayRangeChange">
+                                            </label>
+                                        </div>
+                                        <div class="h3-params-chips">
+                                            <span class="count-badge">渲染档位 {{ roadSyntaxPerformanceProfile }}</span>
+                                            <span class="count-badge">边段上限 {{ roadSyntaxActiveEdgeCap == null ? '无限制' : roadSyntaxActiveEdgeCap }}</span>
+                                        </div>
+                                        <div class="h3-params-actions">
+                                            <button class="h3-btn h3-btn-primary h3-params-compute-btn"
+                                                :disabled="isComputingRoadSyntax || !lastIsochroneGeoJSON"
+                                                @click="computeRoadSyntax">
+                                                {{ isComputingRoadSyntax ? '计算中...' : '计算路网指标' }}
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <div v-else style="margin-top:10px;">
+                                        <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                                            <label v-if="roadSyntaxMetric !== 'intelligibility'" style="display:flex; align-items:center; gap:6px; font-size:12px; color:#666;">
+                                                色带
+                                                <select v-model="roadSyntaxDepthmapColorScale" @change="refreshRoadSyntaxOverlay"
+                                                    style="padding:4px 6px; border:1px solid #ddd; border-radius:6px; font-size:12px;">
+                                                    <option v-for="opt in roadSyntaxDepthmapColorScaleOptions()"
+                                                        :key="`road-syntax-color-scale-inline-${opt.value}`"
+                                                        :value="opt.value">
+                                                        {{ opt.label }}
+                                                    </option>
+                                                </select>
+                                            </label>
+                                            <label v-if="roadSyntaxMetric !== 'intelligibility'" style="display:flex; align-items:center; gap:6px; font-size:12px; color:#666;">
+                                                Blue
+                                                <input
+                                                    v-model.number="roadSyntaxDisplayBlue"
+                                                    type="number"
+                                                    min="0"
+                                                    max="1"
+                                                    step="0.01"
+                                                    @change="onRoadSyntaxDisplayRangeChange"
+                                                    style="width:64px; padding:4px 6px; border:1px solid #ddd; border-radius:6px; font-size:12px;">
+                                            </label>
+                                            <label v-if="roadSyntaxMetric !== 'intelligibility'" style="display:flex; align-items:center; gap:6px; font-size:12px; color:#666;">
+                                                Red
+                                                <input
+                                                    v-model.number="roadSyntaxDisplayRed"
+                                                    type="number"
+                                                    min="0"
+                                                    max="1"
+                                                    step="0.01"
+                                                    @change="onRoadSyntaxDisplayRangeChange"
+                                                    style="width:64px; padding:4px 6px; border:1px solid #ddd; border-radius:6px; font-size:12px;">
+                                            </label>
+                                            <label v-if="roadSyntaxMetricUsesRadius(roadSyntaxMetric)" style="display:flex; align-items:center; gap:6px; font-size:12px; color:#666;">
+                                                半径
+                                                <div style="display:inline-flex; border:1px solid #d1d5db; border-radius:8px; overflow:hidden;">
+                                                    <button
+                                                        type="button"
+                                                        @click="setRoadSyntaxRadiusLabel('global')"
+                                                        :disabled="isComputingRoadSyntax"
+                                                        :style="{
+                                                            border:'0',
+                                                            padding:'4px 10px',
+                                                            fontSize:'12px',
+                                                            cursor: isComputingRoadSyntax ? 'not-allowed' : 'pointer',
+                                                            color: roadSyntaxRadiusLabel === 'global' ? '#fff' : '#374151',
+                                                            background: roadSyntaxRadiusLabel === 'global' ? '#2563eb' : '#fff',
+                                                            opacity: isComputingRoadSyntax ? 0.45 : 1
+                                                        }">等时圈内</button>
+                                                    <button
+                                                        type="button"
+                                                        @click="setRoadSyntaxRadiusLabel('r600')"
+                                                        :disabled="isComputingRoadSyntax || !roadSyntaxHasRadiusLabel('r600')"
+                                                        :style="{
+                                                            border:'0',
+                                                            borderLeft:'1px solid #d1d5db',
+                                                            padding:'4px 10px',
+                                                            fontSize:'12px',
+                                                            cursor: (isComputingRoadSyntax || !roadSyntaxHasRadiusLabel('r600')) ? 'not-allowed' : 'pointer',
+                                                            color: roadSyntaxRadiusLabel === 'r600' ? '#fff' : '#374151',
+                                                            background: roadSyntaxRadiusLabel === 'r600' ? '#2563eb' : '#fff',
+                                                            opacity: (isComputingRoadSyntax || !roadSyntaxHasRadiusLabel('r600')) ? 0.45 : 1
+                                                        }">600m</button>
+                                                    <button
+                                                        type="button"
+                                                        @click="setRoadSyntaxRadiusLabel('r800')"
+                                                        :disabled="isComputingRoadSyntax || !roadSyntaxHasRadiusLabel('r800')"
+                                                        :style="{
+                                                            border:'0',
+                                                            borderLeft:'1px solid #d1d5db',
+                                                            padding:'4px 10px',
+                                                            fontSize:'12px',
+                                                            cursor: (isComputingRoadSyntax || !roadSyntaxHasRadiusLabel('r800')) ? 'not-allowed' : 'pointer',
+                                                            color: roadSyntaxRadiusLabel === 'r800' ? '#fff' : '#374151',
+                                                            background: roadSyntaxRadiusLabel === 'r800' ? '#2563eb' : '#fff',
+                                                            opacity: (isComputingRoadSyntax || !roadSyntaxHasRadiusLabel('r800')) ? 0.45 : 1
+                                                        }">800m</button>
+                                                </div>
+                                            </label>
+                                            <label v-if="roadSyntaxSupportsSkeleton(roadSyntaxMetric)" class="h3-check-chip h3-check-chip-compact">
+                                                <input type="checkbox"
+                                                    v-model="roadSyntaxSkeletonOnly"
+                                                    :disabled="!canToggleRoadSyntaxSkeleton()"
+                                                    @change="refreshRoadSyntaxOverlay">
+                                                骨架优先
+                                            </label>
+                                            <span class="count-badge">当前指标 {{ roadSyntaxLabelByMetric(roadSyntaxMetric) }}</span>
+                                            <span class="count-badge">值 {{ formatRoadSyntaxMetricValue(roadSyntaxMetric) }}</span>
+                                            <span v-if="roadSyntaxMetric === 'intelligibility'" class="count-badge">
+                                                R² {{ roadSyntaxRegressionView().r2 }}
+                                            </span>
+                                        </div>
+
+                                        <div v-if="roadSyntaxLegendModel && roadSyntaxLegendModel.items && roadSyntaxLegendModel.items.length"
+                                            style="margin-top:10px; border:1px solid #eef1f4; border-radius:8px; padding:8px 10px; background:#fafbfc;">
+                                            <div style="font-size:12px; color:#374151; font-weight:600; margin-bottom:6px;">
+                                                {{ roadSyntaxLegendModel.title }}
+                                            </div>
+                                            <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px 10px;">
+                                                <div v-for="(item, idx) in roadSyntaxLegendModel.items"
+                                                    :key="`road-syntax-legend-${idx}`"
+                                                    style="display:flex; align-items:center; gap:6px; font-size:11px; color:#4b5563;">
+                                                    <span :style="{display:'inline-block', width:'12px', height:'12px', borderRadius:'2px', background:item.color, border:'1px solid #d1d5db'}"></span>
+                                                    <span>{{ item.label }}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div v-if="roadSyntaxMainTab === 'intelligibility'" id="roadSyntaxScatterChart"
+                                            style="height:220px; margin-top:10px;"></div>
+                                    </div>
+
+                                    <div v-if="roadSyntaxSwitchStatsText" class="status-text" style="margin-top:10px;">
+                                        {{ roadSyntaxSwitchStatsText }}
+                                    </div>
+                                    <div v-if="roadSyntaxStatus"
+                                        class="status-text"
+                                        style="margin-top:10px; display:flex; align-items:center; gap:8px; justify-content:flex-start;">
+                                        <span>{{ roadSyntaxStatus }}</span>
+                                        <span v-if="isComputingRoadSyntax && Number(roadSyntaxProgressElapsedSec || 0) > 0"
+                                            class="count-badge">
+                                            {{ `计时 ${Math.floor(Number(roadSyntaxProgressElapsedSec || 0))}s` }}
+                                        </span>
+                                        <span v-if="isComputingRoadSyntax && Number(roadSyntaxProgressStep || 0) > 0 && Number(roadSyntaxProgressTotal || 0) > 0"
+                                            class="count-badge">
+                                            {{ `进度 ${roadSyntaxProgressStep}/${roadSyntaxProgressTotal}` }}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div> <!-- End Wizard View Wrapper -->
+
+            </div> <!-- End of sidebar-content -->
+
+            <!-- Fixed History Footer -->
+            <!-- Sidebar Footer (Only in Wizard Mode) -->
+            <div v-if="sidebarView === 'wizard'" class="sidebar-footer"
+                style="padding: 20px; border-top: 1px solid #f0f0f0; background: #fff; display: flex; flex-direction: column; gap: 10px;">
+                <button class="btn-outline"
+                    style="margin-top:0; border:1px solid #eee; display:flex; justify-content:center; align-items:center;"
+                    @click="openHistoryView()">
+                    <img src="/static/images/history.svg" class="icon-svg-small" style="margin-right:8px;"> 查看历史记录 ({{
+                    historyList.length }})
+                </button>
+            </div>
+
+        </aside>

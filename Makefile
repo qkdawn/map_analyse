@@ -1,6 +1,7 @@
 SHELL := /usr/bin/env bash
 
 COMPOSE_FILE := gaode-map/docker-compose.yml
+ENV_FILE := gaode-map/.env
 ARCGIS_BRIDGE_PORT ?= 18081
 PYTHON ?= python
 
@@ -20,16 +21,16 @@ help:
 	@echo "  make verify-startup - Validate gaode-map startup lifecycle"
 
 up:
-	docker compose -f $(COMPOSE_FILE) up -d --build
+	docker compose --env-file $(ENV_FILE) -f $(COMPOSE_FILE) up -d --build
 
 down:
-	docker compose -f $(COMPOSE_FILE) down
+	docker compose --env-file $(ENV_FILE) -f $(COMPOSE_FILE) down
 
 ps:
-	docker compose -f $(COMPOSE_FILE) ps
+	docker compose --env-file $(ENV_FILE) -f $(COMPOSE_FILE) ps
 
 logs:
-	docker compose -f $(COMPOSE_FILE) logs -f --tail=100
+	docker compose --env-file $(ENV_FILE) -f $(COMPOSE_FILE) logs -f --tail=100
 
 bridge:
 	$(PYTHON) -m uvicorn host_bridge.main:app --host 0.0.0.0 --port $(ARCGIS_BRIDGE_PORT)

@@ -97,6 +97,9 @@ public class Region {
     )
     private LocalDateTime timestamp;
 
+    @Column(name = "year", nullable = true)
+    private Integer year;
+
     /* ================= 分类字段（中文列名） ================= */
     @Column(name = "大类", length = 100, nullable = true)
     private String categoryLarge;

@@ -1,0 +1,12 @@
+[submodule "gaode-map"]
+	path = gaode-map
+	url = ssh://git@ssh.github.com:443/qkdawn/gaode-map.git
+[submodule "search"]
+	path = search
+	url = ssh://git@ssh.github.com:443/qkdawn/search.git
+[submodule "host_bridge"]
+	path = host_bridge
+	url = ssh://git@ssh.github.com:443/qkdawn/host_bridge.git
+[submodule "scripts"]
+	path = scripts
+	url = ssh://git@ssh.github.com:443/qkdawn/scripts.git

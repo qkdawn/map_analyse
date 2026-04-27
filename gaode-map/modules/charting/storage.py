@@ -1,11 +1,46 @@
 from __future__ import annotations
 
 import os
+import shutil
 import uuid
+from pathlib import Path
 
 
-CHART_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "generated_charts")
-os.makedirs(CHART_DIR, exist_ok=True)
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_CHART_DIR = PROJECT_ROOT / "runtime" / "generated_charts"
+LEGACY_CHART_DIR = PROJECT_ROOT / "modules" / "generated_charts"
+
+
+def _resolve_chart_dir() -> Path:
+    configured = os.getenv("CHART_OUTPUT_DIR", "").strip()
+    if configured:
+        path = Path(configured)
+        if not path.is_absolute():
+            path = PROJECT_ROOT / path
+        return path
+    return DEFAULT_CHART_DIR
+
+
+def _migrate_legacy_dir(target_dir: Path) -> None:
+    if not LEGACY_CHART_DIR.exists() or LEGACY_CHART_DIR == target_dir:
+        return
+    target_dir.mkdir(parents=True, exist_ok=True)
+    for item in LEGACY_CHART_DIR.iterdir():
+        destination = target_dir / item.name
+        if destination.exists():
+            continue
+        shutil.move(str(item), str(destination))
+    try:
+        LEGACY_CHART_DIR.rmdir()
+    except OSError:
+        # Directory not empty or not removable. Keep runtime path as source of truth.
+        pass
+
+
+CHART_DIR_PATH = _resolve_chart_dir()
+_migrate_legacy_dir(CHART_DIR_PATH)
+CHART_DIR_PATH.mkdir(parents=True, exist_ok=True)
+CHART_DIR = str(CHART_DIR_PATH)
 
 
 def save_svg(svg_content: str) -> tuple[str, str]:

@@ -1,0 +1,302 @@
+from __future__ import annotations
+
+import math
+from typing import Any
+
+import numpy as np
+
+from .common import (
+    GRADIENT_VIEW_LABEL,
+    HOTSPOT_VIEW_LABEL,
+    round_float,
+)
+from .types import AggregatedNightlightCell
+
+_HOTSPOT_CLASSES = [
+    ("core_hotspot", "核心热点", "#fff7bc"),
+    ("secondary_hotspot", "高亮热点", "#fde047"),
+    ("emerging_hotspot", "次级热点", "#f59e0b"),
+    ("transition", "过渡区", "#b45309"),
+    ("low_light", "低亮区", "#52525b"),
+]
+
+_GRADIENT_CLASSES = [
+    ("core_peak", "核心高亮", "#fff7bc"),
+    ("inner_spread", "内圈扩散", "#fde047"),
+    ("middle_decay", "中圈衰减", "#f59e0b"),
+    ("outer_decay", "外圈衰减", "#c2410c"),
+    ("fringe_dark", "边缘暗区", "#334155"),
+]
+
+
+def _categorical_legend(title: str, items: list[tuple[str, str, str]], unit: str) -> dict[str, Any]:
+    return {
+        "title": title,
+        "kind": "categorical",
+        "unit": unit,
+        "min_value": 0.0,
+        "max_value": float(max(0, len(items) - 1)),
+        "stops": [
+            {
+                "ratio": round_float((idx / max(1, len(items) - 1)), 3),
+                "color": color,
+                "value": float(idx),
+                "label": label,
+            }
+            for idx, (_, label, color) in enumerate(items)
+        ],
+    }
+
+
+def _empty_analysis_payload() -> dict[str, Any]:
+    return {
+        "core_hotspot_count": 0,
+        "secondary_hotspot_count": 0,
+        "emerging_hotspot_count": 0,
+        "transition_count": 0,
+        "low_light_count": 0,
+        "hotspot_cell_ratio": 0.0,
+        "peak_radiance": 0.0,
+        "peak_cell_id": None,
+        "max_distance_km": 0.0,
+        "core_band_count": 0,
+        "middle_band_count": 0,
+        "fringe_band_count": 0,
+        "peak_to_edge_ratio": 0.0,
+    }
+
+
+def _cell_value(cell: AggregatedNightlightCell) -> float:
+    return max(0.0, float(cell.raw_value))
+
+
+def _valid_cells(aggregated_cells: list[AggregatedNightlightCell]) -> list[AggregatedNightlightCell]:
+    return [cell for cell in aggregated_cells if int(cell.valid_pixel_count) > 0]
+
+
+def _descending_quantiles(values: np.ndarray, quantiles: list[float]) -> list[float]:
+    if values.size <= 0:
+        return [0.0 for _ in quantiles]
+    thresholds = [float(np.percentile(values, q)) for q in quantiles]
+    for idx in range(1, len(thresholds)):
+        if thresholds[idx] > thresholds[idx - 1]:
+            thresholds[idx] = thresholds[idx - 1]
+    return thresholds
+
+
+def build_hotspot_layer_cells(
+    aggregated_cells: list[AggregatedNightlightCell],
+    unit: str,
+) -> tuple[list[dict[str, Any]], dict[str, Any], dict[str, Any]]:
+    analysis = _empty_analysis_payload()
+    legend = _categorical_legend(HOTSPOT_VIEW_LABEL, _HOTSPOT_CLASSES, unit)
+    if not aggregated_cells:
+        return [], legend, analysis
+
+    valid_cells = _valid_cells(aggregated_cells)
+    if not valid_cells:
+        return _build_no_data_cells(aggregated_cells), legend, analysis
+
+    values = np.asarray([_cell_value(cell) for cell in valid_cells], dtype=np.float64)
+    positive = values[values > 0]
+    if positive.size <= 0:
+        return _build_low_light_cells(aggregated_cells, unit), legend, analysis
+
+    q90, q75, q55, q25 = _descending_quantiles(positive, [90, 75, 55, 25])
+    class_counts = {key: 0 for key, _, _ in _HOTSPOT_CLASSES}
+    peak_cell = max(valid_cells, key=_cell_value)
+    hotspot_total = 0
+    cells = []
+    for cell in aggregated_cells:
+        raw_value = _cell_value(cell)
+        valid_pixel_count = int(max(0, int(cell.valid_pixel_count)))
+        has_data = valid_pixel_count > 0
+        if not has_data:
+            cells.append(_no_data_payload(cell, "无有效夜光像素"))
+            continue
+
+        if raw_value >= q90:
+            key, label, color = _HOTSPOT_CLASSES[0]
+        elif raw_value >= q75:
+            key, label, color = _HOTSPOT_CLASSES[1]
+        elif raw_value >= q55:
+            key, label, color = _HOTSPOT_CLASSES[2]
+        elif raw_value >= q25:
+            key, label, color = _HOTSPOT_CLASSES[3]
+        else:
+            key, label, color = _HOTSPOT_CLASSES[4]
+        class_counts[key] += 1
+        if key in {"core_hotspot", "secondary_hotspot", "emerging_hotspot"}:
+            hotspot_total += 1
+        cells.append(
+            {
+                "cell_id": str(cell.cell_id),
+                "value": round_float(raw_value, 3),
+                "valid_pixel_count": valid_pixel_count,
+                "has_data": True,
+                "class_key": key,
+                "class_label": label,
+                "fill_color": color,
+                "stroke_color": "#ffffff" if key == "core_hotspot" else "#d6d3d1",
+                "fill_opacity": 0.34 if key == "low_light" else 0.58,
+                "label": f"{label} | {round_float(raw_value, 2)} {unit}",
+            }
+        )
+
+    analysis.update(
+        {
+            "core_hotspot_count": int(class_counts["core_hotspot"]),
+            "secondary_hotspot_count": int(class_counts["secondary_hotspot"]),
+            "emerging_hotspot_count": int(class_counts["emerging_hotspot"]),
+            "transition_count": int(class_counts["transition"]),
+            "low_light_count": int(class_counts["low_light"]),
+            "hotspot_cell_ratio": round_float(hotspot_total / max(1, len(valid_cells)), 6),
+            "peak_radiance": round_float(_cell_value(peak_cell), 3),
+            "peak_cell_id": str(peak_cell.cell_id),
+        }
+    )
+    return cells, legend, analysis
+
+
+def _haversine_km(a: list[float], b: list[float]) -> float:
+    lng1, lat1 = math.radians(float(a[0])), math.radians(float(a[1]))
+    lng2, lat2 = math.radians(float(b[0])), math.radians(float(b[1]))
+    d_lng = lng2 - lng1
+    d_lat = lat2 - lat1
+    hav = (
+        math.sin(d_lat / 2.0) ** 2
+        + math.cos(lat1) * math.cos(lat2) * (math.sin(d_lng / 2.0) ** 2)
+    )
+    return 6371.0 * 2.0 * math.atan2(math.sqrt(hav), math.sqrt(max(1e-12, 1.0 - hav)))
+
+
+def build_gradient_layer_cells(
+    aggregated_cells: list[AggregatedNightlightCell],
+    unit: str,
+) -> tuple[list[dict[str, Any]], dict[str, Any], dict[str, Any]]:
+    analysis = _empty_analysis_payload()
+    legend = _categorical_legend(GRADIENT_VIEW_LABEL, _GRADIENT_CLASSES, unit)
+    if not aggregated_cells:
+        return [], legend, analysis
+
+    valid_cells = _valid_cells(aggregated_cells)
+    if not valid_cells:
+        return _build_no_data_cells(aggregated_cells), legend, analysis
+
+    peak_cell = max(valid_cells, key=_cell_value)
+    peak_value = max(_cell_value(peak_cell), 1e-9)
+    peak_centroid = list(peak_cell.centroid_gcj02)
+    distances = np.asarray(
+        [_haversine_km(list(cell.centroid_gcj02), peak_centroid) for cell in valid_cells],
+        dtype=np.float64,
+    )
+    max_distance = float(np.max(distances)) if distances.size else 0.0
+    distance_map = {
+        str(cell.cell_id): float(distances[idx])
+        for idx, cell in enumerate(valid_cells)
+    }
+    class_counts = {key: 0 for key, _, _ in _GRADIENT_CLASSES}
+    edge_values: list[float] = []
+    cells = []
+    for cell in aggregated_cells:
+        raw_value = _cell_value(cell)
+        valid_pixel_count = int(max(0, int(cell.valid_pixel_count)))
+        has_data = valid_pixel_count > 0
+        if not has_data:
+            cells.append(_no_data_payload(cell, "无有效夜光像素"))
+            continue
+
+        distance_km = float(distance_map.get(str(cell.cell_id), 0.0))
+        distance_ratio = 0.0 if max_distance <= 1e-9 else max(0.0, min(1.0, distance_km / max_distance))
+        energy_ratio = max(0.0, min(1.0, raw_value / peak_value))
+        gradient_score = (0.65 * energy_ratio) + (0.35 * (1.0 - distance_ratio))
+
+        if gradient_score >= 0.82:
+            key, label, color = _GRADIENT_CLASSES[0]
+        elif gradient_score >= 0.62:
+            key, label, color = _GRADIENT_CLASSES[1]
+        elif gradient_score >= 0.42:
+            key, label, color = _GRADIENT_CLASSES[2]
+        elif gradient_score >= 0.22:
+            key, label, color = _GRADIENT_CLASSES[3]
+        else:
+            key, label, color = _GRADIENT_CLASSES[4]
+        class_counts[key] += 1
+        if key in {"outer_decay", "fringe_dark"}:
+            edge_values.append(raw_value)
+
+        cells.append(
+            {
+                "cell_id": str(cell.cell_id),
+                "value": round_float(raw_value, 3),
+                "valid_pixel_count": valid_pixel_count,
+                "has_data": True,
+                "class_key": key,
+                "class_label": label,
+                "fill_color": color,
+                "stroke_color": "#ffffff" if key == "core_peak" else "#cbd5e1",
+                "fill_opacity": 0.38 if key == "fringe_dark" else 0.58,
+                "label": f"{label} | {round_float(distance_km, 2)} km | {round_float(raw_value, 2)} {unit}",
+            }
+        )
+
+    edge_mean = float(np.mean(edge_values)) if edge_values else 0.0
+    analysis.update(
+        {
+            "peak_radiance": round_float(_cell_value(peak_cell), 3),
+            "peak_cell_id": str(peak_cell.cell_id),
+            "max_distance_km": round_float(max_distance, 3),
+            "core_band_count": int(class_counts["core_peak"]),
+            "middle_band_count": int(class_counts["inner_spread"] + class_counts["middle_decay"]),
+            "fringe_band_count": int(class_counts["outer_decay"] + class_counts["fringe_dark"]),
+            "peak_to_edge_ratio": round_float((peak_value / edge_mean), 3) if edge_mean > 1e-9 else 0.0,
+        }
+    )
+    return cells, legend, analysis
+
+
+def _no_data_payload(cell: AggregatedNightlightCell, label: str) -> dict[str, Any]:
+    return {
+        "cell_id": str(cell.cell_id),
+        "value": round_float(_cell_value(cell), 3),
+        "valid_pixel_count": int(max(0, int(cell.valid_pixel_count))),
+        "has_data": False,
+        "class_key": None,
+        "class_label": None,
+        "fill_color": "#94a3b8",
+        "stroke_color": "#64748b",
+        "fill_opacity": 0.16,
+        "label": label,
+    }
+
+
+def _build_no_data_cells(aggregated_cells: list[AggregatedNightlightCell]) -> list[dict[str, Any]]:
+    return [_no_data_payload(cell, "无有效夜光像素") for cell in aggregated_cells]
+
+
+def _build_low_light_cells(
+    aggregated_cells: list[AggregatedNightlightCell],
+    unit: str,
+) -> list[dict[str, Any]]:
+    low_light_color = _HOTSPOT_CLASSES[-1][2]
+    cells = []
+    for cell in aggregated_cells:
+        valid_pixel_count = int(max(0, int(cell.valid_pixel_count)))
+        if valid_pixel_count <= 0:
+            cells.append(_no_data_payload(cell, "无有效夜光像素"))
+            continue
+        cells.append(
+            {
+                "cell_id": str(cell.cell_id),
+                "value": round_float(_cell_value(cell), 3),
+                "valid_pixel_count": valid_pixel_count,
+                "has_data": True,
+                "class_key": "low_light",
+                "class_label": "低亮区",
+                "fill_color": low_light_color,
+                "stroke_color": "#d6d3d1",
+                "fill_opacity": 0.34,
+                "label": f"低亮区 | {round_float(_cell_value(cell), 2)} {unit}",
+            }
+        )
+    return cells

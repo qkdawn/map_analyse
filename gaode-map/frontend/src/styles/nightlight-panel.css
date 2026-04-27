@@ -1,0 +1,14 @@
+.analysis-layout-root .nightlight-inline-note {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.96), rgba(30, 41, 59, 0.9));
+  color: #e2e8f0;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.analysis-layout-root .nightlight-inline-note strong {
+  color: #fde68a;
+  font-weight: 600;
+}

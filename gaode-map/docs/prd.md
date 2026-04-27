@@ -33,7 +33,7 @@
     *   **Adapter**：边界层处理 GCJ02 -> WGS84（调用引擎）-> WGS84 -> GCJ02（返回前端）。
 
 #### C) 网格化服务层 (Grid H3 Service)
-*   **定位**：`gaode-map/modules/grid_h3`
+*   **定位**：`gaode-map/modules/h3`
 *   **职责**：纯几何计算，不依赖任何地图 SDK。
 *   **功能**：
     *   `polygon_to_hexagons(polygon_gcj02, resolution) -> [h3_index]`
@@ -43,20 +43,18 @@
 *   **定位**：`gaode-map/modules/poi` (数据管家)
 *   **职责**：负责数据的获取、清洗、**双重落库**。
 *   **工作流 (Workflow)**：
-    1.  **Check Cache**: 查询 SQLite 是否有该不同参数(hash)的分析记录。如有，直接返回统计结果。
+    1.  **Check Cache**: 查询 MySQL 是否有该不同参数(hash)的分析记录。如有，直接返回统计结果。
     2.  **Fetch & Transform**: 调高德 API -> 获 GCJ02 -> 转 **WGS84** 存库。
     3.  **Fast Return**: 优先返回 **GCJ02** 数据给前端渲染。
     4.  **Async Persistence**: **异步**将 POI 存入 MySQL。
         *   **Rule**: 使用 `amap_id` 进行**去重 (Upsert)**，防止数据冗余。
-    5.  **Save Cache**: 计算统计指标 -> 存入 SQLite。
+    5.  **Save Cache**: 计算统计指标 -> 存入 MySQL。
 
 #### E) 分析服务层 (Spatial Analysis Layer)
-*   **定位**：`gaode-map/modules/analysis`
-*   **职责**：接收网格化的 POI 数据，运行统计模型（如核密度、GWR）。
+*   **定位**：`gaode-map/modules/h3`、`gaode-map/modules/road`、`gaode-map/modules/export`
+*   **职责**：接收网格化 POI 与路网数据，完成空间统计、空间句法与导出打包。
 
 ---
-
-### 3. 用户交互流程 (Frontend Workflow)
 
 ### 3. 用户交互流程 (Frontend Workflow)
 
@@ -84,7 +82,7 @@
 ---
 
 ### 4. 交付物
-1.  **Python Packages**: `isochrone`, `grid_h3`, `poi`, `analysis`.
+1.  **Python Packages**: `isochrone`, `h3`, `poi`, `road`, `export`.
 2.  **API Docs**: 定义清晰的 JSON 接口。
 3.  **Java Service**: 仅作为历史数据仓库被调用。
 
@@ -99,4 +97,4 @@
     *   **空间分析**: **`PySAL`** (`esda`, `mgwr` - 空间计量/GWR).
 *   **数据存储**:
     *   **MySQL**: 存储高德原始 POI 数据 (每次请求强制落库).
-    *   **SQLite**: 存储分析缓存、Hash 签名与统计结果.
+    *   **MySQL**: 存储分析缓存、Hash 签名与统计结果.

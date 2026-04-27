@@ -7,10 +7,12 @@ from __future__ import annotations
 from datetime import datetime
 
 from sqlalchemy import (
+    Boolean,
     JSON,
     Column,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
@@ -60,7 +62,7 @@ class AnalysisHistory(Base):
     """
     __tablename__ = "analysis_history"
 
-    id = Column(Integer, primary_key=True, autoincrement=True)
+    id = Column(String(64), primary_key=True)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     
     # 存储分析参数 (中心点, 时长, 出行方式)
@@ -80,7 +82,7 @@ class PoiResult(Base):
     __tablename__ = "poi_results"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    history_id = Column(Integer, ForeignKey("analysis_history.id", ondelete="CASCADE"), nullable=False, index=True)
+    history_id = Column(String(64), ForeignKey("analysis_history.id", ondelete="CASCADE"), nullable=False, index=True)
     
     # 完整的 POI 数据列表
     poi_data = Column(JSON, nullable=False)
@@ -89,3 +91,26 @@ class PoiResult(Base):
     summary = Column(JSON, nullable=True)
     
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+
+
+class AgentSession(Base):
+    """
+    AI 面板历史记录
+    """
+    __tablename__ = "agent_sessions"
+
+    id = Column(String(128), primary_key=True)
+    title = Column(String(255), nullable=False, default="")
+    preview = Column(Text, nullable=False, default="")
+    status = Column(String(64), nullable=False, default="idle")
+    history_id = Column(String(64), nullable=False, index=True)
+    panel_kind = Column(String(64), nullable=False, index=True)
+    is_pinned = Column(Boolean, nullable=False, default=False, index=True)
+    pinned_at = Column(DateTime, nullable=True)
+    snapshot = Column(JSON, nullable=False, default=dict)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)
+
+    __table_args__ = (
+        Index("ix_agent_sessions_history_panel", "history_id", "panel_kind"),
+    )

@@ -20,7 +20,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 import java.io.IOException;
-import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -71,7 +70,7 @@ public class PlaceService {
             double radius;
             float centerLon;
             float centerLat;
-            YearRange yearRange = buildYearRange(request.getYear());
+            Integer queryYear = request.getYear();
             try {
                 centerLon = Float.parseFloat(coords[0]);
                 centerLat = Float.parseFloat(coords[1]);
@@ -108,8 +107,7 @@ public class PlaceService {
                     queryLon,
                     queryLat,
                     radius,
-                    yearRange.start,
-                    yearRange.end,
+                    queryYear,
                     typeCodesParam,
                     typeCodesEmpty,
                     pageable
@@ -155,9 +153,8 @@ public class PlaceService {
                     // 转换为字符串，距离取整（米）
                     poi.setDistance(String.valueOf(Math.round(distance)));
 
-                    if (region.getTimestamp() != null) {
-                        // 直接使用LocalDateTime的getYear()方法
-                        poi.setYear(String.valueOf(region.getTimestamp().getYear()));
+                    if (region.getYear() != null) {
+                        poi.setYear(String.valueOf(region.getYear()));
                     }
 
                     return poi;
@@ -193,7 +190,7 @@ public class PlaceService {
                 return response;
             }
 
-            YearRange yearRange = buildYearRange(request.getYear());
+            Integer queryYear = request.getYear();
             List<String> typeCodesParam = parseTypeCodes(request.getTypes());
             Integer pageSizeParam = request.getPageSize();
             int pageSize = pageSizeParam == null || pageSizeParam <= 0 ? 25 : pageSizeParam;
@@ -224,8 +221,7 @@ public class PlaceService {
             // 执行查询
             List<Region> results = regionRepository.findByCityAndFilters(
                     cityname,
-                    yearRange.start,
-                    yearRange.end,
+                    queryYear,
                     typeCodesParam,
                     pageable
             );
@@ -265,9 +261,8 @@ public class PlaceService {
                     poi.setLocation(region.getMarlon() + "," + region.getMarlat());
                     poi.setDistance("");  // 城市查询不计算距离
 
-                    if (region.getTimestamp() != null) {
-                        // 直接使用LocalDateTime的getYear()方法
-                        poi.setYear(String.valueOf(region.getTimestamp().getYear()));
+                    if (region.getYear() != null) {
+                        poi.setYear(String.valueOf(region.getYear()));
                     }
 
                     return poi;
@@ -320,7 +315,7 @@ public class PlaceService {
 
             List<String> typeCodesParam = parseTypeCodes(request.getTypes());
             boolean typeCodesEmpty = (typeCodesParam == null || typeCodesParam.isEmpty());
-            YearRange yearRange = buildYearRange(request.getYear());
+            Integer queryYear = request.getYear();
 
             Integer pageSizeParam = request.getPageSize();
             int pageSize;
@@ -344,8 +339,7 @@ public class PlaceService {
                     polygonBounds.maxLon,
                     polygonBounds.minLat,
                     polygonBounds.maxLat,
-                    yearRange.start,
-                    yearRange.end,
+                    queryYear,
                     typeCodesParam,
                     typeCodesEmpty,
                     pageable
@@ -392,9 +386,7 @@ public class PlaceService {
                     // polygon 查询没有单一中心点，不返回距离。
                     poi.setDistance("");
 
-                    if (region.getTimestamp() != null) {
-                        poi.setYear(String.valueOf(region.getTimestamp().getYear()));
-                    }
+                    poi.setYear(String.valueOf(resolveRegionYear(region)));
 
                     return poi;
                 } catch (Exception e) {
@@ -464,20 +456,6 @@ public class PlaceService {
             double minLat,
             double maxLat,
             List<double[]> vertices
-    ) { }
-
-    private YearRange buildYearRange(Integer year) {
-        if (year == null) {
-            return new YearRange(null, null);
-        }
-        LocalDateTime start = LocalDateTime.of(year, 1, 1, 0, 0, 0);
-        LocalDateTime end = start.plusYears(1);
-        return new YearRange(start, end);
-    }
-
-    private record YearRange(
-            LocalDateTime start,
-            LocalDateTime end
     ) { }
 
     private boolean pointInPolygon(Double lon, Double lat, List<double[]> polygon) {

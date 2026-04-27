@@ -1,0 +1,80 @@
+from modules.agent.executor import validate_tool_arguments
+from modules.agent.tools import get_tool_registry
+from modules.providers.amap.utils.get_type_info import infer_type_info_from_text, resolve_type_info
+
+
+def test_get_tool_registry_exposes_stage1_tools():
+    registry = get_tool_registry()
+
+    assert {
+        "read_current_scope",
+        "read_current_results",
+        "fetch_pois_in_scope",
+        "build_h3_grid_from_scope",
+        "compute_h3_metrics_from_scope_and_pois",
+        "compute_population_overview_from_scope",
+        "compute_nightlight_overview_from_scope",
+        "compute_road_syntax_from_scope",
+        "get_area_data_bundle",
+        "analyze_poi_structure",
+        "analyze_spatial_structure",
+        "infer_area_labels",
+        "score_site_candidates",
+        "run_area_character_pack",
+        "run_site_selection_pack",
+        "read_poi_structure_analysis",
+        "analyze_target_supply_gap",
+        "run_business_site_advice",
+    }.issubset(set(registry.keys()))
+    assert registry["read_current_scope"].spec.readonly is True
+    assert registry["read_current_scope"].spec.input_schema["additionalProperties"] is False
+    assert registry["read_current_scope"].spec.output_schema["properties"]["has_scope"]["type"] == "boolean"
+    assert registry["read_current_scope"].spec.ui_tier == "foundation"
+    assert registry["read_current_results"].spec.llm_exposure == "primary"
+    assert registry["analyze_poi_structure"].spec.ui_tier == "capability"
+    assert registry["analyze_poi_structure"].spec.capability_type == "analyze"
+    assert registry["run_area_character_pack"].spec.ui_tier == "scenario"
+    assert registry["run_area_character_pack"].spec.scene_type == "area_character"
+    assert registry["run_area_character_pack"].spec.llm_exposure == "primary"
+    assert registry["run_site_selection_pack"].spec.scene_type == "site_selection"
+    assert registry["run_site_selection_pack"].spec.default_policy_key == "business_catchment_1km"
+    assert registry["read_poi_structure_analysis"].spec.readonly is True
+    assert registry["analyze_target_supply_gap"].spec.input_schema["required"] == ["place_type"]
+    assert registry["fetch_pois_in_scope"].spec.requires == ["scope_polygon"]
+    assert registry["fetch_pois_in_scope"].spec.input_schema["properties"]["source"]["enum"] == ["local", "gaode"]
+    assert registry["run_business_site_advice"].spec.layer == "L2"
+    assert registry["run_business_site_advice"].spec.cost_level == "expensive"
+    assert registry["run_business_site_advice"].spec.requires == ["scope_polygon"]
+    assert registry["compute_population_overview_from_scope"].spec.requires == ["scope_polygon"]
+    assert registry["compute_nightlight_overview_from_scope"].spec.requires == ["scope_polygon"]
+    assert registry["compute_h3_metrics_from_scope_and_pois"].spec.produces == [
+        "current_h3",
+        "current_h3_grid",
+        "current_h3_summary",
+        "current_h3_charts",
+    ]
+    assert registry["compute_road_syntax_from_scope"].spec.cost_level == "expensive"
+    assert registry["compute_road_syntax_from_scope"].spec.risk_level == "safe"
+
+
+def test_validate_tool_arguments_rejects_unknown_keys():
+    registry = get_tool_registry()
+    errors = validate_tool_arguments(
+        {"types": "050000", "unexpected": True},
+        registry["fetch_pois_in_scope"].spec.input_schema,
+    )
+
+    assert "arguments.unexpected 不允许出现" in errors
+
+
+def test_resolve_type_info_supports_aliases_for_site_advice():
+    coffee_by_label = resolve_type_info("咖啡厅")
+    coffee_by_alias = resolve_type_info("咖啡店")
+    inferred = infer_type_info_from_text("我想在这里开一家咖啡店，给我建议")
+
+    assert coffee_by_label is not None
+    assert coffee_by_alias is not None
+    assert inferred is not None
+    assert coffee_by_alias["types"] == coffee_by_label["types"]
+    assert inferred["keywords"] == "咖啡厅"
+    assert resolve_type_info("不存在的业态") is None

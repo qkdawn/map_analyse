@@ -376,6 +376,9 @@
                     "defaultChecked": true,
                     "types": "050000",
                     "keywords": "餐饮相关场所",
+                    "aliases": [
+                        "餐饮"
+                    ],
                     "point_type": "type-050000"
                 },
                 {
@@ -421,6 +424,10 @@
                     "defaultChecked": true,
                     "types": "050500|050501|050502|050503|050504",
                     "keywords": "咖啡厅",
+                    "aliases": [
+                        "咖啡店",
+                        "咖啡"
+                    ],
                     "point_type": "type-050500"
                 },
                 {

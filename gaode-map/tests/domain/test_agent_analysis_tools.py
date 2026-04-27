@@ -1,0 +1,177 @@
+import asyncio
+
+from modules.agent.schemas import AnalysisSnapshot
+from modules.agent.tool_adapters.analysis_tools import (
+    analyze_poi_mix_from_scope,
+    analyze_target_supply_gap_from_scope,
+    detect_commercial_hotspots_from_scope,
+    read_h3_structure_analysis,
+    read_nightlight_pattern_analysis,
+    read_poi_structure_analysis,
+    read_population_profile_analysis,
+    read_road_pattern_analysis,
+)
+
+
+def _snapshot() -> AnalysisSnapshot:
+    return AnalysisSnapshot(
+        poi_summary={"total": 120},
+        h3={"summary": {"grid_count": 12, "avg_density_poi_per_km2": 18.6}},
+        road={"summary": {"node_count": 3682, "edge_count": 4089}},
+        population={"summary": {"total_population": 54326.544, "male_ratio": 0.49, "female_ratio": 0.51}},
+        nightlight={"summary": {"total_radiance": 1316.555, "mean_radiance": 3.15, "max_radiance": 9.8, "lit_pixel_ratio": 1.0}},
+        frontend_analysis={
+            "poi": {
+                "category_stats": {
+                    "labels": ["餐饮", "购物", "科教文化", "住宿", "公司", "商务住宅"],
+                    "values": [1000, 565, 333, 274, 159, 113],
+                }
+            },
+            "h3": {
+                "derived_stats": {
+                    "structureSummary": {
+                        "rows": [
+                            {"h3_id": "a", "structure_signal": 2.1, "is_structure_signal": True, "density": 18.2, "poi_count": 60},
+                            {"h3_id": "b", "structure_signal": 1.8, "is_structure_signal": True, "density": 16.5, "poi_count": 42},
+                        ],
+                        "giZStats": {"mean": 1.2},
+                        "lisaIStats": {"mean": 0.6},
+                    },
+                    "typingSummary": {
+                        "rows": [
+                            {"h3_id": "a", "type_key": "high_mix", "is_opportunity": True, "density": 18.2},
+                            {"h3_id": "b", "type_key": "high_mix", "is_opportunity": True, "density": 16.5},
+                        ],
+                        "opportunityCount": 2,
+                        "recommendation": "优先排查高密-高混合且邻域为正的网格",
+                    },
+                    "gapSummary": {
+                        "rows": [
+                            {"h3_id": "a", "gap_zone_label": "高需求低供给", "gap_score": 0.42, "demand_pct": 0.85, "supply_pct": 0.43},
+                            {"h3_id": "b", "gap_zone_label": "中需求偏低供给", "gap_score": 0.28, "demand_pct": 0.73, "supply_pct": 0.45},
+                        ],
+                        "opportunityCount": 2,
+                        "recommendation": "咖啡优先关注高需求低供给",
+                    },
+                },
+                "target_category": "coffee",
+                "target_category_label": "咖啡",
+            },
+            "road": {
+                "metric": "choice",
+                "main_tab": "analysis",
+                "regression": {"r2": 0.62},
+            },
+            "population": {
+                "analysis_view": "age",
+                "age_distribution": [
+                    {"age_band_label": "25-34岁", "total": 12000},
+                    {"age_band_label": "35-44岁", "total": 9800},
+                ],
+                "layer_summary": {"top_dominant_age_band_label": "25-34岁", "dominant_cell_ratio": 0.37},
+            },
+            "nightlight": {
+                "analysis_view": "hotspot",
+                "analysis": {"core_hotspot_count": 4, "hotspot_cell_ratio": 0.33, "peak_radiance": 9.8, "max_distance_km": 1.8, "peak_to_edge_ratio": 2.6},
+                "legend_note": "地图轮廓仅表示热点边界",
+            },
+        },
+    )
+
+
+def test_read_tools_extract_structured_analysis_from_snapshot():
+    snapshot = _snapshot()
+
+    poi = asyncio.run(read_poi_structure_analysis(arguments={}, snapshot=snapshot, artifacts={}, question="总结"))
+    h3 = asyncio.run(read_h3_structure_analysis(arguments={}, snapshot=snapshot, artifacts={}, question="总结"))
+    road = asyncio.run(read_road_pattern_analysis(arguments={}, snapshot=snapshot, artifacts={}, question="总结"))
+    population = asyncio.run(read_population_profile_analysis(arguments={}, snapshot=snapshot, artifacts={}, question="总结"))
+    nightlight = asyncio.run(read_nightlight_pattern_analysis(arguments={}, snapshot=snapshot, artifacts={}, question="总结"))
+
+    assert poi.result["dominant_categories"][0] == "餐饮"
+    assert poi.result["evidence_ready"] is True
+    assert h3.result["distribution_pattern"] in {"single_core", "multi_core", "corridor"}
+    assert h3.result["evidence_ready"] is True
+    assert road.result["regression_r2"] == 0.62
+    assert road.result["evidence_ready"] is True
+    assert population.result["top_age_band"] == "25-34岁"
+    assert population.result["evidence_ready"] is True
+    assert nightlight.result["core_hotspot_count"] == 4
+    assert nightlight.result["evidence_ready"] is True
+
+
+def test_explanation_tools_build_business_hotspot_and_gap_artifacts():
+    snapshot = _snapshot()
+    artifacts = {
+        "current_poi_structure_analysis": asyncio.run(
+            read_poi_structure_analysis(arguments={}, snapshot=snapshot, artifacts={}, question="总结")
+        ).result,
+        "current_h3_structure_analysis": asyncio.run(
+            read_h3_structure_analysis(arguments={}, snapshot=snapshot, artifacts={}, question="总结")
+        ).result,
+        "current_h3_grid": {
+            "type": "FeatureCollection",
+            "count": 2,
+            "features": [
+                {
+                    "type": "Feature",
+                    "geometry": {
+                        "type": "Polygon",
+                        "coordinates": [[[112.9800, 28.1900], [112.9810, 28.1900], [112.9810, 28.1910], [112.9800, 28.1910], [112.9800, 28.1900]]],
+                    },
+                    "properties": {"h3_id": "a"},
+                },
+                {
+                    "type": "Feature",
+                    "geometry": {
+                        "type": "Polygon",
+                        "coordinates": [[[112.9820, 28.1920], [112.9830, 28.1920], [112.9830, 28.1930], [112.9820, 28.1930], [112.9820, 28.1920]]],
+                    },
+                    "properties": {"h3_id": "b"},
+                },
+            ],
+        },
+        "current_pois": [
+            {"lng": 112.9804, "lat": 28.1905, "name": "星巴克", "type": "poi", "lines": ["人民路"]},
+            {"lng": 112.9824, "lat": 28.1925, "name": "万达广场", "type": "poi", "lines": ["黄兴路"]},
+        ],
+    }
+
+    mix = asyncio.run(analyze_poi_mix_from_scope(arguments={}, snapshot=snapshot, artifacts=artifacts, question="总结"))
+    hotspots = asyncio.run(
+        detect_commercial_hotspots_from_scope(arguments={}, snapshot=snapshot, artifacts=artifacts, question="核心在哪")
+    )
+    gap = asyncio.run(
+        analyze_target_supply_gap_from_scope(
+            arguments={"place_type": "咖啡厅"},
+            snapshot=snapshot,
+            artifacts=artifacts,
+            question="这里适合开咖啡吗",
+        )
+    )
+
+    assert mix.result["business_profile"] in {"生活消费主导", "综合服务混合", "商务消费复合"}
+    assert hotspots.result["core_zone_count"] >= 1
+    assert gap.result["place_type"] == "咖啡厅"
+    assert gap.result["supply_gap_level"] in {"medium", "high"}
+    assert len(gap.result["candidate_zones"]) >= 1
+    assert gap.result["candidate_zones"][0]["approx_address"]
+
+
+def test_read_tools_degrade_gracefully_when_frontend_analysis_missing():
+    snapshot = AnalysisSnapshot()
+
+    poi = asyncio.run(read_poi_structure_analysis(arguments={}, snapshot=snapshot, artifacts={}, question="总结"))
+    h3 = asyncio.run(read_h3_structure_analysis(arguments={}, snapshot=snapshot, artifacts={}, question="总结"))
+    population = asyncio.run(read_population_profile_analysis(arguments={}, snapshot=snapshot, artifacts={}, question="总结"))
+
+    assert poi.status == "success"
+    assert poi.result["summary_text"]
+    assert poi.result["data_status"] == "empty"
+    assert poi.result["evidence_ready"] is False
+    assert h3.result["distribution_pattern"] == "weak_signal"
+    assert h3.result["data_status"] == "empty"
+    assert h3.result["evidence_ready"] is False
+    assert population.result["summary_text"]
+    assert population.result["data_status"] == "empty"
+    assert population.result["evidence_ready"] is False

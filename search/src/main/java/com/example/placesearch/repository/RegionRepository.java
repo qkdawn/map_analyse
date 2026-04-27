@@ -6,7 +6,6 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
-import java.time.LocalDateTime;
 import java.util.List;
 
 public interface RegionRepository extends JpaRepository<Region, String> {
@@ -26,7 +25,7 @@ public interface RegionRepository extends JpaRepository<Region, String> {
                     "POWER(SIN(RADIANS(r.marlon - :lon) / 2), 2)" +
                     "))" +
                     ")) <= :radius " +
-                    "AND (:yearStart IS NULL OR (r.timestamp >= :yearStart AND r.timestamp < :yearEnd)) " +
+                    "AND (:year IS NULL OR r.`year` = :year OR (:year = 2020 AND r.`year` IS NULL)) " +
                     "AND (:typeCodesEmpty = true OR r.typecode IN (:typeCodes))",
             nativeQuery = true
     )
@@ -34,8 +33,7 @@ public interface RegionRepository extends JpaRepository<Region, String> {
             @Param("lon") double lon,
             @Param("lat") double lat,
             @Param("radius") double radius,
-            @Param("yearStart") LocalDateTime yearStart,
-            @Param("yearEnd") LocalDateTime yearEnd,
+            @Param("year") Integer year,
             @Param("typeCodes") List<String> typeCodes,
             @Param("typeCodesEmpty") boolean typeCodesEmpty,
             Pageable pageable
@@ -43,12 +41,11 @@ public interface RegionRepository extends JpaRepository<Region, String> {
 
     @Query("SELECT r FROM Region r " +
             "WHERE r.cityname = :cityname " +
-            "AND (:yearStart IS NULL OR (r.timestamp >= :yearStart AND r.timestamp < :yearEnd)) " +
+            "AND (:year IS NULL OR r.year = :year OR (:year = 2020 AND r.year IS NULL)) " +
             "AND (:typeCodes IS NULL OR r.typecode IN :typeCodes)")
     List<Region> findByCityAndFilters(
             @Param("cityname") String cityname,
-            @Param("yearStart") LocalDateTime yearStart,
-            @Param("yearEnd") LocalDateTime yearEnd,
+            @Param("year") Integer year,
             @Param("typeCodes") List<String> typeCodes,
             Pageable pageable
     );
@@ -58,7 +55,7 @@ public interface RegionRepository extends JpaRepository<Region, String> {
                     "WHERE r.marlon IS NOT NULL AND r.marlat IS NOT NULL " +
                     "AND r.marlon BETWEEN :minLon AND :maxLon " +
                     "AND r.marlat BETWEEN :minLat AND :maxLat " +
-                    "AND (:yearStart IS NULL OR (r.timestamp >= :yearStart AND r.timestamp < :yearEnd)) " +
+                    "AND (:year IS NULL OR r.`year` = :year OR (:year = 2020 AND r.`year` IS NULL)) " +
                     "AND (:typeCodesEmpty = true OR r.typecode IN (:typeCodes)) " +
                     "AND ST_Intersects(" +
                     "ST_GeomFromText(:polygonWkt), " +
@@ -72,8 +69,7 @@ public interface RegionRepository extends JpaRepository<Region, String> {
             @Param("maxLon") double maxLon,
             @Param("minLat") double minLat,
             @Param("maxLat") double maxLat,
-            @Param("yearStart") LocalDateTime yearStart,
-            @Param("yearEnd") LocalDateTime yearEnd,
+            @Param("year") Integer year,
             @Param("typeCodes") List<String> typeCodes,
             @Param("typeCodesEmpty") boolean typeCodesEmpty,
             Pageable pageable
@@ -84,7 +80,7 @@ public interface RegionRepository extends JpaRepository<Region, String> {
                     "WHERE r.marlon IS NOT NULL AND r.marlat IS NOT NULL " +
                     "AND r.marlon BETWEEN :minLon AND :maxLon " +
                     "AND r.marlat BETWEEN :minLat AND :maxLat " +
-                    "AND (:yearStart IS NULL OR (r.timestamp >= :yearStart AND r.timestamp < :yearEnd)) " +
+                    "AND (:year IS NULL OR r.`year` = :year OR (:year = 2020 AND r.`year` IS NULL)) " +
                     "AND (:typeCodesEmpty = true OR r.typecode IN (:typeCodes))",
             nativeQuery = true
     )
@@ -93,8 +89,7 @@ public interface RegionRepository extends JpaRepository<Region, String> {
             @Param("maxLon") double maxLon,
             @Param("minLat") double minLat,
             @Param("maxLat") double maxLat,
-            @Param("yearStart") LocalDateTime yearStart,
-            @Param("yearEnd") LocalDateTime yearEnd,
+            @Param("year") Integer year,
             @Param("typeCodes") List<String> typeCodes,
             @Param("typeCodesEmpty") boolean typeCodesEmpty,
             Pageable pageable

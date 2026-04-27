@@ -1,0 +1,202 @@
+.analysis-layout-root .population-raster-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.analysis-layout-root .population-basic-copy {
+  font-size: 13px;
+  line-height: 1.6;
+  color: #475569;
+}
+
+.analysis-layout-root .population-basic-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.analysis-layout-root .population-panel-section {
+  border: 1px solid #e5eaf3;
+  border-radius: 12px;
+  padding: 12px;
+  background: #fff;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.04);
+}
+
+.analysis-layout-root .population-panel-section-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.analysis-layout-root .population-panel-section-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #334155;
+}
+
+.analysis-layout-root .population-panel-section-subtitle {
+  margin-top: 2px;
+  font-size: 20px;
+  line-height: 1.2;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.analysis-layout-root .population-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.analysis-layout-root .population-summary-card {
+  min-width: 0;
+  border: 1px solid #e5edf3;
+  border-radius: 12px;
+  padding: 10px;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+}
+
+.analysis-layout-root .population-summary-card-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+}
+
+.analysis-layout-root .population-summary-card-value {
+  margin-top: 6px;
+  font-size: 20px;
+  line-height: 1.15;
+  font-weight: 700;
+  color: #0f172a;
+  word-break: break-word;
+}
+
+.analysis-layout-root .population-legend-card {
+  border: 1px solid #e5edf3;
+  border-radius: 12px;
+  padding: 12px;
+  background: #fbfdff;
+}
+
+.analysis-layout-root .population-legend-title {
+  font-size: 12px;
+  color: #334155;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.analysis-layout-root .population-legend-gradient {
+  height: 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+}
+
+.analysis-layout-root .population-legend-grid {
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 10px;
+}
+
+.analysis-layout-root .population-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: 11px;
+  color: #475569;
+}
+
+.analysis-layout-root .population-legend-swatch {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  border: 1px solid rgba(148, 163, 184, 0.45);
+  flex: 0 0 auto;
+}
+
+.analysis-layout-root .population-analysis-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.analysis-layout-root .population-analysis-card {
+  border: 1px solid #e5edf3;
+  border-radius: 12px;
+  padding: 10px;
+  background: #ffffff;
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.04);
+}
+
+.analysis-layout-root .population-analysis-card-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+}
+
+.analysis-layout-root .population-analysis-card-value {
+  margin-top: 6px;
+  font-size: 18px;
+  line-height: 1.15;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.analysis-layout-root .population-view-tabs {
+  margin-top: 6px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.analysis-layout-root .population-view-control-row {
+  margin-top: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.analysis-layout-root .population-inline-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #475569;
+}
+
+.analysis-layout-root .population-inline-note {
+  font-size: 12px;
+  color: #64748b;
+}
+
+.analysis-layout-root .h3-btn-ghost.is-active {
+  border-color: #c5d8fb;
+  background: linear-gradient(180deg, #f8fbff 0%, #eef5ff 100%);
+  color: #1d4ed8;
+  box-shadow: 0 4px 10px rgba(59, 130, 246, 0.12);
+}
+
+@media (max-width: 640px) {
+  .analysis-layout-root .population-view-tabs,
+  .analysis-layout-root .population-summary-grid,
+  .analysis-layout-root .population-analysis-grid,
+  .analysis-layout-root .population-legend-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .analysis-layout-root .population-view-control-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .analysis-layout-root .population-inline-field {
+    width: 100%;
+    justify-content: space-between;
+  }
+}

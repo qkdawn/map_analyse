@@ -18,8 +18,8 @@
 
 | 层级 | 组件 | 技术选型 | 理由 |
 | :--- | :--- | :--- | :--- |
-| **前端** | UI 框架 | **原生 HTML5 + ES Modules** | 零构建，极速启动原型开发。 |
-| | CSS 框架 | **Tailwind CSS** (CDN) | 快速样式开发。 |
+| **前端** | UI 框架 | **Vue 3 + TypeScript (Vite)** | 模块边界清晰，便于持续演进。 |
+| | 样式 | **项目内样式系统（兼容层保留历史 CSS）** | 兼容迁移期与新前端并行。 |
 | | 地图引擎 | **高德 JS API 2.0 (AMap)** | 国内数据覆盖最全。 |
 | | 可视化 | **ECharts** | 强大的分析图表支持。 |
 | **后端** | Web 框架 | **FastAPI** (Python 3.10+) | 高性能，原生支持异步。 |
@@ -27,7 +27,7 @@
 | | 几何计算 | **Shapely** | 稳健的多边形/几何运算库。 |
 | | 空间分析 | **PySAL** (`esda`, `mgwr`) | 科学严谨的空间计量经济学库。 |
 | **数据** | 主存储 | **MySQL 8.0** | 持久化存储 POI 数据 (WGS84)。 |
-| | 缓存/历史 | **SQLite** | 存储分析历史、去重 Hash、统计结果。 |
+| | 缓存/历史 | **MySQL** | 存储分析历史、去重 Hash、统计结果。 |
 
 ## 3. 模块设计 (Python Packages)
 
@@ -40,9 +40,9 @@
         # 2. 调用等时圈引擎 (Valhalla, WGS84)
         # 3. 返回 WGS84 多边形，出接口时再转回 GCJ02
     ```
-*   **依赖**：`gaode_service` (仅用于原始 API 调用)。
+*   **依赖**：`modules.providers.amap` (Provider 层统一封装)。
 
-### 3.2 `modules.grid_h3` (H3 网格服务)
+### 3.2 `modules.h3` (H3 网格服务)
 *   **职责**：纯几何的空间分箱/填充逻辑。
 *   **接口定义**：
     ```python
@@ -55,15 +55,15 @@
 ### 3.3 `modules.poi` (POI 数据服务)
 *   **职责**：数据编排与流转。
 *   **工作流**：
-    1.  **查缓存**: 检查 SQLite 是否有该参数 Hash 的统计结果。
+    1.  **查缓存**: 检查 MySQL 是否有该参数 Hash 的统计结果。
     2.  **Fetch & Transform**: 若未命中，调高德 API -> 获 GCJ02 -> **转 WGS84** 存库。
     3.  **Fast Return**: 优先将 **GCJ02 POI** 返回给前端（保证用户体验）。
     4.  **Background Task (异步落库)**:
         *   启动后台任务调用 `dao.save_pois_async(pois)`。
         *   **策略**: MySQL `UPSERT` (Insert on Duplicate Key Update)，使用 `amap_id` 作为唯一键进行**去重**。
-    5.  **Save Stats**: 计算统计指标 -> 存入 SQLite。
+    5.  **Save Stats**: 计算统计指标 -> 存入 MySQL。
 
-### 3.4 `modules.analysis` (空间分析服务)
+### 3.4 `modules.road` / `modules.export` (空间分析与导出服务)
 *   **职责**：科学计算。
 *   **输入**: 带有聚合属性（如 POI 计数）的六边形列表。
 *   **核心功能**:
@@ -81,46 +81,44 @@
 *   `location`: Point (WGS84, 空间索引)
 *   `properties`: JSON (存储额外属性)
 
-### 4.2 SQLite (缓存层)
+### 4.2 MySQL (缓存/历史层)
 表名: `analysis_history`
 *   `hash`: String (参数 Hash: MD5 of center+time+mode)
 *   `created_at`: Datetime
 *   `result_stats`: JSON (例: `{"food": 50, "transport": 20}`)
 *   `grid_data`: JSON (六边形的 GeoJSON 数据)
 
-## 5. 目录结构
+## 5. 目录结构（2026-03 规范化）
 
 ```text
 gaode-map/
-├── main.py                  # FastAPI 入口
-├── config.py                # 环境变量配置
+├── core/                    # 配置、异常、通用模型
+├── router/                  # 路由聚合与依赖注入
 ├── modules/
-│   ├── __init__.py
-│   ├── isochrone/           # 等时圈模块
-│   │   ├── core.py
-│   │   └── adapter.py       # 高德适配层
-│   ├── grid_h3/             # H3 网格模块
-│   │   └── core.py
-│   ├── poi/                 # POI 数据模块
-│   │   ├── manager.py
-│   │   └── dao.py           # 数据库访问层 (MySQL/SQLite)
-│   └── analysis/            # 分析模块
-│   │   └── pysal_engine.py
-├── router/
-│   ├── api.py               # REST 接口路由
-│   └── views.py             # 页面路由
-└── static/
-    ├── css/
-    ├── js/
-    │   ├── map.js           # 高德地图逻辑封装
-    │   ├── api.js           # 后端接口调用封装
-    │   └── ui.js            # 侧边栏与图表控制器
-    └── index.html
+│   ├── admin/
+│   ├── isochrone/
+│   ├── poi/
+│   ├── h3/                  # H3 分析实现
+│   ├── road/                # 路网分析实现
+│   ├── export/              # 导出打包实现
+│   └── providers/
+│       └── amap/            # AMap Provider 实现
+├── store/                   # 数据库与仓储
+├── frontend/                # Vite + Vue3 + TS
+├── templates/               # 兼容层模板
+├── static/                  # 兼容层静态资源
+└── tests/
+    ├── api/
+    ├── domain/
+    ├── integration/
+    └── e2e/
 ```
 
-## 6. 前端架构 (原生 ES Modules)
+## 6. 前端架构 (Vite + Vue3 + TS)
 
-*   `index.html`: 布局骨架 (侧边栏 + 地图容器)。直接引入 `type="module"` 的 `main.js`。
-*   `config.js`: API 基础路径配置。
-*   `state.js`: 简单的 `EventTarget` 全局状态管理，用于同步地图与侧边栏。
-*   `map_controller.js`: 封装 `AMap` 实例。暴露 `renderHexagons()` 等高层方法，屏蔽地图 API 细节。
+*   `/analysis`：由 `frontend` 构建产物入口承载（`/static/frontend/index.html`）。
+*   `frontend/src/main.ts`：Vue 应用入口。
+*   `frontend/src/pages/analysis/App.vue`：analysis 页面壳与初始化流程（通过 `/api/v1/config` 拉配置）。
+*   analysis 主链代码统一在 `frontend/src/features` 与 `frontend/src/map`。
+*   旧模板入口 `templates/analysis.html` 与 `static/js/analysis/**` 已下线。
+*   `/map` 页面仍保留兼容脚本：`static/js/map/*`（仅用于 map 模板链路）。

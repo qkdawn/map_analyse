@@ -1,98 +1,119 @@
-### 说明
-- fastapi开发的高德/本地map后端 + 使用html原生jinjia2模板开发的高德地图
-- 请确保安装核心依赖: `pip install -r requirements.txt` (包含 `h3` 网格计算库)
-- 空间句法路网分析已切换为 `depthmapXcli` 引擎，请确保已安装并在 `.env` 配置 `DEPTHMAPX_CLI_PATH`
+# gaode-map
 
-### Docker 一键部署（含 depthmapXcli）
-- 镜像已在 `docker/Dockerfile` 内自动安装 `depthmapXcli`（默认 `v0.8.0`）。
-- 云端部署前至少配置 `.env` 的 `AMAP_WEB_SERVICE_KEY`。
-- 启动命令：
-```bash
-docker compose up -d --build
-```
-- 如果需要切换 depthmapX 版本：
-```bash
-docker compose build --build-arg DEPTHMAPX_VERSION=v0.8.0 app
-docker compose up -d
-```
-- `valhalla` 的 `custom_files` 挂载目录可通过环境变量覆盖：
-```bash
-export VALHALLA_CUSTOM_FILES_DIR='D:\MapData\osm_source'
-docker compose up -d
-```
-- 路网句法分析仅使用本地/私有 Overpass。请在 `.env` 配置：
-```bash
-OVERPASS_ENDPOINT=http://overpass/api/interpreter
-```
-  说明：建议 Overpass 和 Valhalla 使用同一份 OSM 源数据（同一批 PBF），这样等时圈与句法路网是一致同源的。
+## 1. 当前状态
+- 后端：FastAPI（`main.py`）
+- 前端：Vue 3 + Vite（`frontend/`）
+- Analysis 主链路：`/analysis`（返回 `static/frontend/index.html`）
+- Legacy：`/analysis-legacy` 已下线
+- 运行时图表产物目录：`runtime/generated_charts/`
 
-### 本地 Overpass（句法路网）配置
-1. 将 `*.osm.pbf` 放到外部目录（建议 `D:\MapData\osm_source`），文件名与 `.env` 中 `OVERPASS_PBF_FILE` 一致（默认 `hunan-260201.osm.pbf`）。
-2. Overpass 持久化目录建议使用独立外部目录（如 `D:\MapData\overpass_db`，首次导入会写入大量索引文件）。
-3. 确认 `.env`：
+## 2. 目录（核心）
+- `core/`：配置、异常、通用模型；跨业务域共享空间工具集中在 `core/spatial.py`
+- `router/`：HTTP 路由聚合（按 domain 拆分）
+- `modules/`：业务域实现（`poi`/`population`/`nightlight`/`h3`/`road`/`isochrone`/`export`/`providers`）
+- `store/`：数据库与仓储
+- `frontend/`：前端源码（Vite 构建）
+- `static/frontend/`：前端构建产物（由 Vite 输出）
+- `runtime/`：运行时数据（图表、临时文件）
+- `../scripts/check_repo_hygiene.sh`：仓库卫生检查
+- `tests/`：`api` / `domain` / `integration` / `e2e`
+
+## 3. 本地启动
+
+### 3.1 后端依赖
 ```bash
-OVERPASS_ENDPOINT=http://overpass/api/interpreter
-OVERPASS_PBF_FILE=hunan-260201.osm.pbf
-DEPTHMAPX_CLI_PATH=/usr/local/bin/depthmapXcli
-VALHALLA_SERVER_THREADS=2
-VALHALLA_CUSTOM_FILES_DIR=D:\MapData\osm_source
-VALHALLA_TILES_DIR=D:\MapData\valhalla_tiles
-OVERPASS_DB_DIR=D:\MapData\overpass_db
-OVERPASS_SOURCE_DIR=D:\MapData\osm_source
+cd /mnt/d/Coding/map_analyse/gaode-map
+uv sync
+# 或: pip install -r requirements.txt
 ```
-   这样 Valhalla 与 Overpass 会共用同一份 PBF（同源），但各自输出目录独立。
-4. 启动：
+- `uv sync` 负责安装/同步依赖
+- 测试执行统一使用 `bash ../scripts/run_pytest.sh ...`，避免在 WSL/沙箱环境下依赖 `uv run pytest`
+
+### 3.2 前端构建
 ```bash
-docker compose up -d --build
-```
-5. 首次导入完成后可用此地址自测：
-```bash
-http://localhost:8003/api/interpreter
+cd /mnt/d/Coding/map_analyse/gaode-map/frontend
+npm install
+npm run build
 ```
 
-### 天地图本地开发配置
-- `TIANDITU_KEY` 只需要配置在 `.env`，例如：`TIANDITU_KEY=your_tianditu_key`。
-- 当前前端“天地图底图”采用 `WMTS over AMap`（通过高德容器承载天地图瓦片），会请求 `vec_w`（底图）+ `cva_w`（注记）两层。
-- 本地开发白名单模板（天地图控制台中配置 Referer/域名白名单）：
-  - `localhost`
-  - `127.0.0.1`
-  - `localhost:8000`
-  - `127.0.0.1:8000`
-- `0.0.0.0` 仅用于服务监听（如 `APP_HOST=0.0.0.0`），不是 Referer 白名单值。
-- 天地图链路不需要像高德 JS 一样额外配置 `security code`。
+### 3.3 启动服务
+```bash
+cd /mnt/d/Coding/map_analyse/gaode-map
+uv run uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+```
 
-### 📚 接口文档 (API Reference)
+### 3.4 Docker 开发模式
+```bash
+cd /mnt/d/Coding/map_analyse/gaode-map
+docker compose up --build
+```
+- 仅启动后端及其依赖服务，不再单独启动前端构建容器
+- 因为开发 Compose 会把项目目录挂进容器，启动前请先在宿主机执行一次 `npm run build`，确保 `static/frontend/` 已生成
+- `static/frontend/` 是部署产物，继续保持 `.gitignore`
 
-本项目提供 REST API，主要分为分析、地图管理和后台管理三类。
+## 4. 访问入口
+- `http://localhost:8000/analysis`：分析工作台
+- `http://localhost:8000/map?...`：常规地图页
+- `http://localhost:8000/docs`：OpenAPI 文档
+- `http://localhost:8000/health`：健康检查
 
-#### 1. 核心分析 API
-| 方法 | 路径 | 描述 | 参数示例 |
-| :--- | :--- | :--- | :--- |
-| `POST` | `/api/v1/analysis/pois` | **抓取 POI 数据**<br>根据多边形范围抓取高德 POI | `{ "polygon": [[120,30]...], "keywords": "咖啡", "types": "050000" }` |
-| `POST` | `/api/v1/analysis/isochrone` | **生成等时圈**<br>计算如“15分钟步行范围”的多边形 | `{ "lat": 30.1, "lon": 120.2, "time_min": 15, "mode": "walking" }` |
-| `POST` | `/api/v1/analysis/h3-grid` | **生成 H3 网络**<br>将等时圈 polygon 转换为可渲染网格 GeoJSON | `{ "polygon": [[120,30]...], "resolution": 10, "coord_type": "gcj02", "include_mode": "intersects", "min_overlap_ratio": 0.15 }` |
-| `POST` | `/api/v1/analysis/h3-metrics` | **计算 H3 网格分析**<br>对 POI 做网格聚合并返回密度/熵/邻域指标与图表数据 | `{ "polygon": [[120,30]...], "resolution": 10, "pois": [...], "neighbor_ring": 1 }` |
-| `GET` | `/api/v1/analysis/history` | **获取分析历史**<br>查看之前的抓取记录 | `?limit=20` |
+## 5. 主要接口（分析链路）
+- `GET /api/v1/config`
+- `POST /api/v1/analysis/isochrone`
+- `POST /api/v1/analysis/pois`
+- `POST /api/v1/analysis/h3-grid`
+- `POST /api/v1/analysis/h3-metrics`
+- `POST /api/v1/analysis/road-syntax`
+- `GET /api/v1/analysis/road-syntax/progress`
+- `POST /api/v1/analysis/export/bundle`
+- `GET /api/v1/analysis/history`
+- `GET /api/v1/analysis/history/{id}`
 
-#### 2. 地图管理 API
-| 方法 | 路径 | 描述 | 参数示例 |
-| :--- | :--- | :--- | :--- |
-| `POST` | `/api/v1/generate-map` | **生成地图数据**<br>抓取并缓存基础地图数据 | `{ "place": "西湖区", "type": "city" }` |
-| `GET` | `/api/v1/config` | **获取前端配置**<br>获取 API Key 等公开配置 | 无 |
+## 6. 关键环境变量
+- 地图：`AMAP_WEB_SERVICE_KEY`、`AMAP_JS_API_KEY`、`AMAP_JS_SECURITY_CODE`、`TIANDITU_KEY`
+- 路网/等时圈：`DEPTHMAPX_CLI_PATH`、`OVERPASS_ENDPOINT`、`VALHALLA_BASE_URL`
+- 人口分析：`POPULATION_DATA_DIR`、`POPULATION_PREVIEW_MAX_SIZE`
+- 夜光分析：`NIGHTLIGHT_DATA_DIR`、`NIGHTLIGHT_PREVIEW_MAX_SIZE`
+- 数据库：`DB_URL`（必填，MySQL 连接字符串）
+- 图表输出目录覆盖：`CHART_OUTPUT_DIR`（可选，默认 `runtime/generated_charts/`）
 
-#### 3. 后台管理 API
-| 方法 | 路径 | 描述 | 权限 |
-| :--- | :--- | :--- | :--- |
-| `GET` | `/api/v1/admin/maps` | **地图列表**<br>查看所有缓存的地图数据 | Admin |
-| `DELETE` | `/api/v1/admin/maps/{id}` | **删除地图**<br>清理过期的地图缓存 | Admin |
+### 人口数据目录
+- Docker 启动时，默认把宿主机 `E:/PeopleData` 挂到容器内 `/mapdata/population`
+- Docker 启动时，默认把宿主机 `E:/NightlightData` 挂到容器内 `/mapdata/nightlight`
+- 可通过 `POPULATION_DATA_HOST_DIR` 覆盖宿主机目录
+- 容器内应用读取目录由 `POPULATION_DATA_DIR` 控制，默认 `/mapdata/population`
+- 夜光处理后目录由 `NIGHTLIGHT_DATA_DIR` 控制，默认 `/mapdata/nightlight/processed`
 
-更多接口详情，启动服务后访问在线文档：
-`http://localhost:8000/docs`
+## 7. 测试与仓库卫生
+```bash
+cd /mnt/d/Coding/map_analyse/gaode-map
+bash ../scripts/run_pytest.sh
+bash ../scripts/run_pytest.sh tests/domain/test_poi_query_limit.py
+bash ../scripts/run_pytest.sh tests/domain
+bash ../scripts/check_repo_hygiene.sh
+```
+- 当前仓库默认通过 `pytest.ini` 使用 `-q -s -p no:cacheprovider`
+- `../scripts/run_pytest.sh` 会为每次运行设置独立的 Linux 临时目录和 `--basetemp`，减少 WSL/沙箱环境下的 capture 临时文件问题
+- `../scripts/run_pytest.sh` 默认设置 `PYTHONDONTWRITEBYTECODE=1`，避免测试运行污染仓库内 `__pycache__/` 和 `*.pyc`
 
-### ✅ 测试入口
-- 当前主要的测试/演示流程集中在 **工作台页面**：`/analysis`
-- 地图生成与展示仍可通过 `/map` 相关接口/页面验证
+## 8. 维护约束
+- `router/*` 只保留 HTTP 边界、依赖注入和响应编排；采样、几何裁剪、坐标转换、缓存键生成等逻辑统一下沉到 `modules/*` 或 `core/*`。
+- 共享空间逻辑统一收敛到 `core/spatial.py`，不要在 `population`、`nightlight`、`road`、`isochrone`、`poi` 中复制 polygon/坐标处理变体。
+- 空间业务新增代码优先落到 `facade`、`dataset`、`render`、`aggregate`、`bridge`、`cache`、`geometry`、`overpass` 等现有子职责文件，不继续扩写热点单文件。
+- `modules/road/core.py` 只保留 facade 编排；Depthmap 命令、指标统计、GeoJSON/WebGL 序列化、进度状态分别维护在 `depthmap.py`、`metrics.py`、`serialize.py`、`progress.py`。
+- `modules/h3/analysis.py` 只保留 facade 编排；类别规则、统计计算、ArcGIS 桥接封装分别维护在 `category_rules.py`、`stats.py`、`arcgis_facade.py`。
+- `modules/history/service.py` 是 history 业务规则入口；`store/history_repo.py` 只保留 CRUD/查询，不再承载覆盖、去重和坐标恢复策略。
+- 仓库卫生检查会校验热点文件体量阈值与运行时垃圾文件，提交前执行 `bash ../scripts/check_repo_hygiene.sh`。
 
-### 数据库
-- 支持 **SQLite** (默认, 本地开发) 和 **MySQL** (生产环境, 推荐)。
-- 详见 `DEPLOY_MYSQL.md` 配置指南。
+## 9. Docker
+```bash
+cd /mnt/d/Coding/map_analyse/gaode-map
+docker compose -f docker-compose.prod.yml up -d --build
+```
+- 生产镜像会在 Docker 多阶段构建中自动执行前端 `npm ci` 和 `npm run build`
+- 运行容器直接加载镜像内的 `static/frontend/`，不依赖宿主机预先打包
+
+### 9.1 构建产物约定
+- `frontend/` 存放 Vue + Vite 源码
+- `static/frontend/` 存放部署产物，由 Vite 输出
+- 部署产物不应提交到仓库；本地缺失时可通过 `npm run build` 或 Docker 构建重新生成

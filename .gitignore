@@ -31,3 +31,6 @@ target/
 # Backup and temporary files
 .git-backup/
 *.bak
+
+# Windows reserved device file that breaks git indexing
+NUL

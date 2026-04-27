@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from .schemas import (
+    ArcGISGwrRequest,
     ArcGISH3AnalyzeRequest,
     ArcGISH3ExportRequest,
     ArcGISRoadSyntaxWebGLRequest,
@@ -226,11 +227,13 @@ class ArcGISRunner:
         script_path: str,
         export_script_path: str = "",
         road_syntax_script_path: str = "",
+        gwr_script_path: str = "",
     ):
         self.default_python_path = str(default_python_path or "").strip()
         self.script_path = str(script_path or "").strip()
         self.export_script_path = str(export_script_path or "").strip()
         self.road_syntax_script_path = str(road_syntax_script_path or "").strip()
+        self.gwr_script_path = str(gwr_script_path or "").strip()
         self.analyze_cache_ttl_sec = max(0, int(os.getenv("ARCGIS_ANALYZE_CACHE_TTL_SEC", "900") or 900))
         self.analyze_cache_max_entries = max(4, int(os.getenv("ARCGIS_ANALYZE_CACHE_MAX_ENTRIES", "32") or 32))
         self._analyze_cache: Dict[str, Dict[str, Any]] = {}
@@ -265,6 +268,14 @@ class ArcGISRunner:
             raise ArcGISRunnerError("ARCGIS_ROAD_SYNTAX_SCRIPT_PATH is empty")
         if not _path_exists_cross_platform(script_path):
             raise ArcGISRunnerError(f"ArcGIS road-syntax script not found: {script_path}")
+        return script_path
+
+    def _resolve_gwr_script_path(self) -> str:
+        script_path = str(self.gwr_script_path or "").strip()
+        if not script_path:
+            raise ArcGISRunnerError("ARCGIS_GWR_SCRIPT_PATH is empty")
+        if not _path_exists_cross_platform(script_path):
+            raise ArcGISRunnerError(f"ArcGIS GWR script not found: {script_path}")
         return script_path
 
     def _run_subprocess(self, cmd: List[str], timeout_sec: int) -> subprocess.CompletedProcess:
@@ -583,6 +594,90 @@ class ArcGISRunner:
                 "elapsed_ms": round(float(elapsed_ms), 2),
                 "stderr": proc.stderr.strip(),
                 "stdout": proc.stdout.strip(),
+            }
+        finally:
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+
+    def run_gwr(self, req: ArcGISGwrRequest, trace_id: str) -> Dict[str, Any]:
+        rows = list(req.rows or [])
+        if not rows:
+            raise ArcGISRunnerError("GWR rows is empty")
+
+        python_path = self._resolve_python_path(req.arcgis_python_path)
+        script_path = self._resolve_gwr_script_path()
+        use_windows_path_args = _needs_windows_path_args(python_path)
+
+        payload = {
+            "rows": rows,
+            "dependent_variable": str(req.dependent_variable or "nightlight_radiance"),
+            "variables": list(req.variables or []),
+        }
+
+        tmp_dir = tempfile.mkdtemp(prefix=f"arcgis_gwr_{trace_id}_")
+        started_at = time.perf_counter()
+        try:
+            input_path = Path(tmp_dir) / "input.json"
+            output_path = Path(tmp_dir) / "output.json"
+            input_path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+
+            cmd = [
+                _to_executable_path(python_path),
+                _to_subprocess_path(script_path, use_windows_path_args),
+                "--input",
+                _to_subprocess_path(str(input_path), use_windows_path_args),
+                "--output",
+                _to_subprocess_path(str(output_path), use_windows_path_args),
+            ]
+
+            try:
+                proc = subprocess.run(
+                    cmd,
+                    capture_output=True,
+                    text=True,
+                    encoding="utf-8",
+                    errors="ignore",
+                    timeout=int(req.timeout_sec),
+                    check=False,
+                )
+            except subprocess.TimeoutExpired as exc:
+                raise ArcGISRunnerTimeout(f"ArcGIS subprocess timeout after {int(req.timeout_sec)}s") from exc
+
+            output: Dict[str, Any] = {}
+            if output_path.exists():
+                try:
+                    output = json.loads(output_path.read_text(encoding="utf-8"))
+                except Exception as exc:
+                    if proc.returncode != 0:
+                        err_msg = proc.stderr.strip() or proc.stdout.strip() or "ArcGIS GWR output JSON parse failed"
+                        raise ArcGISRunnerError(f"ArcGIS subprocess failed({proc.returncode}): {err_msg}") from exc
+                    raise ArcGISRunnerError("ArcGIS GWR output is not valid JSON") from exc
+            elif proc.returncode != 0:
+                err_msg = proc.stderr.strip() or proc.stdout.strip() or "ArcGIS GWR output file missing"
+                raise ArcGISRunnerError(f"ArcGIS subprocess failed({proc.returncode}): {err_msg}")
+            else:
+                raise ArcGISRunnerError("ArcGIS GWR output file missing")
+
+            if proc.returncode != 0 and not bool(output.get("ok")):
+                detail = str(output.get("error") or output.get("traceback") or "").strip()
+                err_msg = detail or proc.stderr.strip() or proc.stdout.strip() or "unknown subprocess error"
+                raise ArcGISRunnerError(f"ArcGIS subprocess failed({proc.returncode}): {err_msg}")
+            if proc.returncode != 0:
+                err_msg = proc.stderr.strip() or proc.stdout.strip() or "unknown subprocess error"
+                raise ArcGISRunnerError(f"ArcGIS subprocess failed({proc.returncode}): {err_msg}")
+            if not bool(output.get("ok")):
+                raise ArcGISRunnerError(str(output.get("error") or "ArcGIS returned non-ok status"))
+
+            diagnostics = dict(output.get("diagnostics") or {})
+            if "elapsed_ms" not in diagnostics:
+                diagnostics["elapsed_ms"] = round((time.perf_counter() - started_at) * 1000.0, 2)
+            diagnostics["stderr"] = proc.stderr.strip()
+            diagnostics["stdout"] = proc.stdout.strip()
+
+            return {
+                "status": str(output.get("status") or "ok"),
+                "summary": dict(output.get("summary") or {}),
+                "cells": list(output.get("cells") or []),
+                "diagnostics": diagnostics,
             }
         finally:
             shutil.rmtree(tmp_dir, ignore_errors=True)

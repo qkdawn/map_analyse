@@ -9,6 +9,8 @@ from pydantic import ValidationError
 
 from .runner import ArcGISRunner, ArcGISRunnerError, ArcGISRunnerTimeout, _path_exists_cross_platform
 from .schemas import (
+    ArcGISGwrRequest,
+    ArcGISGwrResponse,
     ArcGISH3AnalyzeRequest,
     ArcGISH3AnalyzeResponse,
     ArcGISH3ExportRequest,
@@ -68,6 +70,14 @@ def _resolve_road_syntax_script_path() -> str:
     return str(default)
 
 
+def _resolve_gwr_script_path() -> str:
+    explicit = str(os.getenv("ARCGIS_GWR_SCRIPT_PATH", "")).strip()
+    if explicit:
+        return explicit
+    default = Path(__file__).resolve().parents[1] / "scripts" / "arcgis_gwr.py"
+    return str(default)
+
+
 _bootstrap_env()
 
 
@@ -76,11 +86,13 @@ def _load_runner() -> ArcGISRunner:
     script_path = _resolve_script_path()
     export_script_path = _resolve_export_script_path()
     road_syntax_script_path = _resolve_road_syntax_script_path()
+    gwr_script_path = _resolve_gwr_script_path()
     return ArcGISRunner(
         default_python_path=python_path,
         script_path=script_path,
         export_script_path=export_script_path,
         road_syntax_script_path=road_syntax_script_path,
+        gwr_script_path=gwr_script_path,
     )
 
 
@@ -103,6 +115,7 @@ def health() -> dict:
     script_path = _resolve_script_path()
     export_script_path = _resolve_export_script_path()
     road_syntax_script_path = _resolve_road_syntax_script_path()
+    gwr_script_path = _resolve_gwr_script_path()
     token = _resolve_token()
     return {
         "status": "ok",
@@ -112,11 +125,13 @@ def health() -> dict:
         "road_syntax_script_exists": bool(_path_exists_cross_platform(road_syntax_script_path))
         if road_syntax_script_path
         else False,
+        "gwr_script_exists": bool(_path_exists_cross_platform(gwr_script_path)) if gwr_script_path else False,
         "token_configured": bool(token),
         "python_path": _mask_path(python_path),
         "script_path": _mask_path(script_path),
         "export_script_path": _mask_path(export_script_path),
         "road_syntax_script_path": _mask_path(road_syntax_script_path),
+        "gwr_script_path": _mask_path(gwr_script_path),
         "analyze_cache_ttl_sec": runner.analyze_cache_ttl_sec,
         "analyze_cache_max_entries": runner.analyze_cache_max_entries,
     }
@@ -230,6 +245,39 @@ def road_syntax_webgl(
         coord_type=coord_type,
         roads=result.get("roads") or {"type": "FeatureCollection", "features": [], "count": 0},
         elapsed_ms=float(result.get("elapsed_ms") or 0.0),
+        error=None,
+        trace_id=trace_id,
+    )
+
+
+@app.post("/v1/arcgis/gwr/analyze", response_model=ArcGISGwrResponse)
+def analyze_gwr(
+    payload: ArcGISGwrRequest,
+    x_arcgis_token: Optional[str] = Header(default=None),
+):
+    expected_token = _resolve_token()
+    if not expected_token:
+        raise HTTPException(status_code=500, detail="ARCGIS_TOKEN/ARCGIS_BRIDGE_TOKEN is not configured")
+    if str(x_arcgis_token or "").strip() != expected_token:
+        raise HTTPException(status_code=401, detail="invalid arcgis token")
+
+    trace_id = str(payload.run_id or uuid.uuid4().hex)
+    logger.info("[ArcGISHostBridge] gwr trace_id=%s rows=%d", trace_id, len(payload.rows or []))
+    try:
+        result = runner.run_gwr(payload, trace_id=trace_id)
+    except ArcGISRunnerTimeout as exc:
+        logger.error("[ArcGISHostBridge] gwr timeout trace_id=%s err=%s", trace_id, exc)
+        raise HTTPException(status_code=504, detail=str(exc)) from exc
+    except (ArcGISRunnerError, ValidationError) as exc:
+        logger.error("[ArcGISHostBridge] gwr failed trace_id=%s err=%s", trace_id, exc)
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    return ArcGISGwrResponse(
+        ok=True,
+        status=str(result.get("status") or "ok"),
+        summary=result.get("summary") or {},
+        cells=result.get("cells") or [],
+        diagnostics=result.get("diagnostics") or {},
         error=None,
         trace_id=trace_id,
     )

@@ -5,31 +5,26 @@
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, inspect
 from sqlalchemy.orm import sessionmaker
 
 from core.config import settings
-from .models import Base
+from .models import AgentSession, Base
 
 logger = logging.getLogger(__name__)
 
 
-def _build_engine():
+def _build_engine(db_uri: str | None = None):
     """
-    构建 SQLAlchemy 引擎并确保数据目录存在。
+    构建 SQLAlchemy 引擎。
     """
-    db_uri = settings.sqlalchemy_database_uri
-    connect_args = {}
-    if "sqlite" in db_uri:
-        db_path = Path(settings.db_path).resolve()
-        db_path.parent.mkdir(parents=True, exist_ok=True)
-        connect_args = {"check_same_thread": False}
+    effective_db_uri = db_uri or settings.sqlalchemy_database_uri
+    if effective_db_uri.lower().startswith("sqlite"):
+        raise ValueError("SQLite is no longer supported. Configure DB_URL with mysql+pymysql://...")
 
     return create_engine(
-        db_uri,
-        connect_args=connect_args,
+        effective_db_uri,
         future=True,
         pool_pre_ping=True,  # Auto-reconnect
         pool_recycle=3600,
@@ -37,7 +32,25 @@ def _build_engine():
 
 
 engine = _build_engine()
-SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
+SessionLocal = sessionmaker(autoflush=False, autocommit=False, future=True)
+SessionLocal.configure(bind=engine)
+
+
+def _ensure_agent_sessions_schema() -> None:
+    inspector = inspect(engine)
+    if not inspector.has_table("agent_sessions"):
+        AgentSession.__table__.create(bind=engine, checkfirst=True)
+        return
+
+    columns = {item.get("name") for item in inspector.get_columns("agent_sessions")}
+    if {"history_id", "panel_kind"}.issubset(columns):
+        for index in AgentSession.__table__.indexes:
+            index.create(bind=engine, checkfirst=True)
+        return
+
+    logger.warning("agent_sessions 缺少面板历史字段，将按新结构重建并丢弃旧 AI 历史")
+    AgentSession.__table__.drop(bind=engine, checkfirst=True)
+    AgentSession.__table__.create(bind=engine, checkfirst=True)
 
 
 def init_db() -> None:
@@ -45,4 +58,5 @@ def init_db() -> None:
     创建表结构（幂等）。
     """
     Base.metadata.create_all(bind=engine)
-    logger.info("数据库初始化完成: %s", settings.db_path)
+    _ensure_agent_sessions_schema()
+    logger.info("数据库初始化完成")

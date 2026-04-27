@@ -25,7 +25,7 @@ class MapRequest(BaseModel):
     """
     center: dict = Field(..., description="中心点坐标")
     radius: int = Field(..., description="半径(米)", gt=0)
-    points: List[LocationPoint] = Field(..., description="位置点列表", min_items=1)
+    points: List[LocationPoint] = Field(..., description="位置点列表", min_length=1)
     adcode: Optional[str] = Field(None, description="城市行政区编码，city 模式用于绘制边界")
 
 class PolygonCreateRequest(BaseModel):

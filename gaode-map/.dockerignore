@@ -1,7 +1,11 @@
 .git
 .venv
+.pytest_cache
+.playwright-cli
+.runtime_orphans
 __pycache__/
 *.pyc
+*.bak
 *.pyo
 *.pyd
 *.db
@@ -12,3 +16,8 @@ __pycache__/
 .DS_Store
 Thumbs.db
 node_modules/
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+static/frontend/
+**/__pycache__/

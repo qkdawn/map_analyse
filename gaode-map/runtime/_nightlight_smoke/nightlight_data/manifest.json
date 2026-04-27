@@ -1,0 +1,12 @@
+{
+  "default_year": 2025,
+  "datasets": [
+    {
+      "year": 2025,
+      "label": "2025 年",
+      "file": "annual/black_marble_2025_china.tif",
+      "unit": "nWatts/(cm^2 sr)",
+      "variable": "NearNadir_Composite_Snow_Free"
+    }
+  ]
+}

@@ -3,6 +3,22 @@ __pycache__/
 *.pyc
 .env
 .DS_Store
+.pytest_cache/
+.playwright-cli/
+.runtime_orphans/
+*.bak
+*.tmp
+*.log
+.coverage
+htmlcov/
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/.cache/
+frontend/*.tsbuildinfo
+static/frontend/
+runtime/generated_charts/
+/AGENTS.md
 
 # Data
 data/
@@ -21,3 +37,4 @@ docker/valhalla_custom_files/*.pbf
 *.pbf
 *.osrm
 *.gph
+**/__pycache__/

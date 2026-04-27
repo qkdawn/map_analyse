@@ -61,6 +61,14 @@ make app-local      # 本地启动 gaode-map（不走 docker）
 make verify-h3      # 运行 h3-grid API 验证脚本
 ```
 
+## Windows 一键入口
+
+- `open_docker_deploy_config.bat`: 打开 `gaode-map/docker-compose.prod.yml`、`gaode-map/docker-compose.yml`、`gaode-map/.env`
+- `open_host_bridge_config.bat`: 打开 `host_bridge/README.md`、`host_bridge/start_bridge.bat`、`gaode-map/.env`
+- `start_docker_prod.bat`: 双击启动 Docker 部署栈
+- `start_host_bridge.bat`: 双击启动宿主机 `host_bridge`
+- `start_docker_and_host_bridge.bat`: 一键同时启动 Docker 部署栈和 `host_bridge`
+
 ## 开发说明
 
 - 各模块详细说明见：

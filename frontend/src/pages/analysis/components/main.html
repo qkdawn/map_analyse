@@ -1,4 +1,4 @@
-﻿
+
         <!-- Middle: Main Workspace -->
         <main class="main-content" :class="{ 'main-content-agent-mode': isAgentWorkspaceActive() }">
             <div v-show="isAgentWorkspaceActive()" class="agent-main-stage">
@@ -7,7 +7,7 @@
                         <div class="agent-tools-header">
                             <div>
                                 <div class="agent-tools-eyebrow">Agent Tool Registry</div>
-                                <h2 class="agent-tools-title">宸ュ叿</h2>
+                                <h2 class="agent-tools-title">工具</h2>
                                 <p class="agent-tools-subtitle">这里展示当前后端 Agent tool registry 中可用的只读元数据，不在工具库内直接执行工具。</p>
                             </div>
                             <button type="button" class="agent-tools-back-btn" @click="backToAgentChat">返回聊天</button>
@@ -40,7 +40,7 @@
                                                     <div class="agent-tool-row-head">
                                                         <div class="agent-tool-name">{{ tool.name }}</div>
                                                         <div class="agent-tool-badges">
-                                                            <span v-if="tool.uiTier === 'scenario'" class="agent-tool-badge is-primary">Planner 浼樺厛</span>
+                                                            <span v-if="tool.uiTier === 'scenario'" class="agent-tool-badge is-primary">Planner 优先</span>
                                                             <span class="agent-tool-badge">{{ getAgentToolLabel(tool.capabilityType) }}</span>
                                                             <span class="agent-tool-readonly" :class="{ 'is-write': !tool.readonly }">
                                                                 {{ tool.readonly ? '只读' : '会写入' }}
@@ -51,14 +51,14 @@
                                                     <div class="agent-tool-meta is-compact">
                                                         <span>{{ getAgentToolLabel(tool.uiTier) }}</span>
                                                         <span>{{ getAgentToolLabel(tool.dataDomain || tool.category) }}</span>
-                                                        <span>椋庨櫓 {{ getAgentToolLabel(tool.riskLevel) }}</span>
+                                                        <span>风险 {{ getAgentToolLabel(tool.riskLevel) }}</span>
                                                     </div>
                                                 </div>
                                                 <button
                                                     type="button"
                                                     class="agent-tool-detail-btn"
-                                                    title="鏌ョ湅璇︽儏"
-                                                    aria-label="鏌ョ湅宸ュ叿璇︽儏"
+                                                    title="查看详情"
+                                                    aria-label="查看工具详情"
                                                     @click="openAgentToolDetail(tool, $event)">
                                                     i
                                                 </button>
@@ -82,7 +82,7 @@
                                     <button type="button" class="agent-tool-detail-close" aria-label="关闭工具详情" @click="closeAgentToolDetail">×</button>
                                 </div>
                                 <div class="agent-tool-badges agent-tool-detail-badges">
-                                    <span v-if="getAgentToolDetail().uiTier === 'scenario'" class="agent-tool-badge is-primary">Planner 浼樺厛</span>
+                                    <span v-if="getAgentToolDetail().uiTier === 'scenario'" class="agent-tool-badge is-primary">Planner 优先</span>
                                     <span v-if="getAgentToolDetail().defaultPolicyKey" class="agent-tool-badge">{{ getAgentToolDetail().defaultPolicyKey }}</span>
                                     <span class="agent-tool-readonly" :class="{ 'is-write': !getAgentToolDetail().readonly }">
                                         {{ getAgentToolDetail().readonly ? '只读' : '会写入' }}
@@ -91,9 +91,9 @@
                                 <div class="agent-tool-meta">
                                     <span>{{ getAgentToolLabel(getAgentToolDetail().uiTier) }}</span>
                                     <span>{{ getAgentToolLabel(getAgentToolDetail().capabilityType) }}</span>
-                                    <span>绫诲埆 {{ getAgentToolLabel(getAgentToolDetail().category) }}</span>
-                                    <span>鎴愭湰 {{ getAgentToolLabel(getAgentToolDetail().costLevel) }}</span>
-                                    <span>椋庨櫓 {{ getAgentToolLabel(getAgentToolDetail().riskLevel) }}</span>
+                                    <span>类别 {{ getAgentToolLabel(getAgentToolDetail().category) }}</span>
+                                    <span>成本 {{ getAgentToolLabel(getAgentToolDetail().costLevel) }}</span>
+                                    <span>风险 {{ getAgentToolLabel(getAgentToolDetail().riskLevel) }}</span>
                                 </div>
                                 <div class="agent-tool-docs agent-tool-detail-docs">
                                     <div class="agent-tool-doc-row">
@@ -139,7 +139,7 @@
                         v-else
                         class="agent-app-center"
                         :class="{
-                            'is-empty': !isAgentSummaryTabActive() && !agentHasConversationContent() && !agentLoading && !agentSessionHydrating,
+                            'is-empty': !isAgentSummaryTabActive() && !isAgentIterationChangeTabActive() && !isAgentSiteSelectionTabActive() && !agentHasConversationContent() && !agentLoading && !agentSessionHydrating,
                             'has-thread': agentHasConversationContent() || agentLoading || agentSessionHydrating
                         }"
                         @click="closeAgentCreateTabMenu()">
@@ -152,6 +152,8 @@
                                 :class="{
                                     'is-active': agentTabs.activeTabId === tab.id,
                                     'agent-top-tab--summary': tab.kind === 'summary',
+                                    'agent-top-tab--iteration-change': tab.kind === 'iteration_change',
+                                    'agent-top-tab--site-selection': tab.kind === 'site_selection',
                                     'agent-top-tab--followup': tab.kind === 'followup'
                                 }"
                                 @click="switchAgentTopTab(tab.id)">
@@ -159,7 +161,7 @@
                                 <span
                                     v-if="tab.closable"
                                     class="agent-top-tab-close"
-                                    title="鍏抽棴绐楀彛"
+                                    title="关闭窗口"
                                     @click.stop="closeAgentTopTab(tab.id, $event)">
                                     ×
                                 </span>
@@ -168,7 +170,7 @@
                                 <button
                                     type="button"
                                     class="agent-top-tab-add"
-                                    title="娣诲姞绐楀彛"
+                                    title="添加窗口"
                                     @click="toggleAgentCreateTabMenu($event)">
                                     +
                                 </button>
@@ -176,15 +178,27 @@
                                     <button
                                         type="button"
                                         class="agent-top-tab-add-menu-item"
-                                        @click="createAgentSummaryTab({ title: '总结' })">
-                                        新建总结
+                                        @click="createAgentSummaryTab({ title: '区域总结' })">
+                                        新建区域总结
+                                    </button>
+                                    <button
+                                        type="button"
+                                        class="agent-top-tab-add-menu-item"
+                                        @click="createAgentIterationChangeTab({ title: '夜光近三年' })">
+                                        新建多年迭代变化
+                                    </button>
+                                    <button
+                                        type="button"
+                                        class="agent-top-tab-add-menu-item"
+                                        @click="createAgentSiteSelectionTab({ title: '区域内选址' })">
+                                        新建区域内选址
                                     </button>
                                     <button
                                         type="button"
                                         class="agent-top-tab-add-menu-item"
                                         :disabled="!canCreateAgentFollowupTab()"
-                                        @click="createAgentFollowupTab({ title: '追问' })">
-                                        新建追问
+                                        @click="createAgentFollowupTab({ title: '追问解释' })">
+                                        新建追问解释
                                     </button>
                                 </div>
                             </div>
@@ -194,9 +208,9 @@
                             <div v-if="shouldShowAgentSummaryGeneratingState()" class="agent-summary-loading">
                                 <div class="agent-summary-loading-head">
                                     <div class="agent-summary-loading-spinner" aria-hidden="true"></div>
-                                    <div class="agent-summary-loading-title">正在生成商业判断型总结</div>
+                                    <div class="agent-summary-loading-title">正在生成区域总结</div>
                                     <div class="agent-summary-loading-desc">
-                                        {{ getAgentSummaryPhaseLabel() || '请稍候，正在整合结构化证据并输出总结' }}
+                                        {{ getAgentSummaryPhaseLabel() || '请稍候，正在整合结构化证据并输出区域总结' }}
                                     </div>
                                 </div>
                                 <div class="agent-summary-loading-grid">
@@ -302,14 +316,14 @@
                                     </div>
                                 </section>
                                 <section
-                                    v-for="(item, idx) in getAgentSummarySecondaryConclusions()"
-                                    :key="`summary-secondary-${idx}`"
+                                    v-for="(item, idx) in getAgentSummaryAreaJudgments()"
+                                    :key="`summary-area-judgment-${item.sectionKey || idx}`"
                                     class="agent-summary-card">
                                     <div class="agent-summary-card-title">{{ item.title || '-' }}</div>
                                     <div class="agent-summary-line">{{ item.reasoning || '-' }}</div>
                                     <div
                                         v-for="(dimension, dimIdx) in (item.dimensions || [])"
-                                        :key="`summary-secondary-${idx}-dim-${dimIdx}`"
+                                        :key="`summary-area-judgment-${idx}-dim-${dimIdx}`"
                                         class="agent-summary-secondary-dimension">
                                         <strong>{{ dimension.label || '-' }}:</strong>{{ dimension.conclusion || '-' }}
                                     </div>
@@ -462,27 +476,406 @@
                                         type="button"
                                         class="agent-summary-gate-btn agent-summary-gate-cta-btn"
                                         :disabled="isAgentSummaryPrimaryActionDisabled()"
-                                        @click="canGenerateSummaryAfterTasks()
-                                            ? generateAgentSummaryPanel()
-                                            : (shouldUseSummaryFullRecompute() ? startSummaryFullRecompute() : startSummaryParallelFill())">
-                                        {{
-                                            agentSummaryGenerating
-                                                ? '生成中...'
-                                                : (canGenerateSummaryAfterTasks()
-                                                    ? '生成总结'
-                                                    : (shouldUseSummaryFullRecompute() ? '复用并补齐' : '补齐缺失'))
-                                        }}
+                                        @click="runAgentSummaryPrimaryAction()">
+                                        {{ getAgentSummaryPrimaryActionLabel() }}
                                     </button>
                                 </div>
                             </div>
                         </div>
 
-                        <div v-if="!isAgentSummaryTabActive() && !agentHasConversationContent() && !agentLoading && !agentSessionHydrating" class="agent-hero">
+                        <div v-else-if="isAgentIterationChangeTabActive()" class="agent-summary-tab-view">
+                            <div class="agent-iteration-shell">
+                                <div class="agent-iteration-head">
+                                    <div>
+                                        <div class="agent-summary-gate-title">多年迭代变化</div>
+                                        <div class="agent-summary-gate-desc">{{ getAgentIterationActiveDescription() }}</div>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        class="agent-summary-gate-btn"
+                                        :disabled="getAgentIterationActiveLoading()"
+                                        @click="ensureAgentIterationKind(agentIterationActiveKind, true)">
+                                        {{ getAgentIterationActiveLoadingText() }}
+                                    </button>
+                                </div>
+                                <div class="agent-iteration-kind-tabs">
+                                    <button
+                                        v-for="kind in getAgentIterationKinds()"
+                                        :key="`agent-iteration-kind-${kind.key}`"
+                                        type="button"
+                                        class="agent-iteration-kind-tab"
+                                        :class="{ active: agentIterationActiveKind === kind.key }"
+                                        :disabled="kind.disabled"
+                                        @click="setAgentIterationKind(kind.key)">
+                                        {{ kind.label }}
+                                    </button>
+                                </div>
+
+                                <div v-if="agentIterationActiveKind === 'poi'" class="agent-iteration-poi">
+                                    <div v-if="agentIterationPoiLoading" class="agent-summary-card">
+                                        <div class="agent-summary-card-title">正在生成 POI 多年变化</div>
+                                        <div class="agent-summary-line">正在按历史年份读取 POI 快照并汇总业态结构。</div>
+                                    </div>
+                                    <div v-else-if="agentIterationPoiError || getAgentIterationPoiPayload().error" class="agent-summary-card">
+                                        <div class="agent-summary-card-title">生成失败</div>
+                                        <div class="agent-summary-line">{{ agentIterationPoiError || getAgentIterationPoiPayload().error }}</div>
+                                    </div>
+                                    <div v-else-if="!getAgentIterationPoiPayload().status" class="agent-summary-card">
+                                        <div class="agent-summary-card-title">POI 特征与多年趋势</div>
+                                        <div class="agent-summary-line">点击重新生成，查看当前历史 POI 的业态特征和年份变化。</div>
+                                    </div>
+
+                                    <section v-if="getAgentIterationPoiPayload().status === 'ready'" class="agent-summary-card">
+                                        <div class="agent-summary-card-title">📊 AI分析</div>
+                                        <div v-if="getAgentIterationPoiPayload().notice" class="agent-summary-line agent-iteration-note">
+                                            {{ getAgentIterationPoiPayload().notice }}
+                                        </div>
+                                        <div v-if="getAgentIterationPoiPayload().ai_error" class="agent-summary-line agent-iteration-error">
+                                            {{ getAgentIterationAiErrorLabel(getAgentIterationPoiPayload().ai_error) }}
+                                        </div>
+                                        <div class="agent-iteration-analysis-list">
+                                            <div
+                                                v-for="(line, idx) in getAgentIterationPoiAiSummaryRows()"
+                                                :key="`agent-iteration-poi-ai-summary-${idx}`"
+                                                class="agent-iteration-analysis-row">
+                                                <span>{{ line }}</span>
+                                            </div>
+                                        </div>
+                                    </section>
+
+                                    <section v-if="getAgentIterationPoiPayload().status === 'ready'" class="agent-summary-card">
+                                        <div class="agent-summary-card-title">POI 特征</div>
+                                        <div v-if="getAgentIterationPoiPayload().notice" class="agent-summary-line agent-iteration-note">
+                                            {{ getAgentIterationPoiPayload().notice }}
+                                        </div>
+                                        <div class="agent-iteration-metric-grid">
+                                            <div
+                                                v-for="row in getAgentIterationPoiFeatureRows()"
+                                                :key="`agent-iteration-poi-feature-${row.key}`"
+                                                class="agent-iteration-metric">
+                                                <span>{{ row.label }}</span>
+                                                <strong>{{ row.value }}</strong>
+                                            </div>
+                                        </div>
+                                    </section>
+
+                                    <section v-if="getAgentIterationPoiTotalLineChart().length >= 2" class="agent-summary-card agent-iteration-poi-chart-section">
+                                        <div class="agent-summary-card-title">📈 趋势分析</div>
+                                        <div class="agent-iteration-chart-grid">
+                                            <div class="agent-iteration-chart-card">
+                                                <div class="agent-iteration-chart-title">POI总量变化</div>
+                                                <svg viewBox="0 0 320 140" class="agent-iteration-line-chart" role="img" aria-label="POI总量变化折线图">
+                                                    <polyline
+                                                        :points="getAgentIterationPoiLineChartPolyline()"
+                                                        fill="none"
+                                                        stroke="#2563eb"
+                                                        stroke-width="3"
+                                                        stroke-linecap="round"
+                                                        stroke-linejoin="round"></polyline>
+                                                    <circle
+                                                        v-for="point in getAgentIterationPoiLineChartPoints()"
+                                                        :key="`poi-line-point-${point.year}`"
+                                                        :cx="point.x"
+                                                        :cy="point.y"
+                                                        r="4"
+                                                        fill="#2563eb"></circle>
+                                                </svg>
+                                                <div class="agent-iteration-chart-axis">
+                                                    <span v-for="item in getAgentIterationPoiTotalLineChart()" :key="`poi-line-label-${item.year}`">{{ item.year }}</span>
+                                                </div>
+                                            </div>
+
+                                            <div class="agent-iteration-chart-card">
+                                                <div class="agent-iteration-chart-title">业态结构变化</div>
+                                                <div class="agent-iteration-stack-chart">
+                                                    <div
+                                                        v-for="row in getAgentIterationPoiCategoryStackChart()"
+                                                        :key="`poi-stack-${row.year}`"
+                                                        class="agent-iteration-stack-row">
+                                                        <span class="agent-iteration-stack-year">{{ row.year }}</span>
+                                                        <div class="agent-iteration-stack-bar">
+                                                            <span
+                                                                v-for="segment in row.segments"
+                                                                :key="`poi-stack-${row.year}-${segment.name}`"
+                                                                class="agent-iteration-stack-segment"
+                                                                :style="{ width: `${Math.max(2, (Number(segment.ratio) || 0) * 100)}%`, background: getAgentIterationCategoryColor(segment.name) }"
+                                                                :title="`${segment.name} ${formatAgentIterationMetric(segment.count, 0)}`"></span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div class="agent-iteration-stack-legend">
+                                                    <span
+                                                        v-for="name in getAgentIterationPoiCategoryLegend()"
+                                                        :key="`poi-stack-legend-${name}`">
+                                                        <i :style="{ background: getAgentIterationCategoryColor(name) }"></i>{{ name }}
+                                                    </span>
+                                                </div>
+                                            </div>
+
+                                            <div class="agent-iteration-chart-card agent-iteration-chart-card-wide">
+                                                <div class="agent-iteration-chart-title">区域分布变化</div>
+                                                <div class="agent-iteration-heatmap-grid">
+                                                    <div
+                                                        v-for="heatmap in getAgentIterationPoiAreaHeatmaps()"
+                                                        :key="`poi-heatmap-${heatmap.year}`"
+                                                        class="agent-iteration-heatmap-card">
+                                                        <div class="agent-iteration-heatmap-year">{{ heatmap.year }}</div>
+                                                        <svg viewBox="0 0 100 100" class="agent-iteration-heatmap-svg" role="img" :aria-label="`${heatmap.year} POI区域分布热力`">
+                                                            <circle
+                                                                v-for="(point, idx) in heatmap.points"
+                                                                :key="`poi-heatmap-${heatmap.year}-${idx}`"
+                                                                :cx="point.x"
+                                                                :cy="point.y"
+                                                                r="2.2"
+                                                                fill="#f97316"
+                                                                fill-opacity="0.38"></circle>
+                                                        </svg>
+                                                        <div class="agent-iteration-heatmap-caption">{{ heatmap.top_area || '区域分布' }} · {{ heatmap.point_count }}点</div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </section>
+
+                                    <section v-if="getAgentIterationPoiTrendRows().length" class="agent-summary-card">
+                                        <div class="agent-summary-card-title">POI 多年趋势</div>
+                                        <div class="agent-iteration-metric-grid">
+                                            <div
+                                                v-for="row in getAgentIterationPoiTrendRows()"
+                                                :key="`agent-iteration-poi-trend-${row.key}`"
+                                                class="agent-iteration-metric">
+                                                <span>{{ row.label }}</span>
+                                                <strong>{{ row.value }}</strong>
+                                            </div>
+                                        </div>
+                                    </section>
+
+                                    <section v-if="getAgentIterationPoiAiInsightRows().length" class="agent-summary-card">
+                                        <div class="agent-summary-card-title">🔎 AI洞察</div>
+                                        <div class="agent-iteration-insight-list">
+                                            <div
+                                                v-for="row in getAgentIterationPoiAiInsightRows()"
+                                                :key="`agent-iteration-poi-insight-${row.key}`"
+                                                class="agent-iteration-insight-row">
+                                                <strong>{{ row.label }}</strong>
+                                                <span>{{ row.value }}</span>
+                                            </div>
+                                        </div>
+                                    </section>
+
+                                    <section v-if="getAgentIterationPoiSnapshotRows().length" class="agent-summary-card">
+                                        <div class="agent-summary-card-title">年度快照</div>
+                                        <div class="agent-iteration-year-list">
+                                            <div
+                                                v-for="summary in getAgentIterationPoiSnapshotRows()"
+                                                :key="`agent-iteration-poi-year-${summary.year || 'current'}`"
+                                                class="agent-iteration-year-row">
+                                                <strong>{{ summary.year || '当前' }}</strong>
+                                                <span>POI {{ formatAgentIterationMetric(summary.count, 0) }}</span>
+                                                <span>业态 {{ formatAgentIterationMetric(summary.category_count, 0) }}</span>
+                                                <span>{{ (((summary.top_categories || [])[0] || {}).name) || '未分类' }}</span>
+                                            </div>
+                                        </div>
+                                    </section>
+                                </div>
+
+                                <div v-else-if="agentIterationActiveKind === 'population'" class="agent-iteration-population">
+                                    <div v-if="agentIterationPopulationLoading" class="agent-summary-card">
+                                        <div class="agent-summary-card-title">正在生成人口总结特征</div>
+                                        <div class="agent-summary-line">正在读取人口时序数据并汇总增长、下降和密度变化。</div>
+                                    </div>
+                                    <div v-else-if="agentIterationPopulationError || getAgentIterationPopulationPayload().error" class="agent-summary-card">
+                                        <div class="agent-summary-card-title">生成失败</div>
+                                        <div class="agent-summary-line">{{ agentIterationPopulationError || getAgentIterationPopulationPayload().error }}</div>
+                                    </div>
+                                    <div v-else-if="!getAgentIterationPopulationPayload().status" class="agent-summary-card">
+                                        <div class="agent-summary-card-title">人口总结特征</div>
+                                        <div class="agent-summary-line">点击重新生成，查看人口变化的结构化总结指标。</div>
+                                    </div>
+
+                                    <section v-if="getAgentIterationPopulationPayload().status === 'ready'" class="agent-summary-card">
+                                        <div class="agent-summary-card-title">人口总结特征</div>
+                                        <div class="agent-iteration-metric-grid">
+                                            <div
+                                                v-for="row in getAgentIterationPopulationFeatureRows()"
+                                                :key="`agent-iteration-population-feature-${row.key}`"
+                                                class="agent-iteration-metric">
+                                                <span>{{ row.label }}</span>
+                                                <strong>{{ row.value }}</strong>
+                                            </div>
+                                        </div>
+                                    </section>
+                                </div>
+
+                                <div v-else class="agent-iteration-nightlight">
+                                    <div v-if="agentIterationNightlightLoading" class="agent-summary-card">
+                                        <div class="agent-summary-card-title">正在生成夜光多年变化</div>
+                                        <div class="agent-summary-line">正在加载近三年快照、热点迁移层，并请求 AI 解析。</div>
+                                    </div>
+                                    <div v-else-if="agentIterationNightlightError || getAgentIterationNightlightPayload().error" class="agent-summary-card">
+                                        <div class="agent-summary-card-title">生成失败</div>
+                                        <div class="agent-summary-line">{{ agentIterationNightlightError || getAgentIterationNightlightPayload().error }}</div>
+                                    </div>
+                                    <div v-else-if="!getAgentIterationNightlightPayload().status" class="agent-summary-card">
+                                        <div class="agent-summary-card-title">夜光近三年变化</div>
+                                        <div class="agent-summary-line">点击重新生成，查看近三年夜光快照和热点迁移趋势。</div>
+                                    </div>
+
+                                    <section v-if="(getAgentIterationNightlightPayload().snapshots || []).length" class="agent-summary-card agent-iteration-snapshot-section">
+                                        <div class="agent-summary-card-title">近三年夜光快照</div>
+                                        <div class="agent-iteration-snapshot-grid">
+                                            <article
+                                                v-for="snapshot in (getAgentIterationNightlightPayload().snapshots || [])"
+                                                :key="`agent-iteration-nightlight-${snapshot.year}`"
+                                                class="agent-iteration-snapshot-card"
+                                                :class="{ 'is-clickable': !snapshot.error && (getAgentIterationSnapshotCells(snapshot).length || snapshot.image_url) }"
+                                                tabindex="0"
+                                                role="button"
+                                                :aria-label="`${snapshot.year} 夜光快照详情，可复制指标`"
+                                                @click="openAgentIterationSnapshotDetail(snapshot)"
+                                                @keyup.enter="openAgentIterationSnapshotDetail(snapshot)"
+                                                @keyup.space.prevent="openAgentIterationSnapshotDetail(snapshot)">
+                                                <div class="agent-iteration-snapshot-head">
+                                                    <div class="agent-iteration-snapshot-year">{{ snapshot.year }}</div>
+                                                    <span v-if="!snapshot.error && (getAgentIterationSnapshotCells(snapshot).length || snapshot.image_url)" class="agent-iteration-snapshot-action">点击复制</span>
+                                                </div>
+                                                <div v-if="snapshot.error" class="agent-iteration-snapshot-error">{{ snapshot.error }}</div>
+                                                <svg
+                                                    v-else-if="getAgentIterationSnapshotCells(snapshot).length"
+                                                    viewBox="0 0 360 260"
+                                                    class="agent-iteration-snapshot-svg"
+                                                    role="img"
+                                                    :aria-label="`${snapshot.year} 夜光格网快照`">
+                                                    <defs>
+                                                        <linearGradient :id="`agent-nightlight-bg-${snapshot.year}`" x1="0" y1="0" x2="1" y2="1">
+                                                            <stop offset="0%" stop-color="#0f2347"></stop>
+                                                            <stop offset="58%" stop-color="#07152f"></stop>
+                                                            <stop offset="100%" stop-color="#020617"></stop>
+                                                        </linearGradient>
+                                                    </defs>
+                                                    <rect x="0" y="0" width="360" height="260" rx="10" :fill="`url(#agent-nightlight-bg-${snapshot.year})`"></rect>
+                                                    <polygon
+                                                        v-for="cell in getAgentIterationSnapshotCells(snapshot)"
+                                                        :key="`agent-iteration-cell-${snapshot.year}-${cell.key}`"
+                                                        :points="cell.points"
+                                                        :fill="cell.fill"
+                                                        :fill-opacity="cell.opacity"
+                                                        :stroke="cell.stroke"
+                                                        stroke-width="1">
+                                                    </polygon>
+                                                </svg>
+                                                <img
+                                                    v-else-if="snapshot.image_url"
+                                                    :src="snapshot.image_url"
+                                                    :alt="`${snapshot.year} 夜光快照`"
+                                                    class="agent-iteration-snapshot-img">
+                                                <div v-else class="agent-iteration-snapshot-error">暂无快照</div>
+                                                <div class="agent-iteration-snapshot-stats">
+                                                    <span>总辐亮 {{ formatAgentIterationMetric((snapshot.summary || {}).total_radiance, 1) }}</span>
+                                                    <span>均值 {{ formatAgentIterationMetric((snapshot.summary || {}).mean_radiance, 2) }}</span>
+                                                    <span>P90 {{ formatAgentIterationMetric((snapshot.summary || {}).p90_radiance, 2) }}</span>
+                                                    <span>点亮 {{ formatAgentIterationPercent((snapshot.summary || {}).lit_pixel_ratio) }}</span>
+                                                </div>
+                                            </article>
+                                        </div>
+                                        <div
+                                            v-if="agentIterationSnapshotDetailOpen"
+                                            class="agent-iteration-snapshot-detail-mask"
+                                            @click="closeAgentIterationSnapshotDetail">
+                                            <div class="agent-iteration-snapshot-detail-dialog" @click.stop>
+                                                <div class="agent-iteration-snapshot-detail-head">
+                                                    <div>
+                                                        <div class="agent-iteration-snapshot-detail-title">{{ (agentIterationSnapshotDetail || {}).year }} 夜光快照指标</div>
+                                                        <div class="agent-iteration-snapshot-detail-subtitle">可复制年度快照的核心夜光指标</div>
+                                                    </div>
+                                                    <button type="button" class="agent-iteration-snapshot-detail-close" @click="closeAgentIterationSnapshotDetail">×</button>
+                                                </div>
+                                                <textarea
+                                                    class="agent-iteration-snapshot-copy-text"
+                                                    readonly
+                                                    :value="buildAgentIterationSnapshotCopyText(agentIterationSnapshotDetail || {})"></textarea>
+                                                <div class="agent-iteration-snapshot-detail-actions">
+                                                    <button type="button" class="agent-iteration-snapshot-copy-btn" @click="copyAgentIterationSnapshotDetail">复制快照指标</button>
+                                                    <span v-if="agentIterationSnapshotCopyStatus" class="agent-iteration-snapshot-copy-status">{{ agentIterationSnapshotCopyStatus }}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </section>
+
+                                    <section v-if="getAgentIterationNightlightPayload().status" class="agent-summary-card agent-iteration-analysis-card">
+                                        <div class="agent-summary-card-title">AI 热点变化解析</div>
+                                        <div v-if="getAgentIterationNightlightAnalysisRows().length" class="agent-iteration-analysis-list">
+                                            <div
+                                                v-for="row in getAgentIterationNightlightAnalysisRows()"
+                                                :key="`agent-iteration-analysis-${row.key}`"
+                                                class="agent-iteration-analysis-row">
+                                                <strong>{{ row.label }}</strong>
+                                                <span>{{ row.value }}</span>
+                                            </div>
+                                        </div>
+                                        <div v-else class="agent-summary-line">
+                                            AI 解析暂不可用，仍可查看下方结构化变化指标与年度快照。
+                                        </div>
+                                        <div v-if="getAgentIterationNightlightPayload().ai_error" class="agent-summary-line agent-iteration-error">
+                                            {{ getAgentIterationAiErrorLabel(getAgentIterationNightlightPayload().ai_error) }}
+                                        </div>
+                                    </section>
+
+                                    <section v-if="getAgentIterationNightlightPayload().status" class="agent-summary-card">
+                                        <div class="agent-summary-card-title">三年趋势指标</div>
+                                        <div class="agent-iteration-metric-grid">
+                                            <div
+                                                v-for="row in getAgentIterationNightlightTrendRows()"
+                                                :key="`agent-iteration-trend-${row.key}`"
+                                                class="agent-iteration-metric">
+                                                <span>{{ row.label }}</span>
+                                                <strong>{{ row.value }}</strong>
+                                            </div>
+                                            <div
+                                                v-for="row in getAgentIterationNightlightHotspotRows()"
+                                                :key="`agent-iteration-hotspot-${row.key}`"
+                                                class="agent-iteration-metric">
+                                                <span>{{ row.label }}</span>
+                                                <strong>{{ row.value }}</strong>
+                                            </div>
+                                        </div>
+                                    </section>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div v-else-if="isAgentSiteSelectionTabActive()" class="agent-summary-tab-view">
+                            <div class="agent-summary-gate">
+                                <div class="agent-summary-gate-head">
+                                    <div class="agent-summary-gate-icon">⌖</div>
+                                    <div>
+                                        <div class="agent-summary-gate-title">区域内选址</div>
+                                        <div class="agent-summary-gate-desc">这里会承接当前单等时圈范围，后续用于判断范围内部哪些网格或位置更适合目标业态。</div>
+                                    </div>
+                                </div>
+                                <div class="agent-summary-grid">
+                                    <section class="agent-summary-card">
+                                        <div class="agent-summary-card-title">待接入能力</div>
+                                        <div class="agent-summary-line">选址算法暂未接入，本步先预留面板结构。</div>
+                                    </section>
+                                    <section class="agent-summary-card">
+                                        <div class="agent-summary-card-title">预期输入</div>
+                                        <div class="agent-summary-line">当前等时圈、POI 网格、人口、夜光、路网和业态目标。</div>
+                                    </section>
+                                    <section class="agent-summary-card">
+                                        <div class="agent-summary-card-title">预期输出</div>
+                                        <div class="agent-summary-line">候选网格排序、推荐理由、风险约束和下一步验证建议。</div>
+                                    </section>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div v-if="!isAgentSummaryTabActive() && !isAgentIterationChangeTabActive() && !isAgentSiteSelectionTabActive() && !agentHasConversationContent() && !agentLoading && !agentSessionHydrating" class="agent-hero">
                             <div class="agent-hero-title">我们先从哪里开始呢？</div>
                             <div class="agent-hero-subtitle">先说问题，Agent 会调用已有工具和分析能力直接处理。</div>
                         </div>
 
-                        <div v-if="!isAgentSummaryTabActive() && (agentHasConversationContent() || agentLoading || agentSessionHydrating)" class="agent-thread-shell">
+                        <div v-if="!isAgentSummaryTabActive() && !isAgentIterationChangeTabActive() && !isAgentSiteSelectionTabActive() && (agentHasConversationContent() || agentLoading || agentSessionHydrating)" class="agent-thread-shell">
                             <div
                                 ref="agentChatBody"
                                 class="agent-chat-body agent-chat-body-main"
@@ -684,7 +1077,7 @@
                                         <div class="agent-decision-layout">
                                             <div class="agent-card agent-card-decision">
                                                 <div class="agent-card-type">decision</div>
-                                                <div class="agent-card-title">鏍稿績鍒ゆ柇</div>
+                                                <div class="agent-card-title">核心判断</div>
                                                 <div class="agent-card-content">{{ agentDecision.summary }}</div>
                                                 <div class="agent-decision-badges">
                                                     <span class="agent-decision-badge">{{ getAgentDecisionStrengthLabel(agentDecision.strength) }}</span>
@@ -710,7 +1103,7 @@
                                                 <div class="agent-card-title">还不能判断什么</div>
                                                 <ul class="agent-card-items">
                                                     <li v-for="(item, index) in agentCounterpoints" :key="`agent-counterpoint-${getAgentStructuredItemKey(item, index)}`">
-                                                        <span class="agent-structured-headline">{{ item.title || '绾︽潫' }}</span>
+                                                        <span class="agent-structured-headline">{{ item.title || '约束' }}</span>
                                                         <span class="agent-structured-detail">{{ item.detail }}</span>
                                                     </li>
                                                     <li v-for="(item, index) in agentBoundary" :key="`agent-boundary-${getAgentStructuredItemKey(item, index)}`">
@@ -736,7 +1129,7 @@
                                                         <div v-if="item.detail" class="agent-structured-detail">{{ item.detail }}</div>
                                                         <div v-if="item.condition || item.target" class="agent-structured-meta">
                                                             <span v-if="item.condition">触发条件：{{ item.condition }}</span>
-                                                            <span v-if="item.target">锝滅洰鏍囷細{{ item.target }}</span>
+                                                            <span v-if="item.target">目标：{{ item.target }}</span>
                                                         </div>
                                                     </li>
                                                 </ul>
@@ -769,7 +1162,7 @@
 
                                 <div v-if="agentResearchNotes.length || agentNextSuggestions.length || agentCitations.length" class="agent-meta-inline">
                                     <div v-if="agentResearchNotes.length" class="agent-meta-group">
-                                        <div class="agent-meta-title">鐮旂┒绗旇</div>
+                                        <div class="agent-meta-title">研究笔记</div>
                                         <ul class="agent-meta-list">
                                             <li v-for="(item, index) in agentResearchNotes" :key="`agent-main-note-${index}`">{{ item }}</li>
                                         </ul>
@@ -829,7 +1222,7 @@
 
             <div v-show="!isAgentWorkspaceActive()" class="analysis-map-stage">
             <div v-if="sidebarView === 'wizard' && step === 2" class="h3-map-toolbar">
-                <button type="button" class="h3-map-tool-btn h3-map-save-btn" @click="saveAndRestart" title="淇濆瓨骞跺紑鍚柊鍒嗘瀽">
+                <button type="button" class="h3-map-tool-btn h3-map-save-btn" @click="saveAndRestart" title="保存并新建分析">
                     <svg class="h3-map-tool-icon" viewBox="0 0 24 24" aria-hidden="true">
                         <path d="M4 5.5A1.5 1.5 0 0 1 5.5 4h10.2l4.3 4.3V18.5A1.5 1.5 0 0 1 18.5 20h-13A1.5 1.5 0 0 1 4 18.5z"></path>
                         <path d="M8 4.5v5h7v-5"></path>
@@ -842,13 +1235,13 @@
                     <button type="button" class="h3-map-tool-btn h3-map-simplify-btn"
                         :class="{ active: h3SimplifyMenuOpen }"
                         @click.stop="toggleSimplifyMenu"
-                        title="鏄剧ず閰嶇疆">
+                        title="显示设置">
                         <svg class="h3-map-tool-icon" viewBox="0 0 24 24" aria-hidden="true">
                             <path d="M4 7h16"></path>
                             <path d="M4 12h16"></path>
                             <path d="M4 17h16"></path>
                         </svg>
-                        <span class="h3-map-tool-text">鏄剧ず</span>
+                        <span class="h3-map-tool-text">显示</span>
                         <svg class="h3-map-tool-caret" viewBox="0 0 24 24" aria-hidden="true">
                             <path d="m6 9 6 6 6-6"></path>
                         </svg>
@@ -951,7 +1344,7 @@
                             <path d="M8 10h8"></path>
                             <path d="M8 14h6"></path>
                         </svg>
-                        <span class="h3-map-tool-text">浠诲姟</span>
+                        <span class="h3-map-tool-text">任务</span>
                         <span v-if="getH3PendingTaskCount() > 0" class="h3-task-count">{{ getH3PendingTaskCount() }}</span>
                     </button>
                 </div>
@@ -979,7 +1372,7 @@
             <div v-if="sidebarView === 'wizard' && step === 2 && h3ExportTasksOpen" class="h3-export-task-panel">
                 <div class="h3-export-task-panel-header">
                     <span>导出任务</span>
-                    <button type="button" class="h3-export-task-close" @click="closeH3ExportTasks">鍏抽棴</button>
+                    <button type="button" class="h3-export-task-close" @click="closeH3ExportTasks">关闭</button>
                 </div>
                 <div v-if="!h3ExportTasks.length" class="h3-export-task-empty">暂无任务</div>
                 <template v-else>
@@ -1029,8 +1422,8 @@
                 v-if="sidebarView === 'wizard'"
                 type="button"
                 class="map-recenter-btn"
-                title="鍥炲埌涓績"
-                aria-label="鍥炲埌涓績"
+                title="回到中心"
+                aria-label="回到中心"
                 :disabled="!mapCore || !mapCore.map"
                 @click="goMapBackToCenter">
                 <svg viewBox="0 0 24 24" aria-hidden="true">

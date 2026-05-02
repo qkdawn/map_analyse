@@ -6,6 +6,10 @@ from fastapi.responses import StreamingResponse
 
 from modules.agent.runtime import process_agent_turn, stream_agent_turn
 from modules.agent.schemas import (
+    AgentIterationNightlightRequest,
+    AgentIterationNightlightResponse,
+    AgentIterationPoiRequest,
+    AgentIterationPoiResponse,
     AgentSummaryStreamEvent,
     AgentToolSummary,
     AgentSummaryReadinessResponse,
@@ -18,6 +22,7 @@ from modules.agent.schemas import (
     AgentTurnRequest,
     AgentTurnResponse,
 )
+from modules.agent.iteration_change_service import generate_nightlight_iteration_analysis, generate_poi_iteration_analysis
 from modules.agent.summary_service import evaluate_summary_readiness, stream_generate_summary_pack
 from modules.agent.session_service import (
     delete_agent_session,
@@ -162,6 +167,22 @@ async def post_agent_summary_generate(request: Request, payload: AgentSummaryReq
             "X-Accel-Buffering": "no",
         },
     )
+
+
+@router.post(
+    "/api/v1/analysis/agent/iteration/nightlight/interpret",
+    response_model=AgentIterationNightlightResponse,
+)
+async def post_agent_iteration_nightlight_interpret(payload: AgentIterationNightlightRequest):
+    return await generate_nightlight_iteration_analysis(payload.evidence)
+
+
+@router.post(
+    "/api/v1/analysis/agent/iteration/poi/interpret",
+    response_model=AgentIterationPoiResponse,
+)
+async def post_agent_iteration_poi_interpret(payload: AgentIterationPoiRequest):
+    return await generate_poi_iteration_analysis(payload.evidence)
 
 
 @router.get("/api/v1/analysis/agent/sessions/{session_id}", response_model=AgentSessionDetail)

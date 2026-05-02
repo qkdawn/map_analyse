@@ -57,7 +57,6 @@ PersistedAgentStatus = Literal[
     "requires_risk_confirmation",
     "failed",
 ]
-AgentSessionKind = Literal["", "summary", "followup"]
 ToolStatus = Literal["success", "failed", "skipped"]
 ToolLoopStatus = Literal["completed", "requires_risk_confirmation", "failed"]
 CardType = Literal["summary", "evidence", "recommendation"]
@@ -158,6 +157,35 @@ class AgentSummaryGenerateResponse(BaseModel):
     warnings: List[str] = Field(default_factory=list)
     phases: List[str] = Field(default_factory=list)
     progress_steps: List[AgentSummaryProgressStep] = Field(default_factory=list)
+
+
+class AgentIterationNightlightRequest(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    evidence: Dict[str, Any] = Field(default_factory=dict)
+
+
+class AgentIterationNightlightResponse(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    status: str = "failed"
+    ai_analysis: Dict[str, str] = Field(default_factory=dict)
+    error: str = ""
+
+
+class AgentIterationPoiRequest(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    evidence: Dict[str, Any] = Field(default_factory=dict)
+
+
+class AgentIterationPoiResponse(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    status: str = "failed"
+    ai_summary: List[str] = Field(default_factory=list)
+    ai_insights: Dict[str, str] = Field(default_factory=dict)
+    error: str = ""
 
 
 class ToolSpec(BaseModel):
@@ -599,9 +627,7 @@ class AgentSessionSummary(BaseModel):
     history_id: str = ""
     is_pinned: bool = False
     title_source: AgentSessionTitleSource = "fallback"
-    session_kind: AgentSessionKind = ""
-    has_summary_pack: bool = False
-    has_followup_messages: bool = False
+    panel_kind: str = ""
     created_at: str = ""
     updated_at: str = ""
     pinned_at: Optional[str] = None
@@ -615,7 +641,7 @@ class AgentSessionSnapshotRequest(BaseModel):
     status: PersistedAgentStatus = "idle"
     stage: AgentStage = "gating"
     history_id: str = ""
-    session_kind: AgentSessionKind = ""
+    panel_kind: str = ""
     is_pinned: Optional[bool] = None
     input: str = ""
     messages: List[AgentMessage] = Field(default_factory=list)

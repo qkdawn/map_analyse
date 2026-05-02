@@ -2700,6 +2700,32 @@ test('getSummaryTaskKeysToFill skips tasks that are already reusable', () => {
   assert.deepEqual(ctx.getSummaryTaskKeysToFill(), ['poi_grid', 'road_syntax'])
 })
 
+test('summary primary action reuses available results instead of full recompute', async () => {
+  const calls = []
+  const ctx = createAgentContext({
+    agentSummaryReadiness: {
+      checked: true,
+      ready: false,
+      missingTasks: ['poi_fetch'],
+      reused: [],
+      fetched: [],
+    },
+  })
+  ctx.canGenerateSummaryAfterTasks = () => false
+  ctx.getSummaryTaskKeysToFill = () => []
+  ctx.startSummaryParallelFill = async () => {
+    calls.push('parallel_fill')
+  }
+  ctx.generateAgentSummaryPanel = async () => {
+    calls.push('generate')
+  }
+
+  assert.equal(ctx.getAgentSummaryPrimaryActionLabel(), '复用已有结果')
+  await ctx.runAgentSummaryPrimaryAction()
+
+  assert.deepEqual(calls, ['parallel_fill'])
+})
+
 test('getAgentSummaryGeneratingSections maps task progress into staged skeleton cards', () => {
   const ctx = createAgentContext({
     agentSummaryGenerating: true,
@@ -2729,6 +2755,267 @@ test('getAgentSummaryGeneratingSections maps task progress into staged skeleton 
   ctx.agentSummaryProgressPhase = 'analysis_started'
   assert.equal(ctx.getAgentSummaryGeneratingSections().find((item) => item.key === 'headline').status, 'active')
   assert.equal(ctx.getAgentSummaryGeneratingSections().find((item) => item.key === 'spatial_structure').status, 'active')
+})
+
+test('createAgentIterationChangeTab opens independent iteration tab', () => {
+  const ctx = createAgentContext()
+
+  const tabId = ctx.createAgentIterationChangeTab({ autoload: false })
+
+  assert.ok(tabId.startsWith('iteration-change-'))
+  assert.equal(ctx.getAgentActiveTopTab().kind, 'iteration_change')
+  assert.equal(ctx.isAgentIterationChangeTabActive(), true)
+  assert.equal(ctx.agentIterationActiveKind, 'nightlight')
+  assert.ok(ctx.getAgentTopTabs().some((item) => item.kind === 'iteration_change' && item.title.includes('多年迭代变化')))
+})
+
+test('ensureAgentIterationNightlight loads three snapshots without mutating nightlight panel state', async () => {
+  const ctx = createAgentContext({
+    nightlightSelectedYear: 2025,
+    nightlightOverview: { summary: { total_radiance: 99 } },
+    nightlightLayer: { view: 'radiance' },
+    nightlightRaster: { image_url: 'old' },
+  })
+  ctx.createAgentIterationChangeTab({ autoload: false })
+  const calls = []
+  global.fetch = async (url, options = {}) => {
+    calls.push({ url, body: options.body ? JSON.parse(options.body) : null })
+    if (url === '/api/v1/analysis/timeseries/meta') {
+      return { ok: true, json: async () => ({ nightlight_years: [2022, 2023, 2024, 2025] }) }
+    }
+    if (url === '/api/v1/analysis/timeseries/nightlight') {
+      return {
+        ok: true,
+        json: async () => ({
+          series: [
+            { year: 2023, total_radiance: 10, mean_radiance: 1, p90_radiance: 2, lit_pixel_ratio: 0.2 },
+            { year: 2024, total_radiance: 20, mean_radiance: 2, p90_radiance: 3, lit_pixel_ratio: 0.3 },
+            { year: 2025, total_radiance: 30, mean_radiance: 3, p90_radiance: 4, lit_pixel_ratio: 0.4 },
+          ],
+          layer: { summary: { class_counts: { hotspot_emerging: 2, hotspot_stable: 1, hotspot_faded: 0, stable: 5 } } },
+          insights: [],
+        }),
+      }
+    }
+    if (url === '/api/v1/analysis/nightlight/overview') {
+      const year = JSON.parse(options.body).year
+      return {
+        ok: true,
+        json: async () => ({
+          scope_id: `scope-${year}`,
+          summary: { total_radiance: year, mean_radiance: 1, p90_radiance: 2, lit_pixel_ratio: 0.25 },
+        }),
+      }
+    }
+    if (url === '/api/v1/analysis/nightlight/grid') {
+      const year = JSON.parse(options.body).year
+      return {
+        ok: true,
+        json: async () => ({
+          scope_id: `scope-${year}`,
+          features: [{
+            type: 'Feature',
+            properties: { cell_id: `cell-${year}` },
+            geometry: { type: 'Polygon', coordinates: [[[0, 0], [1, 0], [1, 1], [0, 1], [0, 0]]] },
+          }],
+        }),
+      }
+    }
+    if (url === '/api/v1/analysis/nightlight/layer') {
+      const year = JSON.parse(options.body).year
+      return {
+        ok: true,
+        json: async () => ({
+          scope_id: `scope-${year}`,
+          cells: [{ cell_id: `cell-${year}`, fill_color: '#facc15', fill_opacity: 0.7, stroke_color: '#ffffff' }],
+          legend: {},
+        }),
+      }
+    }
+    if (url === '/api/v1/analysis/nightlight/raster') {
+      const year = JSON.parse(options.body).year
+      return {
+        ok: true,
+        json: async () => ({
+          scope_id: `scope-${year}`,
+          image_url: `data:image/png;base64,${year}`,
+          bounds_gcj02: [[0, 0], [1, 1]],
+          legend: {},
+          summary: { total_radiance: year, mean_radiance: 1, p90_radiance: 2, lit_pixel_ratio: 0.25 },
+        }),
+      }
+    }
+    if (url === '/api/v1/analysis/agent/iteration/nightlight/interpret') {
+      const body = JSON.parse(options.body)
+      assert.deepEqual(body.evidence.years, [2023, 2024, 2025])
+      assert.equal(body.evidence.snapshot_refs.some((item) => item.image_url), false)
+      return {
+        ok: true,
+        json: async () => ({
+          status: 'ready',
+          ai_analysis: {
+            headline: '热点增强',
+            trend_summary: '总辐亮连续增强',
+            hotspot_migration: '新增热点增加',
+            risk_or_opportunity: '夜间商业机会增强',
+          },
+        }),
+      }
+    }
+    throw new Error(`unexpected fetch ${url}`)
+  }
+
+  const payload = await ctx.ensureAgentIterationNightlight(true)
+
+  assert.equal(payload.status, 'ready')
+  assert.deepEqual(payload.years, [2023, 2024, 2025])
+  assert.equal(payload.snapshots.length, 3)
+  assert.equal(payload.snapshots[0].grid_features.length, 1)
+  assert.equal(ctx.getAgentIterationSnapshotCells(payload.snapshots[0]).length, 1)
+  assert.equal(payload.ai_analysis.headline, '热点增强')
+  assert.equal(ctx.nightlightSelectedYear, 2025)
+  assert.deepEqual(ctx.nightlightOverview, { summary: { total_radiance: 99 } })
+  assert.deepEqual(ctx.nightlightLayer, { view: 'radiance' })
+  assert.deepEqual(ctx.nightlightRaster, { image_url: 'old' })
+  assert.equal(calls.filter((item) => item.url === '/api/v1/analysis/nightlight/raster').length, 3)
+  assert.equal(calls.filter((item) => item.url === '/api/v1/analysis/nightlight/grid').length, 3)
+  assert.equal(calls.filter((item) => item.url === '/api/v1/analysis/nightlight/layer').length, 3)
+})
+
+test('ensureAgentIterationPopulation stores summary features', async () => {
+  const ctx = createAgentContext()
+  ctx.createAgentIterationChangeTab({ autoload: false })
+  global.fetch = async (url, options = {}) => {
+    if (url === '/api/v1/analysis/timeseries/meta') {
+      return {
+        ok: true,
+        json: async () => ({
+          default_population_period: '2024-2026',
+          population_periods: [{ value: '2024-2026', label: '2024 -> 2026' }],
+        }),
+      }
+    }
+    if (url === '/api/v1/analysis/timeseries/population') {
+      const body = JSON.parse(options.body)
+      assert.equal(body.period, '2024-2026')
+      assert.equal(body.layer_view, 'population_delta')
+      return {
+        ok: true,
+        json: async () => ({
+          series: [
+            { year: 2024, total_population: 1000, population_density: 50 },
+            { year: 2026, total_population: 1200, population_density: 58 },
+          ],
+          layer: { summary: { cell_count: 10, increase_count: 7, decrease_count: 2, average_rate: 0.12 } },
+          insights: ['人口增长网格占主导'],
+        }),
+      }
+    }
+    throw new Error(`unexpected fetch ${url}`)
+  }
+
+  const payload = await ctx.ensureAgentIterationPopulation(true)
+  const rows = ctx.getAgentIterationPopulationFeatureRows()
+
+  assert.equal(payload.status, 'ready')
+  assert.equal(payload.period, '2024-2026')
+  assert.equal(rows.find((item) => item.key === 'increase').value, 7)
+  assert.equal(rows.find((item) => item.key === 'population_delta').value, '200')
+  assert.equal(ctx.getAgentIterationKinds().find((item) => item.key === 'population').disabled, false)
+})
+
+test('ensureAgentIterationPoi summarizes multi-year history pois', async () => {
+  const ctx = createAgentContext({
+    currentHistoryRecordId: 'history-1',
+    currentHistoryAvailablePoiYears: [2023, 2024, 2025],
+  })
+  ctx.createAgentIterationChangeTab({ autoload: false })
+  global.fetch = async (url, options = {}) => {
+    if (String(url).includes('/api/v1/analysis/agent/iteration/poi/interpret')) {
+      const body = JSON.parse(options.body || '{}')
+      assert.equal(body.evidence.years.length, 3)
+      assert.equal(body.evidence.total_series.length, 3)
+      return {
+        ok: true,
+        json: async () => ({
+          status: 'ready',
+          ai_summary: ['当前POI规模处于中等水平，餐饮为主导业态。', '一区为核心聚集区。'],
+          ai_insights: {
+            fastest_growth: '咖啡 +120%',
+            declining_category: '传统零售 -35%',
+            emerging_area: '二区',
+            structure_judgement: '业态结构偏消费型。',
+          },
+          error: '',
+        }),
+      }
+    }
+    const year = Number(String(url).split('year=')[1])
+    const poisByYear = {
+      2023: [
+        { id: 'a', name: '咖啡 A', type: '餐饮服务;咖啡厅', adname: '一区', location: [112.9, 28.1] },
+        { id: 'b', name: '商场 B', type: '购物服务;商场', adname: '一区', location: [112.91, 28.11] },
+      ],
+      2024: [
+        { id: 'c', name: '咖啡 C', type: '餐饮服务;咖啡厅', adname: '一区', location: [112.92, 28.12] },
+        { id: 'd', name: '咖啡 D', type: '餐饮服务;咖啡厅', adname: '二区', location: [112.96, 28.16] },
+        { id: 'e', name: '商场 E', type: '购物服务;商场', adname: '一区', location: [112.93, 28.13] },
+      ],
+      2025: [
+        { id: 'f', name: '咖啡 F', type: '餐饮服务;咖啡厅', adname: '一区', location: [112.94, 28.14] },
+        { id: 'g', name: '咖啡 G', type: '餐饮服务;咖啡厅', adname: '一区', location: [112.95, 28.15] },
+        { id: 'h', name: '书店 H', type: '购物服务;专卖店', adname: '二区', location: [112.97, 28.17] },
+        { id: 'i', name: '酒店 I', type: '住宿服务;酒店', adname: '二区', location: [112.98, 28.18] },
+      ],
+    }
+    assert.match(url, /\/api\/v1\/analysis\/history\/history-1\/pois\?year=/)
+    return { ok: true, json: async () => ({ pois: poisByYear[year] || [], selected_year: year }) }
+  }
+
+  const payload = await ctx.ensureAgentIterationPoi(true)
+  const featureRows = ctx.getAgentIterationPoiFeatureRows()
+  const trendRows = ctx.getAgentIterationPoiTrendRows()
+
+  assert.equal(payload.status, 'ready')
+  assert.deepEqual(payload.years, [2023, 2024, 2025])
+  assert.equal(payload.summaries.length, 3)
+  assert.equal(payload.ai_summary[0], '当前POI规模处于中等水平，餐饮为主导业态。')
+  assert.equal(payload.ai_insights.emerging_area, '二区')
+  assert.equal(ctx.getAgentIterationPoiAiSummaryRows().length, 2)
+  assert.equal(ctx.getAgentIterationPoiAiInsightRows().find((item) => item.key === 'fastest_growth').value, '咖啡 +120%')
+  assert.equal(ctx.getAgentIterationPoiTotalLineChart().length, 3)
+  assert.equal(ctx.getAgentIterationPoiCategoryStackChart().length, 3)
+  assert.equal(ctx.getAgentIterationPoiAreaHeatmaps().length, 3)
+  assert.match(ctx.getAgentIterationPoiLineChartPolyline(), /,/)
+  assert.equal(featureRows.find((item) => item.key === 'total').value, '4')
+  assert.equal(trendRows.find((item) => item.key === 'total_delta').value, '+2')
+  assert.match(trendRows.find((item) => item.key === 'top_increase').value, /餐饮服务/)
+  assert.equal(ctx.getAgentIterationKinds().find((item) => item.key === 'poi').disabled, false)
+})
+
+test('iteration change payload survives agent tab ui state restore', () => {
+  const ctx = createAgentContext()
+  ctx.createAgentIterationChangeTab({ autoload: false })
+  ctx.commitAgentIterationNightlightPayload({
+    status: 'ready',
+    years: [2023, 2024, 2025],
+    period: '2023-2025',
+    snapshots: [{ year: 2025, image_url: 'data:image/png;base64,2025' }],
+  })
+  const uiState = ctx.buildAgentTabsUiState()
+
+  const restored = createAgentContext({
+    agentPanelPayloads: {
+      agent_tabs: uiState,
+      iteration_change: ctx.agentPanelPayloads.iteration_change,
+    },
+  })
+  restored.restoreAgentTabsFromSession({ panelPayloads: restored.agentPanelPayloads })
+  restored.switchAgentTopTab(uiState.iteration_change_tabs[0].id)
+
+  assert.equal(restored.isAgentIterationChangeTabActive(), true)
+  assert.deepEqual(restored.getAgentIterationNightlightPayload().years, [2023, 2024, 2025])
+  assert.equal(restored.getAgentIterationNightlightPayload().snapshots[0].year, 2025)
 })
 
 function ctxSessionBase(id, title) {

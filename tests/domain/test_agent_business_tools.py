@@ -25,7 +25,7 @@ def test_run_business_site_advice_chains_l1_tools(monkeypatch):
     async def fake_fetch(*, arguments, snapshot, artifacts, question):
         del snapshot, question
         calls.append(("poi", dict(arguments)))
-        assert arguments["keywords"] == "鍜栧暋鍘?
+        assert arguments["keywords"] == "咖啡厅"
         return ToolResult(
             tool_name="fetch_pois_in_scope",
             status="success",
@@ -87,13 +87,13 @@ def test_run_business_site_advice_chains_l1_tools(monkeypatch):
             arguments={},
             snapshot=snapshot,
             artifacts=artifacts,
-            question="鎴戞兂鍦ㄨ繖閲屽紑涓€瀹跺挅鍟″簵锛岀粰鎴戝缓璁?,
+            question="我想在这里开一家咖啡店，给我建议",
         )
     )
 
     assert result.status == "success"
     assert [name for name, _args in calls] == ["poi", "h3", "population", "nightlight", "road"]
-    assert result.artifacts["business_site_advice"]["place_type"] == "鍜栧暋鍘?
+    assert result.artifacts["business_site_advice"]["place_type"] == "咖啡厅"
     assert result.artifacts["current_poi_summary"]["total"] == 2
     assert result.artifacts["current_h3_summary"]["grid_count"] == 4
     assert result.artifacts["current_population_summary"]["total_population"] == 1000
@@ -105,10 +105,10 @@ def test_run_business_site_advice_requires_resolved_place_type():
     snapshot = _snapshot_with_scope()
     result = asyncio.run(
         business_tools.run_business_site_advice(
-            arguments={"place_type": "涓嶅瓨鍦ㄧ殑涓氭€?},
+            arguments={"place_type": "不存在的业态"},
             snapshot=snapshot,
             artifacts={"scope_polygon": snapshot.scope["polygon"]},
-            question="鎴戞兂鍦ㄨ繖閲屽紑涓€瀹朵笉瀛樺湪鐨勪笟鎬?,
+            question="我想在这里开一家不存在的业态",
         )
     )
 
@@ -122,7 +122,7 @@ def test_run_business_site_advice_degrades_optional_tool_failure(monkeypatch):
         return ToolResult(
             tool_name="fetch_pois_in_scope",
             status="success",
-            artifacts={"current_pois": [{"id": "coffee-1"}], "current_poi_summary": {"total": 1, "keywords": "鍜栧暋鍘?}},
+            artifacts={"current_pois": [{"id": "coffee-1"}], "current_poi_summary": {"total": 1, "keywords": "咖啡厅"}},
         )
 
     async def fake_h3(*, arguments, snapshot, artifacts, question):
@@ -146,15 +146,15 @@ def test_run_business_site_advice_degrades_optional_tool_failure(monkeypatch):
     snapshot = _snapshot_with_scope()
     result = asyncio.run(
         business_tools.run_business_site_advice(
-            arguments={"place_type": "鍜栧暋搴?},
+            arguments={"place_type": "咖啡店"},
             snapshot=snapshot,
             artifacts={"scope_polygon": snapshot.scope["polygon"]},
-            question="鎴戞兂寮€鍜栧暋搴?,
+            question="我想开咖啡店",
         )
     )
 
     assert result.status == "success"
-    assert any("宸查檷绾х户缁? in warning for warning in result.warnings)
+    assert any("已降级继续" in warning for warning in result.warnings)
 
 
 def test_run_area_character_pack_returns_tags_and_evidence_chain(monkeypatch):
@@ -178,7 +178,7 @@ def test_run_area_character_pack_returns_tags_and_evidence_chain(monkeypatch):
             tool_name="analyze_poi_structure",
             status="success",
             artifacts=artifacts,
-            result={"business_profile": "鐢熸椿娑堣垂涓诲"},
+            result={"business_profile": "生活消费主导"},
         )
 
     async def fake_spatial(*, arguments, snapshot, artifacts, question):
@@ -191,14 +191,14 @@ def test_run_area_character_pack_returns_tags_and_evidence_chain(monkeypatch):
             tool_name="infer_area_labels",
             status="success",
             result={
-                "character_tags": ["澶滈棿娑堣垂鍨嬬墖鍖?],
-                "dominant_functions": ["椁愰ギ", "璐墿"],
-                "activity_period": "鏅氶棿娲昏穬",
-                "crowd_traits": ["骞撮緞涓绘 25-34宀?],
-                "spatial_temperament": "璺綉缁嗗瘑銆佸彲杈炬€ц緝寮?,
+                "character_tags": ["夜间消费型片区"],
+                "dominant_functions": ["餐饮", "购物"],
+                "activity_period": "晚间活跃",
+                "crowd_traits": ["年龄主段 25-34岁"],
+                "spatial_temperament": "路网细密、可达性较强",
                 "rule_hits": [{"rule_id": "night_consumer_cluster"}],
                 "confidence": "strong",
-                "summary_text": "鍖哄煙鏍囩涓哄闂存秷璐瑰瀷鐗囧尯銆?,
+                "summary_text": "区域标签为夜间消费型片区。",
             },
         )
 
@@ -209,17 +209,17 @@ def test_run_area_character_pack_returns_tags_and_evidence_chain(monkeypatch):
     monkeypatch.setattr(
         scenario_tools,
         "build_poi_structure_analysis",
-        lambda snapshot, artifacts: {"dominant_categories": ["椁愰ギ"], "dining_ratio": 0.35, "evidence_ready": True},
+        lambda snapshot, artifacts: {"dominant_categories": ["餐饮"], "dining_ratio": 0.35, "evidence_ready": True},
     )
     monkeypatch.setattr(
         scenario_tools,
         "analyze_poi_mix",
-        lambda snapshot, artifacts, poi_structure: {"business_profile": "鐢熸椿娑堣垂涓诲", "dominant_functions": ["椁愰ギ", "璐墿"]},
+        lambda snapshot, artifacts, poi_structure: {"business_profile": "生活消费主导", "dominant_functions": ["餐饮", "购物"]},
     )
     monkeypatch.setattr(
         scenario_tools,
         "build_population_profile_analysis",
-        lambda snapshot, artifacts: {"top_age_band": "25-34宀?, "total_population": 22000},
+        lambda snapshot, artifacts: {"top_age_band": "25-34岁", "total_population": 22000},
     )
     monkeypatch.setattr(
         scenario_tools,
@@ -235,14 +235,14 @@ def test_run_area_character_pack_returns_tags_and_evidence_chain(monkeypatch):
         scenario_tools,
         "infer_area_character_labels",
         lambda snapshot, artifacts, **kwargs: {
-            "character_tags": ["澶滈棿娑堣垂鍨嬬墖鍖?],
-            "dominant_functions": ["椁愰ギ", "璐墿"],
-            "activity_period": "鏅氶棿娲昏穬",
-            "crowd_traits": ["骞撮緞涓绘 25-34宀?],
-            "spatial_temperament": "璺綉缁嗗瘑銆佸彲杈炬€ц緝寮?,
+            "character_tags": ["夜间消费型片区"],
+            "dominant_functions": ["餐饮", "购物"],
+            "activity_period": "晚间活跃",
+            "crowd_traits": ["年龄主段 25-34岁"],
+            "spatial_temperament": "路网细密、可达性较强",
             "rule_hits": [{"rule_id": "night_consumer_cluster"}],
             "confidence": "strong",
-            "summary_text": "鍖哄煙鏍囩涓哄闂存秷璐瑰瀷鐗囧尯銆?,
+            "summary_text": "区域标签为夜间消费型片区。",
         },
     )
 
@@ -251,13 +251,13 @@ def test_run_area_character_pack_returns_tags_and_evidence_chain(monkeypatch):
             arguments={"policy_key": "district_summary"},
             snapshot=_snapshot_with_scope(),
             artifacts={"scope_polygon": _snapshot_with_scope().scope["polygon"]},
-            question="鎬荤粨杩欎釜鍖哄煙鐨勫晢涓氱壒寰?,
+            question="总结这个区域的商业特征",
         )
     )
 
     assert result.status == "success"
-    assert result.result["character_tags"] == ["澶滈棿娑堣垂鍨嬬墖鍖?]
-    assert result.result["dominant_functions"] == ["椁愰ギ", "璐墿"]
+    assert result.result["character_tags"] == ["夜间消费型片区"]
+    assert result.result["dominant_functions"] == ["餐饮", "购物"]
     assert result.result["evidence_chain"]
 
 
@@ -267,7 +267,7 @@ def test_run_site_selection_pack_returns_ranking(monkeypatch):
         return ToolResult(
             tool_name="run_business_site_advice",
             status="success",
-            result={"place_type": "鍜栧暋鍘?, "poi_count": 5},
+            result={"place_type": "咖啡厅", "poi_count": 5},
             artifacts={**artifacts, "current_poi_summary": {"total": 5}},
         )
 
@@ -276,7 +276,7 @@ def test_run_site_selection_pack_returns_ranking(monkeypatch):
         return ToolResult(
             tool_name="analyze_target_supply_gap",
             status="success",
-            result={"place_type": "鍜栧暋鍘?, "candidate_zones": [{"display_title": "鍊欓€?锛氫汉姘戣矾闄勮繎", "approx_address": "浜烘皯璺檮杩?}]},
+            result={"place_type": "咖啡厅", "candidate_zones": [{"display_title": "候选1：人民路附近", "approx_address": "人民路附近"}]},
         )
 
     monkeypatch.setattr(scenario_tools, "run_business_site_advice", fake_business)
@@ -300,26 +300,25 @@ def test_run_site_selection_pack_returns_ranking(monkeypatch):
         scenario_tools,
         "score_site_candidates",
         lambda snapshot, artifacts, **kwargs: {
-            "candidate_sites": [{"rank": 1, "display_title": "鍊欓€?锛氫汉姘戣矾闄勮繎", "total_score": 81.0, "strengths": ["渚涚粰缂哄彛鏄庢樉"], "risks": ["闇€澶嶆牳绉熼噾"]}],
-            "ranking": [{"rank": 1, "title": "鍊欓€?锛氫汉姘戣矾闄勮繎", "total_score": 81.0}],
-            "strengths": ["渚涚粰缂哄彛鏄庢樉"],
-            "risks": ["闇€澶嶆牳绉熼噾"],
-            "not_recommended_reason": "浣庢帓鍚嶇偣浣嶅湪鍙揪鎬ф垨娲诲姏涓婂亸寮便€?,
+            "candidate_sites": [{"rank": 1, "display_title": "候选1：人民路附近", "total_score": 81.0, "strengths": ["供给缺口明显"], "risks": ["需复核租金"]}],
+            "ranking": [{"rank": 1, "title": "候选1：人民路附近", "total_score": 81.0}],
+            "strengths": ["供给缺口明显"],
+            "risks": ["需复核租金"],
+            "not_recommended_reason": "低排名点位在可达性或活力上偏弱。",
             "confidence": "moderate",
-            "summary_text": "宸插畬鎴?1 涓€欓€夊尯鎵撳垎鎺掑簭銆?,
+            "summary_text": "已完成 1 个候选区打分排序。",
         },
     )
 
     result = asyncio.run(
         scenario_tools.run_site_selection_pack(
-            arguments={"place_type": "鍜栧暋鍘?, "policy_key": "business_catchment_1km"},
+            arguments={"place_type": "咖啡厅", "policy_key": "business_catchment_1km"},
             snapshot=_snapshot_with_scope(),
             artifacts={"scope_polygon": _snapshot_with_scope().scope["polygon"]},
-            question="鎴戞兂鍦ㄨ繖閲屽紑涓€瀹跺挅鍟″簵锛岀粰鎴戝缓璁?,
+            question="我想在这里开一家咖啡店，给我建议",
         )
     )
 
     assert result.status == "success"
-    assert result.result["ranking"][0]["title"] == "鍊欓€?锛氫汉姘戣矾闄勮繎"
+    assert result.result["ranking"][0]["title"] == "候选1：人民路附近"
     assert result.result["candidate_sites"][0]["total_score"] == 81.0
-

@@ -1,78 +1,79 @@
-# map_analyse Monorepo
+﻿# map_analyse Monorepo
 
-统一管理地图分析相关服务：
+统一管理地图分析相关服务。这个仓库是父仓库，只负责组织各个子项目；具体业务代码放在各自子仓库里，并通过 Git submodule 固定版本。
 
-- `gaode-map`：FastAPI 主后端 + 页面模板
-- `search`：Spring Boot 历史数据查询服务
-- `host_bridge`：ArcGIS/ArcPy 桥接服务
-- `scripts`：联调与验证脚本
+## 子项目
 
-## 目录结构
+- `gaode-map`：FastAPI 主后端、前端页面与地图分析能力。
+- `search`：Spring Boot POI / 历史数据查询服务。
+- `host_bridge`：ArcGIS / ArcPy 桥接服务。计划作为 submodule 管理；当前 GitHub 远端尚未创建或无权限访问。
+- `scripts`：联调、验证与数据处理脚本。计划作为 submodule 管理；当前 GitHub 远端尚未创建或无权限访问。
 
-```text
-map_analyse/
-  gaode-map/      # Python/FastAPI 主服务（含 docker-compose）
-  search/         # Java/Spring Boot 查询服务
-  host_bridge/    # ArcGIS Host Bridge
-  scripts/        # 验证/辅助脚本
+## 推荐克隆方式
+
+```bash
+git clone --recurse-submodules ssh://git@ssh.github.com:443/qkdawn/map_analyse.git
+```
+
+如果已经普通 clone 了父仓库，再执行：
+
+```bash
+git submodule update --init --recursive
+```
+
+## 常用工作流
+
+更新所有子项目到父仓库记录的版本：
+
+```bash
+git submodule update --init --recursive
+```
+
+在某个子项目里开发并推送：
+
+```bash
+cd gaode-map
+git checkout Kun_Expand
+# 修改、测试、提交
+git push origin Kun_Expand
+cd ..
+git add gaode-map
+git commit -m "chore: update gaode-map submodule"
+git push origin main
+```
+
+更新某个子项目到远端分支最新提交：
+
+```bash
+git submodule update --remote gaode-map
+git add gaode-map
+git commit -m "chore: bump gaode-map submodule"
 ```
 
 ## 端口约定
 
 - `8000`：`gaode-map` app
 - `8001`：`search`
-- `8002`：`valhalla`（由 compose 启动）
-- `8003`：`overpass`（由 compose 启动）
+- `8002`：`valhalla`，由 compose 启动
+- `8003`：`overpass`，由 compose 启动
 - `18081`：`host_bridge`
-
-## 快速开始（推荐）
-
-1. 准备环境文件：
-   - `gaode-map/.env`（可从 `.env.example` 拷贝）
-   - `search/.env`（可从 `.env.example` 拷贝）
-2. 启动主服务栈（Docker）：
-
-```bash
-make up
-```
-
-3. 可选：启动 ArcGIS Host Bridge（宿主机）：
-
-```bash
-make bridge
-```
-
-4. 查看服务状态：
-
-```bash
-make ps
-```
 
 ## 常用命令
 
 ```bash
 make help           # 查看全部命令
-make up             # 启动/重建 gaode-map + search + valhalla + overpass
+make up             # 启动 / 重建 gaode-map + search + valhalla + overpass
 make down           # 停止服务栈
 make logs           # 查看 compose 日志
 make bridge         # 启动 host_bridge
-make search-local   # 本地启动 search（不走 docker）
-make app-local      # 本地启动 gaode-map（不走 docker）
+make search-local   # 本地启动 search，不走 docker
+make app-local      # 本地启动 gaode-map，不走 docker
 make verify-h3      # 运行 h3-grid API 验证脚本
 ```
 
-## Windows 一键入口
+## 注意事项
 
-- `open_docker_deploy_config.bat`: 打开 `gaode-map/docker-compose.prod.yml`、`gaode-map/docker-compose.yml`、`gaode-map/.env`
-- `open_host_bridge_config.bat`: 打开 `host_bridge/README.md`、`host_bridge/start_bridge.bat`、`gaode-map/.env`
-- `start_docker_prod.bat`: 双击启动 Docker 部署栈
-- `start_host_bridge.bat`: 双击启动宿主机 `host_bridge`
-- `start_docker_and_host_bridge.bat`: 一键同时启动 Docker 部署栈和 `host_bridge`
-
-## 开发说明
-
-- 各模块详细说明见：
-  - `gaode-map/README.md`
-  - `search/README.md`
-  - `host_bridge/README.md`
-- 敏感配置（如 `.env`）已在根 `.gitignore` 中统一忽略。
+- 父仓库只提交 submodule 指针，不直接提交子项目源码。
+- 子项目修改要先在子仓库提交并推送，再回到父仓库提交新的 submodule 指针。
+- `.env` 等敏感配置不要提交；各子项目使用自己的 `.env.example`。
+- `host_bridge` 和 `scripts` 需要先在 GitHub 创建对应仓库后，才能加入为可克隆的远端 submodule。

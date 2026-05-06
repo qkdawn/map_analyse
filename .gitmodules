@@ -1,12 +1,16 @@
 [submodule "gaode-map"]
 	path = gaode-map
 	url = ssh://git@ssh.github.com:443/qkdawn/gaode-map.git
+	branch = Kun_Expand
 [submodule "search"]
 	path = search
 	url = ssh://git@ssh.github.com:443/qkdawn/search.git
+	branch = master
 [submodule "host_bridge"]
 	path = host_bridge
 	url = ssh://git@ssh.github.com:443/qkdawn/host_bridge.git
+	branch = main
 [submodule "scripts"]
 	path = scripts
 	url = ssh://git@ssh.github.com:443/qkdawn/scripts.git
+	branch = main

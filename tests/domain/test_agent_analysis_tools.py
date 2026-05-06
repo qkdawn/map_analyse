@@ -16,6 +16,12 @@ from modules.agent.tool_adapters.analysis_tools import (
 def _snapshot() -> AnalysisSnapshot:
     return AnalysisSnapshot(
         poi_summary={"total": 120},
+        scope={"center": [112.98, 28.19]},
+        pois=[
+            {"lng": 112.99, "lat": 28.20, "category": "餐饮", "subcategory": "咖啡厅", "adname": "一区"},
+            {"lng": 112.991, "lat": 28.201, "category": "餐饮", "subcategory": "咖啡厅", "adname": "一区"},
+            {"lng": 112.97, "lat": 28.18, "category": "购物", "subcategory": "商场", "adname": "二区"},
+        ],
         h3={"summary": {"grid_count": 12, "avg_density_poi_per_km2": 18.6}},
         road={"summary": {"node_count": 3682, "edge_count": 4089}},
         population={"summary": {"total_population": 54326.544, "male_ratio": 0.49, "female_ratio": 0.51}},
@@ -89,6 +95,13 @@ def test_read_tools_extract_structured_analysis_from_snapshot():
     nightlight = asyncio.run(read_nightlight_pattern_analysis(arguments={}, snapshot=snapshot, artifacts={}, question="总结"))
 
     assert poi.result["dominant_categories"][0] == "餐饮"
+    assert poi.result["spatial_factors"]["geometry_mode"] == "point"
+    assert poi.result["spatial_factors"]["direction_factor"]["dominant_direction"]
+    assert poi.result["spatial_factors"]["ring_factor"]["ring_rows"]
+    assert poi.result["spatial_factors"]["hotspot_factor"]["hotspot_grid_count"] >= 1
+    assert poi.result["subcategory_spatial_rows"][0]["name"] == "咖啡厅"
+    assert poi.result["subcategory_spatial_rows"][0]["dominant_direction"]
+    assert poi.result["subcategory_spatial_summary"]
     assert poi.result["evidence_ready"] is True
     assert h3.result["distribution_pattern"] in {"single_core", "multi_core", "corridor"}
     assert h3.result["evidence_ready"] is True
@@ -169,6 +182,9 @@ def test_read_tools_degrade_gracefully_when_frontend_analysis_missing():
     assert poi.result["summary_text"]
     assert poi.result["data_status"] == "empty"
     assert poi.result["evidence_ready"] is False
+    assert poi.result["spatial_factors"]["geometry_mode"] == "point"
+    assert poi.result["spatial_factors"]["count"] == 0
+    assert poi.result["subcategory_spatial_rows"] == []
     assert h3.result["distribution_pattern"] == "weak_signal"
     assert h3.result["data_status"] == "empty"
     assert h3.result["evidence_ready"] is False

@@ -3,6 +3,8 @@ from __future__ import annotations
 from math import asin, cos, radians, sin, sqrt
 from typing import Any, Dict, List, Tuple
 
+from modules.spatial_factor_engine import build_spatial_factors, build_subcategory_spatial_snapshot
+
 from .schemas import AnalysisSnapshot
 
 
@@ -396,6 +398,58 @@ def _top_category_pairs(category_stats: Dict[str, Any], *, fallback_total: int =
     return pairs
 
 
+def _resolve_poi_spatial_center(snapshot: AnalysisSnapshot, artifacts: Dict[str, Any]) -> List[float] | None:
+    candidates = [
+        _safe_dict(snapshot.scope).get("center"),
+        _safe_dict(snapshot.context).get("center"),
+        artifacts.get("current_center"),
+    ]
+    for candidate in candidates:
+        if isinstance(candidate, (list, tuple)) and len(candidate) >= 2:
+            lng = _to_float(candidate[0], None)
+            lat = _to_float(candidate[1], None)
+            if lng is not None and lat is not None:
+                return [lng, lat]
+    return None
+
+
+def _poi_type_labels(point: Dict[str, Any]) -> Tuple[str, str]:
+    category = str(point.get("category") or point.get("parent") or "").strip()
+    subcategory = str(point.get("subcategory") or "").strip()
+    raw_type = str(point.get("type") or point.get("typecode") or point.get("type_code") or "").strip()
+    if raw_type and (not category or not subcategory):
+        labels = [part.strip() for part in raw_type.replace("，", ";").replace(",", ";").replace("/", ";").split(";") if part.strip()]
+        if not category and labels:
+            category = labels[0]
+        if not subcategory and labels:
+            subcategory = labels[1] if len(labels) > 1 else labels[0]
+    return category or "未分类", subcategory or category or "未分类小类"
+
+
+def _normalize_poi_spatial_points(snapshot: AnalysisSnapshot, artifacts: Dict[str, Any]) -> List[Dict[str, Any]]:
+    rows: List[Dict[str, Any]] = []
+    for point in _current_points(snapshot, artifacts):
+        lng = _to_float(point.get("lng"), None)
+        lat = _to_float(point.get("lat"), None)
+        location = point.get("location")
+        if (lng is None or lat is None) and isinstance(location, (list, tuple)) and len(location) >= 2:
+            lng = _to_float(location[0], None)
+            lat = _to_float(location[1], None)
+        if lng is None or lat is None:
+            continue
+        category, subcategory = _poi_type_labels(point)
+        rows.append(
+            {
+                "lng": lng,
+                "lat": lat,
+                "category": category,
+                "subcategory": subcategory,
+                "area": str(point.get("area") or point.get("adname") or point.get("cityname") or point.get("pname") or "").strip() or "未知区域",
+            }
+        )
+    return rows
+
+
 def build_poi_structure_analysis(snapshot: AnalysisSnapshot, artifacts: Dict[str, Any]) -> Dict[str, Any]:
     panel = _current_frontend_panel(snapshot, artifacts, "poi")
     poi_summary = artifacts.get("current_poi_summary") if isinstance(artifacts.get("current_poi_summary"), dict) else snapshot.poi_summary
@@ -430,6 +484,10 @@ def build_poi_structure_analysis(snapshot: AnalysisSnapshot, artifacts: Dict[str
         if pairs
         else "当前缺少可直接利用的 POI 类别结构结果。"
     )
+    poi_points = _normalize_poi_spatial_points(snapshot, artifacts)
+    center = _resolve_poi_spatial_center(snapshot, artifacts)
+    spatial_factors = build_spatial_factors(poi_points, mode="point", center=center)
+    subcategory_spatial = build_subcategory_spatial_snapshot(poi_points, center=spatial_factors.get("center") or center)
     payload = {
         "top_categories": pairs[:8],
         "dominant_categories": dominant_categories,
@@ -440,8 +498,11 @@ def build_poi_structure_analysis(snapshot: AnalysisSnapshot, artifacts: Dict[str
         "culture_ratio": round(culture_ratio, 4),
         "structure_tags": structure_tags,
         "summary_text": summary_text,
+        "spatial_factors": spatial_factors,
+        "subcategory_spatial_rows": subcategory_spatial.get("subcategory_spatial_rows") or [],
+        "subcategory_spatial_summary": subcategory_spatial.get("subcategory_spatial_summary") or [],
     }
-    return _with_analysis_status(payload, ready=bool(pairs or dominant_categories))
+    return _with_analysis_status(payload, ready=bool(pairs or dominant_categories or poi_points))
 
 
 def build_h3_structure_analysis(snapshot: AnalysisSnapshot, artifacts: Dict[str, Any]) -> Dict[str, Any]:

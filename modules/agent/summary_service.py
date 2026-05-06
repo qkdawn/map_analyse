@@ -337,7 +337,9 @@ def _build_poi_structure_judgment(source_payload: Dict[str, Any]) -> str:
         second = ""
     extras = [item for item in tags if item not in {business_label, "生活消费主导"}]
     third = f"{extras[0]}进一步强化了功能定位" if extras else ""
-    return "，".join(part for part in [first, second, third] if part) + "。"
+    spatial_summary = [str(item).strip("。 ") for item in (poi.get("subcategory_spatial_summary") or []) if str(item).strip()]
+    spatial = spatial_summary[0] if spatial_summary else ""
+    return "，".join(part for part in [first, second, third, spatial] if part) + "。"
 
 
 def _build_consumption_vitality_judgment(source_payload: Dict[str, Any]) -> str:
